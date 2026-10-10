@@ -231,7 +231,11 @@ export async function chooseOption(eventId: number, chosenOptionId: number | nul
 
 /** Organizer removes a participant; votes cascade. */
 export async function deleteParticipant(eventId: number, participantId: number) {
-  const r = await prisma.participant.deleteMany({ where: { id: participantId, eventId } });
+  const p = await prisma.participant.findFirst({ where: { id: participantId, eventId }, select: { editTokenHash: true } });
+  const [, r] = await prisma.$transaction([
+    prisma.deletedParticipant.createMany({ data: p ? [{ editTokenHash: p.editTokenHash, eventId }] : [], skipDuplicates: true }),
+    prisma.participant.deleteMany({ where: { id: participantId, eventId } }),
+  ]);
   if (!r.count) throw new ApiError(404, ['Deltageren findes ikke.']);
 }
 

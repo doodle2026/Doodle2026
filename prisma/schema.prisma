@@ -29,6 +29,7 @@ model Event {
   chosenOption    TimeOption?      @relation("ChosenOption", fields: [chosenOptionId], references: [id], onDelete: SetNull)
   timeOptions     TimeOption[]
   idempotencyKeys IdempotencyKey[]
+  deletedParticipants DeletedParticipant[]
   participants    Participant[]
   invitations     Invitation[]
   /// Organizer display name for invitation mails ("<name> via GrabAday"), sanitized. Optional.
@@ -74,6 +75,18 @@ model IdempotencyKey {
 }
 
 /// Feature 3 (voting) – schema only, no API/UI yet.
+/// Edit-token hashes of participants the organizer deleted, so their edit link can say "your answer was deleted"
+/// instead of "invalid link". Removed with the poll (cascade). No names or votes are kept.
+model DeletedParticipant {
+  editTokenHash String   @id @map("edit_token_hash") @db.Char(64)
+  eventId       Int      @map("event_id")
+  deletedAt     DateTime @default(now()) @map("deleted_at") @db.Timestamptz(3)
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("deleted_participants")
+}
+
 model Participant {
   id              Int                  @id @default(autoincrement())
   eventId         Int                  @map("event_id")
@@ -135,6 +148,8 @@ model Invitation {
   name            String?      @db.VarChar(100)
   /// queued | sent | delivered | failed | bounced | unsub
   delivery        String       @default("queued") @db.VarChar(16)
+  /// E1: delivery state before the recipient unsubscribed, restored on resubscribe.
+  deliveryBeforeUnsub String?  @map("delivery_before_unsub") @db.VarChar(16)
   reason          String?      @db.VarChar(200)
   /// Resend email id of the latest mail (webhook correlation).
   providerId      String?      @unique @map("provider_id") @db.VarChar(64)

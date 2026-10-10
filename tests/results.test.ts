@@ -157,8 +157,8 @@ describe('delete participant (admin)', () => {
     expect(d.body.participants.map((p: Json) => p.name)).toEqual(['Birgitte']);
     expect(d.body.time_options[0].votes).toEqual({ yes: 1, maybe: 0, no: 0, total: 1 });
     expect((await call(`/api/events/${e.id}/participants/${pid}`, { method: 'DELETE', token: e.admin })).status).toBe(404);
-    // the deleted participant's edit link no longer works; name is free again
-    expect((await call(`/api/events/${e.id}/votes/me`, { token: v1.body.edit_token })).status).toBe(403);
+    // the deleted participant's edit link says so (P1: 410 participant_deleted); name is free again; random tokens stay 403
+    expect((await call(`/api/events/${e.id}/votes/me`, { token: v1.body.edit_token })).status).toBe(410);
     expect((await call(`/api/events/${e.id}/votes`, json('POST', { name: 'anders', votes: [{ option_id: e.o[0], value: 'no' }] }))).status).toBe(201);
   });
 });

@@ -114,7 +114,7 @@ describe('invitations API (step 4)', () => {
     const p = await poll(), q = await poll(); const a = `u-${uniq()}@example.com`;
     await invite(p, { recipients: a });
     const t = linkToken((await invRow(p.id, a)).id);
-    expect((await call(`/api/u/p/${t}`)).body).toMatchObject({ email: a, poll_unsubscribed: false });
+    expect((await call(`/api/u/p/${t}`)).body).toMatchObject({ email: `${a[0]}•••@example.com`, poll_unsubscribed: false });
     expect((await call(`/api/u/p/${t}`, { method: 'POST', body: 'x' })).status).toBe(400); // no one-click marker, no JSON
     expect((await call(`/api/u/p/${t}`, { method: 'POST', json: { action: 'unsubscribe' } })).body.poll_unsubscribed).toBe(true);
     expect((await invRow(p.id, a)).delivery).toBe('unsub');

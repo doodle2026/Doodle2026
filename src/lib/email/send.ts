@@ -79,9 +79,9 @@ export function emailConfig(env: Env = process.env): EmailConfig {
 }
 
 /** "anna@example.com" → "a***@example.com". */
-export function maskEmail(s: string): string {
+export function maskEmail(s: string, dots = '***'): string {
   const a = addr(s), at = a.lastIndexOf('@');
-  return at > 0 ? `${a[0]}***${a.slice(at)}` : '***';
+  return at > 0 ? `${a[0]}${dots}${a.slice(at)}` : dots;
 }
 /** Remove links and anything token-like (≥ 20 url-safe chars) from free text. */
 export function redact(s: string): string {
@@ -107,7 +107,7 @@ export function createMailer(opts: { env?: Env; fetch?: typeof fetch; log?: Log;
 
   const recipients = (m: EmailMessage) => (Array.isArray(m.to) ? m.to : [m.to]).map((x) => x.trim()).filter(Boolean);
   const valid = (m: EmailMessage) => { const to = recipients(m); return to.length > 0 && to.length <= 50 && to.every(isEmail) && !!m.subject?.trim() && !!m.text?.trim(); };
-  const summarize = (m: EmailMessage) => `to=${recipients(m).map(maskEmail).join(',')} subject="${redact(m.subject).slice(0, 120)}" text=${m.text.length} chars${m.html ? ' +html' : ''}`;
+  const summarize = (m: EmailMessage) => `to=${recipients(m).map((x) => maskEmail(x)).join(',')} subject="${redact(m.subject).slice(0, 120)}" text=${m.text.length} chars${m.html ? ' +html' : ''}`;
   const payload = (m: EmailMessage) => {
     const replyTo = m.replyTo && isEmail(m.replyTo) ? m.replyTo : cfg.replyTo;
     // Header values must be single-line (no header injection).

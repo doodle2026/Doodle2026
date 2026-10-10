@@ -1,3 +1,4 @@
+import { maskEmail } from './email/send';
 /**
  * Step 4 – invitation mails (server). Rules (docs/EMAIL.md):
  * organizer only (admin token, checked by the route) · ≤ 50 recipients per send, ≤ 200 per poll ·
@@ -183,7 +184,10 @@ export async function sendReminder(eventId: number) {
     if (!plan.messages.length) throw new ApiError(400, ['Der er ingen modtagere til en påmindelse.'], { code: 'no_recipients' });
     if (!(await reserveQuota(plan.messages.length))) throw new ApiError(429, ['Dagens mailkvote er brugt op. Prøv igen i morgen.'], { code: 'quota' });
     await tx.event.update({ where: { id: eventId }, data: { remindersSent: { increment: 1 }, lastReminderAt: new Date() } });
-    for (const e of suppressed) await tx.invitation.update({ where: { eventId_email: { eventId, email: e } }, data: { delivery: 'unsub', lastEventAt: new Date() } });
+    for (const e of suppressed) {
+      const cur = await tx.invitation.findUnique({ where: { eventId_email: { eventId, email: e } }, select: { delivery: true } });
+      if (cur && cur.delivery !== 'unsub') await tx.invitation.update({ where: { eventId_email: { eventId, email: e } }, data: { delivery: 'unsub', deliveryBeforeUnsub: cur.delivery, lastEventAt: new Date() } });
+    }
     return { plan, ids: new Map(inv.map((i) => [i.email, i.id])) };
   }).then(async ({ plan, ids }) => {
     const r = await deliver(eventId, plan.messages.map((m) => ({ ...m, idempotencyKey: `${m.idempotencyKey}:${Date.now() >> 20}` })), ids);
@@ -229,7 +233,8 @@ export async function linkInfo(token: string) {
   const i = await byToken(token);
   if (!i) return null;
   const s = await prisma.emailSuppression.findMany({ where: { emailHash: emailHash(i.email), scope: { in: ['all', pollScope(i.eventId)] } }, select: { scope: true } });
-  return { email: i.email, title: i.event.title, slug: i.event.slug, poll_unsubscribed: s.some((x) => x.scope !== 'all'), all_unsubscribed: s.some((x) => x.scope === 'all') };
+  // E2: landing pages/API only ever show a masked address (token holders may forward the mail).
+  return { email: maskEmail(i.email, '•••'), title: i.event.title, slug: i.event.slug, poll_unsubscribed: s.some((x) => x.scope !== 'all'), all_unsubscribed: s.some((x) => x.scope === 'all') };
 }
 export async function setSubscription(token: string, scope: 'poll' | 'all', unsubscribe: boolean) {
   const i = await byToken(token);
@@ -239,7 +244,11 @@ export async function setSubscription(token: string, scope: 'poll' | 'all', unsu
   else await prisma.emailSuppression.deleteMany({ where: key });
   // Organizer sees only "Afmeldt" (never which scope or why).
   const still = await prisma.emailSuppression.count({ where: { emailHash: key.emailHash, scope: { in: ['all', pollScope(i.eventId)] } } });
-  await prisma.invitation.updateMany({ where: { id: i.id, delivery: { not: 'bounced' } }, data: still ? { delivery: 'unsub', reason: null, lastEventAt: new Date() } : { delivery: 'sent', lastEventAt: new Date() } });
+  // E1: remember the real delivery state while unsubscribed and restore it on resubscribe (never fake "sent").
+  if (i.delivery !== 'bounced') {
+    if (still && i.delivery !== 'unsub') await prisma.invitation.update({ where: { id: i.id }, data: { delivery: 'unsub', deliveryBeforeUnsub: i.delivery, reason: null, lastEventAt: new Date() } });
+    else if (!still && i.delivery === 'unsub') await prisma.invitation.update({ where: { id: i.id }, data: { delivery: i.deliveryBeforeUnsub ?? 'sent', deliveryBeforeUnsub: null, lastEventAt: new Date() } });
+  }
   return linkInfo(token);
 }
 export const ABUSE_REASONS = ['spam', 'unknown_sender', 'phishing', 'other'] as const;
@@ -271,6 +280,12 @@ export async function applyWebhook(evt: { type?: unknown; data?: { email_id?: un
   else if (type === 'email.bounced') next = { delivery: 'bounced', reason: 'Adressen findes ikke (hard bounce)' };
   else if (type === 'email.complained') next = { delivery: 'bounced', reason: 'Markeret som spam af modtageren' };
   if (!next) return { ignored: true };
+  // E1: while unsubscribed, provider events update the remembered state (shown again after resubscribe).
+  if (i.delivery === 'unsub' && next.delivery !== 'bounced') {
+    const prev = i.deliveryBeforeUnsub ?? 'queued';
+    if (RANK[next.delivery] >= RANK[prev] || (prev === 'failed' && next.delivery === 'delivered')) await prisma.invitation.update({ where: { id: i.id }, data: { deliveryBeforeUnsub: next.delivery } });
+    return { updated: true };
+  }
   // Never downgrade (e.g. a late "delivered" after "bounced"); delivered may replace a temporary failure.
   if (RANK[next.delivery] < RANK[i.delivery] && !(i.delivery === 'failed' && next.delivery === 'delivered')) return { ignored: true };
   await prisma.invitation.update({ where: { id: i.id }, data: { ...next, lastEventAt: new Date() } });

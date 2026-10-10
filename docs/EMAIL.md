@@ -44,6 +44,7 @@ without tracking we cannot know who answered, so step 4 sends to **all non-unsub
   `<t>` = HMAC(`EMAIL_LINK_SECRET`, invitation id) – stable across invitation and reminders; DB stores only SHA-256(t).
 - ✅ `List-Unsubscribe: <APP_URL/api/u/p/<t>>` + `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058 POST).
   The landing page unsubscribes via JS POST (link scanners that only GET do nothing); "all" needs one confirm click; both can be undone.
+  Landing pages and `GET /api/u/p/<t>` show the address masked (`a•••@example.com`), never in full.
 - ✅ Suppression list (`email_suppressions`) stores only SHA-256(pepper + normalized address) with scope `all` or `poll:<id>`; checked before every invitation and reminder. Hard bounces and spam complaints add an `all` entry.
 - ✅ Abuse reports stored (reason + optional text, no address); by default also unsubscribes; after 2 reports for a poll, its mail is stopped (`mail_blocked_at`).
 - ✅ Addresses deleted with the poll (FK cascade) or 90 days after close by `GET|POST /api/cron/cleanup` (Bearer `CRON_SECRET`, constant-time, idempotent), scheduled daily 03:17 UTC in `vercel.json`. Suppression hashes and abuse reports contain no addresses and are kept.

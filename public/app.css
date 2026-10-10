@@ -1,4 +1,4 @@
-/* App-only additions on top of the synced design CSS (styles.css). Ask Doodle UI to upstream these. */
+/* App-only additions on top of the synced design CSS (styles.css). */
 /* K2: passed dates – muted column/card + "passeret" label; inputs disabled. */
 .vgrid th.is-past,.vgrid td.is-past,.vcard.is-past{opacity:.55}
 .vgrid td.is-past .tri,.vcard.is-past .seg button{cursor:not-allowed}
