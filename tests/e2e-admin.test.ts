@@ -12,10 +12,10 @@ const ip = () => `10.7.${(Math.random() * 255) | 0}.${(Math.random() * 254 + 1) 
 async function setup() {
   const r = await fetch(`${BASE}/api/events`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip() },
     body: JSON.stringify({ title: 'Runde 4', time_options: [{ start: `${Y}-11-03T09:00:00Z` }, { start: `${Y}-11-04T09:00:00Z` }] }) });
-  const e = await r.json() as { id: string; admin_token: string };
+  const e = await r.json() as { id: string; admin_token: string; time_options: { id: number }[] };
   for (const [name, votes] of [['Anna', ['yes', 'no']], ['Bo', ['maybe', 'yes']]] as const) {
     await fetch(`${BASE}/api/events/${e.id}/votes`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip() },
-      body: JSON.stringify({ name, votes: votes.map((v, i) => ({ option_index: i, value: v })) }) });
+      body: JSON.stringify({ name, votes: votes.map((v, i) => ({ option_id: e.time_options[i].id, value: v })) }) });
   }
   return e;
 }
