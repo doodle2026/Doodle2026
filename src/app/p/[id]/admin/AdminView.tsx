@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { AdminEvent } from '@/lib/events';
-import { storeAdminToken, takeAdminToken } from '@/lib/admin-client';
+import { forgetAdminToken, storeAdminToken, takeAdminToken } from '@/lib/admin-client';
 import { bestIds, whenLabel } from '@/lib/format';
 import AdminResults from './AdminResults';
 import OptionEditRow, { type EditResult } from './OptionEditRow';
@@ -13,7 +13,7 @@ const TITLE_MAX = 200;
 const DESC_MAX = 2000;
 
 type Opt = { key: string; id?: number; start_at: string; end_at: string | null; votes: number };
-type Dialog = null | 'close' | 'reopen' | 'rotate';
+type Dialog = null | 'close' | 'reopen' | 'rotate' | 'delete-poll';
 let seq = 0;
 
 export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: string }) {
@@ -210,6 +210,14 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     try {
       const path = dialog === 'close' ? '/close' : dialog === 'reopen' ? '/reopen' : '/rotate-admin';
       const body = dialog === 'close' ? { chosen_option_id: chosen ? Number(chosen) : null } : {};
+      if (dialog === 'delete-poll') {
+        const { res, data } = await api('', { method: 'DELETE' });
+        if (res.status === 401 || res.status === 403) { setState('denied'); return; }
+        if (!res.ok && res.status !== 404) { dlgRef.current?.close(); setSummary(Array.isArray(data.errors) ? data.errors : ['Sletning mislykkedes.']); return; }
+        forgetAdminToken(slug, sessionStorage);
+        location.replace('/?deleted=1');
+        return;
+      }
       const { res, data } = await api(path, { method: 'POST', body: JSON.stringify(body) });
       if (res.status === 401 || res.status === 403) { closeDialog(); setState('denied'); return; }
       if (!res.ok) { setSummary(Array.isArray(data.errors) ? data.errors : ['Ukendt fejl.']); closeDialog(); return; }
@@ -239,7 +247,9 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   }
 
   const closed = ev.is_closed;
-  const dlgText = dialog === 'close'
+  const dlgText = dialog === 'delete-poll'
+    ? { h: `Slet «${ev.title}»?`, p: `Afstemningen, ${ev.time_options.length} tidsforslag og ${ev.participants.length} deltageres svar slettes for altid. Både deltager- og admin-linket holder op med at virke. Det kan ikke fortrydes.`, ok: 'Slet for altid', cls: 'btn--danger' }
+    : dialog === 'close'
     ? { h: 'Luk afstemningen?', p: 'Ingen kan længere stemme eller ændre svar. Du kan genåbne senere.', ok: 'Luk afstemning', cls: 'btn--danger' }
     : dialog === 'reopen'
       ? { h: 'Genåbn afstemningen?', p: 'Deltagerne kan igen stemme og ændre deres svar. Det valgte tidspunkt nulstilles.', ok: 'Genåbn', cls: 'btn--primary' }
@@ -381,6 +391,8 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
           )}
           <p>Har du delt admin-linket ved en fejl? Lav et nyt – det gamle holder op med at virke.</p>
           <button type="button" className="btn btn--danger-ghost" id="rotate" onClick={() => openDialog('rotate')}>Lav nyt admin-link…</button>
+          <p>Slet hele afstemningen med alle tidsforslag og svar. Linkene holder op med at virke. Det kan ikke fortrydes.</p>
+          <button type="button" className="btn btn--danger" id="delete-poll" onClick={() => openDialog('delete-poll')}>Slet afstemning…</button>
         </div>
       </section>
 
