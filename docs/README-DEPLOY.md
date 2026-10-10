@@ -104,6 +104,34 @@ pg_restore --dbname "$TARGET_DIRECT_URL" --no-owner --no-privileges --clean --if
 ```
 Test a restore into the staging project (or local Docker Postgres) now and then.
 
+## E-mail (Resend)
+**Plan (Free, checked Oct 2026):** 3,000 e-mails/month, **100/day** (UTC day; each To/CC/BCC recipient counts), up to 3 verified domains,
+30-day log retention. Sending region selectable on Free: choose **Ireland (eu-west-1)**. Note: Resend stores account data,
+logs and metadata in the US regardless of sending region (US company – fine for this personal app; mention in privacy note).
+
+**A domain is required.** Without a verified domain Resend only lets you send from `onboarding@resend.dev` to the account
+owner's own address, i.e. no mails to friends. Options: a cheap `.dk` (~75–100 kr/yr) or a subdomain of a domain you already own.
+Use a sending subdomain (`mail.<domain>`) to keep reputation separate from the root domain.
+
+**Setup**
+1. resend.com → Domains → Add domain `mail.<domain>`, region **Ireland (eu-west-1)**.
+2. Add the DNS records Resend shows at your DNS host (template below; copy exact values from the dashboard), then *Verify*.
+3. API Keys → create key, permission **Sending access**, domain `mail.<domain>`.
+4. Set Vercel Production env (Jan sets via API/dashboard): `RESEND_API_KEY` (Sensitive), `EMAIL_MODE=send`,
+   `EMAIL_FROM="Doodle <noreply@mail.<domain>>"`, optional `EMAIL_REPLY_TO`. Redeploy production.
+
+**DNS record template** (host names relative to `<domain>`; Resend's dashboard is authoritative):
+| Type | Name / host | Value | Priority | Purpose |
+|---|---|---|---|---|
+| MX | `send.mail` | `feedback-smtp.eu-west-1.amazonses.com` | 10 | Return-Path / bounces |
+| TXT | `send.mail` | `v=spf1 include:amazonses.com ~all` | – | SPF |
+| TXT | `resend._domainkey.mail` | `p=MIGfMA0GCSqGSIb3…` (DKIM public key from dashboard) | – | DKIM |
+| TXT | `_dmarc` | `v=DMARC1; p=none;` | – | DMARC (optional, recommended; tighten to `p=quarantine` later) |
+
+**Modes:** `EMAIL_MODE=log` (default locally and on every preview) never calls Resend; the app logs a redacted summary
+(template name, recipient domain/masked address, poll id), never tokens or full admin/edit links. `EMAIL_MODE=send` only
+in production. Notification mails contain secret links, so they must not be logged in full there either.
+
 ## GDPR
 Data is hosted in the EU (Vercel fra1, Supabase Frankfurt). As a personal, non-commercial app a formal DPA isn't required;
 if it ever becomes commercial or processes others' data on behalf of an organisation, sign the Supabase DPA
@@ -113,4 +141,4 @@ if it ever becomes commercial or processes others' data on behalf of an organisa
 - GitHub account with a private repo (Free)
 - Vercel Hobby account + access token
 - Supabase Free organization with 2 projects + `prisma` role passwords
-- Later: Resend (free tier) API key + verified sending domain
+- Resend (Free) account, API key, and a domain you control DNS for (sending subdomain mail.<domain>)
