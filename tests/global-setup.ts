@@ -1,5 +1,16 @@
 import { spawn, execSync, type ChildProcess } from 'node:child_process';
-import { createWriteStream, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+
+const PIDFILE = '.next-test.pid'; // outside the dist dir (which is wiped before each build)
+
+/** Kill a test server from a previous (aborted) run: by pidfile, then whatever still listens on the port. */
+function killStale(port: string) {
+  try {
+    const pid = Number(readFileSync(PIDFILE, 'utf8'));
+    if (pid > 0) process.kill(-pid, 'SIGTERM');
+  } catch { /* no pidfile / already gone */ }
+  try { execSync(`fuser -k ${port}/tcp`, { stdio: 'ignore' }); } catch { /* nothing listening or no fuser */ }
+}
 
 /** N3: `npm test` works without extra env – fall back to .env.test (real env vars always win). */
 function loadEnvTest() {
@@ -29,11 +40,19 @@ export default async function setup(project: TestProject) {
     base = `http://localhost:${port}`;
     const env = { ...process.env, APP_URL: base, NEXT_TELEMETRY_DISABLED: '1', NEXT_DIST_DIR: '.next-test' };
     const dev = process.env.TEST_SERVER === 'dev';
-    if (!dev) execSync('npx next build', { stdio: 'inherit', env: { ...env, NODE_ENV: 'production' } });
+    // V9: a test server left over from an aborted run keeps .next-test open / the port busy, and `next build`
+    // then races with it (ENOENT build-manifest.json). Kill it, start from an empty dist dir, verify the build.
+    killStale(port);
+    rmSync('.next-test', { recursive: true, force: true, maxRetries: 3 });
+    if (!dev) {
+      execSync('npx next build', { stdio: 'inherit', env: { ...env, NODE_ENV: 'production' } });
+      if (!existsSync('.next-test/BUILD_ID')) throw new Error('next build did not produce .next-test/BUILD_ID');
+    }
     child = spawn('npx', ['next', dev ? 'dev' : 'start', '-p', port], {
       env,
       stdio: ['ignore', 'pipe', 'pipe'], detached: true,
     });
+    if (child.pid) writeFileSync(PIDFILE, String(child.pid));
     let log = '';
     mkdirSync('.next-test', { recursive: true });
     const file = createWriteStream('.next-test/server.log'); // tests assert no tokens ever reach the logs
@@ -55,6 +74,7 @@ export default async function setup(project: TestProject) {
   project.provide('serverLog', child ? '.next-test/server.log' : '');
   return async () => {
     if (child?.pid) { try { process.kill(-child.pid, 'SIGTERM'); } catch { /* already gone */ } }
+    rmSync(PIDFILE, { force: true });
   };
 }
 

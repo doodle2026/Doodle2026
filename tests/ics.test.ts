@@ -17,6 +17,8 @@ describe('ics', () => {
     const s = buildIcs({ uid: 'abc-1@x', stamp: new Date('2026-10-10T10:00:00Z'), start: new Date('2027-11-03T09:00:00Z'), end: null,
       summary: 'Møde; nr, 1', description: 'Linje 1\nLinje 2', url: 'https://x/p/abc' });
     expect(s).toContain('\r\nUID:abc-1@x\r\n');
+    expect(buildIcs({ uid: 'u', stamp: new Date(0), start: new Date(0), end: null, summary: 's', sequence: 3, lastModified: new Date('2026-01-02T03:04:05Z') }))
+      .toContain('DTSTAMP:19700101T000000Z\r\nSEQUENCE:3\r\nLAST-MODIFIED:20260102T030405Z\r\n');
     expect(s).toContain('DTSTAMP:20261010T100000Z');
     expect(s).toContain('DTSTART:20271103T090000Z\r\nDTEND:20271103T100000Z');
     expect(s).toContain('SUMMARY:Møde\\; nr\\, 1');
@@ -29,6 +31,8 @@ describe('ics', () => {
   test('safe filename (ASCII + RFC 5987 UTF-8)', () => {
     expect(icsDisposition('Teammøde "Q4" / <script>')).toBe(
       `attachment; filename="teammoede-q4-script.ics"; filename*=UTF-8''${encodeURIComponent('Teammøde Q4 script.ics')}`);
+    const bidi = icsDisposition('a\u202Egnp\u2066\u2069\u202A.exe');
+    expect(bidi).toBe(`attachment; filename="agnp-exe.ics"; filename*=UTF-8''${encodeURIComponent('agnp.exe.ics')}`);
     expect(icsDisposition('🎉🎉')).toMatch(/^attachment; filename="moede\.ics"/);
   });
 });

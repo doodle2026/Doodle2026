@@ -75,7 +75,8 @@ describe('.ics', () => {
     expect(t.split('\r\n').every((l) => Buffer.byteLength(l, 'utf8') <= 75)).toBe(true);
     expect(t.replace(/\r\n/g, '')).not.toMatch(/\n|\r/);
     const unfolded = t.replace(/\r\n /g, '');
-    expect(unfolded).toContain(`UID:${e.id}-${e.o[0]}@localhost`);
+    expect(unfolded).toContain(`UID:${e.id}@localhost\r\n`);
+    expect(unfolded).toMatch(/SEQUENCE:\d+\r\nLAST-MODIFIED:\d{8}T\d{6}Z/);
     expect(unfolded).toMatch(/DTSTAMP:\d{8}T\d{6}Z/);
     expect(unfolded).toContain(`DTSTART:${Y}1103T080000Z`);
     expect(unfolded).toContain(`DTEND:${Y}1103T093000Z`);
@@ -85,6 +86,40 @@ describe('.ics', () => {
     // stable UID across downloads
     const again = (await call(`/api/events/${e.id}/ics`)).text.replace(/\r\n /g, '');
     expect(again.match(/UID:.*/)![0]).toBe(unfolded.match(/UID:.*/)![0]);
+  });
+
+  test('changing the chosen time keeps the UID and bumps SEQUENCE (+ LAST-MODIFIED); same choice again does not', async () => {
+    const e = await create();
+    const ics = async () => (await call(`/api/events/${e.id}/ics`)).text.replace(/\r\n /g, '');
+    const field = (t: string, f: string) => t.match(new RegExp(`^${f}:(.*)\r$`, 'm'))![1];
+    await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: e.o[0] }, e.admin));
+    const a = await ics();
+    await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: e.o[0] }, e.admin)); // no change
+    expect(field(await ics(), 'SEQUENCE')).toBe(field(a, 'SEQUENCE'));
+    await new Promise((r) => setTimeout(r, 1100));
+    await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: e.o[1] }, e.admin));
+    const b = await ics();
+    expect(field(b, 'UID')).toBe(field(a, 'UID'));
+    expect(Number(field(b, 'SEQUENCE'))).toBe(Number(field(a, 'SEQUENCE')) + 1);
+    expect(field(b, 'LAST-MODIFIED') > field(a, 'LAST-MODIFIED')).toBe(true);
+    expect(field(b, 'DTSTART')).not.toBe(field(a, 'DTSTART'));
+    // moving the chosen option via PATCH also bumps it
+    const adm = await call(`/api/events/${e.id}/admin`, { token: e.admin });
+    const moved = adm.body.time_options.map((o: Json) => ({ id: o.id, start: o.id === e.o[1] ? `${Y}-11-06T13:00:00Z` : o.start_at, end: o.end_at }));
+    expect((await call(`/api/events/${e.id}`, json('PATCH', { title: 'T', time_options: moved }, e.admin))).status).toBe(200);
+    const c = await ics();
+    expect(Number(field(c, 'SEQUENCE'))).toBe(Number(field(b, 'SEQUENCE')) + 1);
+    expect(field(c, 'DTSTART')).toBe(`${Y}1106T130000Z`);
+  });
+
+  test('bidi/invisible chars never reach the ICS filename (ASCII or UTF-8) or SUMMARY', async () => {
+    const e = await create('a"b\\c/d e;f\u202Egnp\u2066x\u200D.exe');
+    await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: e.o[0] }, e.admin));
+    const r = await call(`/api/events/${e.id}/ics`);
+    const cd = r.headers.get('content-disposition')!;
+    expect(decodeURIComponent(cd)).not.toMatch(/[\u202A-\u202E\u2066-\u2069\u200B-\u200F]/);
+    expect(cd).not.toMatch(/%E2%80%A[A-E]|%E2%81%A[6-9]|%E2%80%8[B-F]/i);
+    expect(r.text).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
   });
 
   test('no end time → default 1 hour', async () => {

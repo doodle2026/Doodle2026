@@ -17,8 +17,32 @@ export function textLength(s: string): number {
   return n;
 }
 // Zero-width / invisible chars (U+200B–U+200D, U+2060, U+FEFF per design §11, plus other invisibles) are stripped before the emptiness check.
-const INVISIBLE_RE = /[\s\u00AD\u180E\u200B-\u200F\u2028-\u202F\u2060-\u2064\uFEFF]/gu;
+/** Whitespace + every invisible/format char we treat as "nothing": soft hyphen U+00AD, CGJ U+034F, Arabic letter
+ * mark U+061C, Mongolian VS U+180E, ZWSP/ZWNJ/ZWJ/LRM/RLM U+200B-200F, line/para sep + bidi embeddings/overrides
+ * U+2028-202E, NNBSP U+202F, word joiner/invisible operators U+2060-2064, bidi isolates U+2066-2069, BOM U+FEFF. */
+export const INVISIBLE_RE = /[\s\u00AD\u034F\u061C\u180E\u200B-\u200F\u2028-\u202F\u2060-\u2064\u2066-\u2069\uFEFF]/gu;
 export const isBlank = (s: string) => s.replace(INVISIBLE_RE, '') === '';
+
+// Invisible format chars (no whitespace): soft hyphen, Mongolian VS, ZW space/ZWNJ/ZWJ, LRM/RLM, bidi
+// embeddings/isolates (U+202A-202E), word joiner & invisible operators, BOM.
+/** INVISIBLE_RE minus ordinary whitespace (spaces/newlines are handled separately). */
+export const INVISIBLE_FORMAT_RE = /[\u00AD\u034F\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/gu;
+// A ZWJ is only meaningful between two pictographs (👨‍👩‍👧). Keep exactly those, drop every other invisible char.
+const EMOJI_ZWJ_RE = /(\p{Extended_Pictographic}[\u{FE0F}\u{1F3FB}-\u{1F3FF}]?)\u200D(?=\p{Extended_Pictographic})/gu;
+const ZWJ_MARK = '\u{F0000}'; // private-use placeholder while stripping
+
+/**
+ * Shared person-name normalizer (votes): removes invisible/format characters (except emoji ZWJ),
+ * collapses whitespace, trims. Used for display AND (with NFKC + lower-case) for uniqueness.
+ */
+export function stripInvisible(s: string): string {
+  return s.replace(EMOJI_ZWJ_RE, `$1${ZWJ_MARK}`).replace(INVISIBLE_FORMAT_RE, '').replaceAll(ZWJ_MARK, '\u200D');
+}
+export function normalizeName(s: string): string {
+  return stripInvisible(s).replace(/\s+/g, ' ').trim();
+}
+/** Uniqueness key: normalized, NFKC, Danish lower-case, and with no invisible chars at all. */
+export const nameKey = (s: string) => normalizeName(s).normalize('NFKC').replace(INVISIBLE_RE, (c) => (c === ' ' ? ' ' : '')).toLocaleLowerCase('da');
 
 export interface CleanOption { id?: number; startAt: Date; endAt: Date | null }
 export interface CleanEvent { title: string; description: string; timeOptions: CleanOption[] }
@@ -53,13 +77,13 @@ export function validateEvent(body: unknown, now: Date = new Date(), opts: Valid
   let title = '';
   if (body.title != null && typeof body.title !== 'string') errors.push('Titel skal være tekst.');
   else {
-    title = ((body.title as string | undefined) ?? '').trim();
+    title = stripInvisible((body.title as string | undefined) ?? '').trim();
     if (isBlank(title)) errors.push('Titel er påkrævet.');
     else if (textLength(title) > LIMITS.title) errors.push(`Titel må højst være ${LIMITS.title} tegn.`);
   }
   let description = '';
   if (body.description != null && typeof body.description !== 'string') errors.push('Beskrivelse skal være tekst.');
-  else description = ((body.description as string | undefined) ?? '').trim();
+  else description = stripInvisible((body.description as string | undefined) ?? '').trim();
   if (textLength(description) > LIMITS.description) errors.push(`Beskrivelse må højst være ${LIMITS.description} tegn.`);
 
   const clean: CleanOption[] = [];

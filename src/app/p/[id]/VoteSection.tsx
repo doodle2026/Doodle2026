@@ -5,13 +5,14 @@ import { whenLabel } from '@/lib/format';
 import { copyText } from '@/lib/share';
 import { counterState, counterText, isBlank, textLength } from '@/lib/form';
 import {
-  bestMask, editTokenFromHash, KEY_VOTE, LABEL, nameError, nextVote, readStored, totals, totalText, writeStored, type Vote,
+  bestMask, editTokenFromHash, HINT_CARDS, HINT_GRID, nextDayMarker, savedMessage, KEY_VOTE, LABEL, nameError, nextVote, readStored, totals, totalText, writeStored, type Vote,
 } from '@/lib/vote-client';
 
 const dayFmt = new Intl.DateTimeFormat('da-DK', { weekday: 'short', day: 'numeric', month: 'short' });
 const tFmt = new Intl.DateTimeFormat('da-DK', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const offFmt = new Intl.DateTimeFormat('da-DK', { timeZoneName: 'shortOffset' });
 const offsetOf = (d: Date) => (offFmt.formatToParts(d).find((p) => p.type === 'timeZoneName')?.value ?? '').replace('GMT', '') || '+00';
+const keyFmt = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const newIdemKey = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
 
@@ -26,26 +27,29 @@ function Badge({ v }: { v: Vote }) {
 export default function VoteSection({ initial }: { initial: ApiEvent }) {
   const [ev, setEv] = useState(initial);
   const [mounted, setMounted] = useState(false);
+  const [wide, setWide] = useState(true); // V3: matches the CSS breakpoint (table ≥ 640 px, cards below)
   const [name, setName] = useState('');
   const [me, setMe] = useState<Vote[]>(() => initial.time_options.map(() => null));
   const [token, setToken] = useState<string | null>(null);
   const [myId, setMyId] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
-  const [saved, setSaved] = useState<{ name: string; editUrl: string | null } | null>(null);
+  const [saved, setSaved] = useState<{ name: string; editUrl: string | null; fresh: boolean } | null>(null);
   const [nameErr, setNameErr] = useState('');
   const [summary, setSummary] = useState<{ head: string; items: string[] } | null>(null);
   const [tokenErr, setTokenErr] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState<'' | 'ok' | 'err'>('');
   const [live, setLive] = useState('');
-  const idemKey = useRef<string | null>(null);
+  // Idempotency key is bound to the exact payload: a retry of the SAME answers reuses it, any change gets a new key (V2).
+  const idem = useRef<{ key: string; body: string } | null>(null);
   const focusSel = useRef<string | null>(null);
 
   const closed = ev.is_closed;
   const opts = ev.time_options;
   const others = ev.participants.filter((p) => !(editing && p.id === myId));
   const showInput = !closed && (editing || !saved);
-  const rows = [...others.map((p) => p.votes), ...(showInput ? [me] : [])];
+  // V6: totals/best count SAVED answers only (incl. your own saved row while you edit), never unsaved clicks.
+  const rows = ev.participants.map((p) => p.votes);
   const T = totals(rows, opts.length);
   const best = bestMask(T);
   const chosen = (i: number) => ev.chosen_option_id === opts[i].id;
@@ -55,12 +59,15 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
   const localKey = (iso: string) => dayFmt.format(new Date(iso)) + tFmt.format(new Date(iso));
   const dupLocal = (iso: string) => opts.filter((x) => localKey(x.start_at) === localKey(iso)).length > 1;
   const time = (o: { start_at: string; end_at: string | null }) =>
-    mounted ? `${tFmt.format(new Date(o.start_at))}${dupLocal(o.start_at) ? ` (${offsetOf(new Date(o.start_at))})` : ''}${o.end_at ? '–' + tFmt.format(new Date(o.end_at)) : ''}` : '';
+    mounted ? `${tFmt.format(new Date(o.start_at))}${dupLocal(o.start_at) ? ` (${offsetOf(new Date(o.start_at))})` : ''}${o.end_at ? '–' + tFmt.format(new Date(o.end_at)) + nextDayMarker(keyFmt.format(new Date(o.start_at)), keyFmt.format(new Date(o.end_at))) : ''}` : '';
   const optLabel = (i: number) => (mounted ? whenLabel(opts[i].start_at, opts[i].end_at) : '');
 
   // Personal edit link: #edit=<token> → verify via API (Bearer), keep in localStorage, strip the fragment.
   useEffect(() => {
     setMounted(true);
+    const mq = window.matchMedia('(min-width: 640px)');
+    setWide(mq.matches);
+    mq.addEventListener('change', (e) => setWide(e.matches));
     const fromHash = editTokenFromHash(location.hash);
     if (fromHash !== null) history.replaceState(null, '', location.pathname + location.search);
     const stored = readStored(initial.slug, localStorage);
@@ -78,7 +85,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
         writeStored(initial.slug, { token: t, pid: d.participant_id }, localStorage);
         setToken(t); setMyId(d.participant_id);
         if (fromHash && !d.is_closed) startEditing(d.participant_id, initial, d.name);
-        else setSaved({ name: d.name, editUrl: null });
+        else setSaved({ name: d.name, editUrl: null, fresh: false });
       } catch { /* offline: just view */ }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -99,12 +106,16 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
   }
   function cancelEditing() {
     setEditing(false); setMe(opts.map(() => null)); setName(''); setSummary(null); setNameErr('');
-    setSaved(myId !== null ? { name: ev.participants.find((p) => p.id === myId)?.name ?? '', editUrl: null } : null);
+    setSaved(myId !== null ? { name: ev.participants.find((p) => p.id === myId)?.name ?? '', editUrl: null, fresh: false } : null);
   }
 
-  function set(i: number, v: Vote, sel: string) {
-    setMe((m) => m.map((x, j) => (j === i ? v : x)));
-    setLive(`${optLabel(i)}: ${LABEL[String(v)][1]}`);
+  /** `v` may be a function of the CURRENT value, so rapid clicks never cycle from a stale render (V2). */
+  function set(i: number, v: Vote | ((cur: Vote) => Vote), sel: string) {
+    setMe((m) => {
+      const nv = typeof v === 'function' ? v(m[i]) : v;
+      setLive(`${optLabel(i)}: ${LABEL[String(nv)][1]}`);
+      return m.map((x, j) => (j === i ? nv : x));
+    });
     focusSel.current = sel;
   }
   function triKey(e: KeyboardEvent<HTMLButtonElement>, i: number) {
@@ -143,22 +154,22 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
       if (editing && token) {
         r = await fetch(`/api/events/${ev.slug}/votes/me?tz=${tz}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body });
       } else {
-        idemKey.current ??= newIdemKey(); // same key on retry → same participant (no duplicates)
-        r = await fetch(`/api/events/${ev.slug}/votes?tz=${tz}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idemKey.current }, body });
+        if (idem.current?.body !== body) idem.current = { key: newIdemKey(), body };
+        r = await fetch(`/api/events/${ev.slug}/votes?tz=${tz}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idem.current.key }, body });
       }
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
         const errs: string[] = Array.isArray(d.errors) ? d.errors : ['Ukendt fejl.'];
         if (d.code === 'name_taken') setNameErr(errs[0]);
+        if (d.code === 'idempotency_mismatch') idem.current = null;
         if (r.status === 423) setEv((x) => ({ ...x, is_closed: true }));
         if (r.status === 403) { setTokenErr(true); setEditing(false); writeStored(ev.slug, null, localStorage); setToken(null); setMyId(null); }
         if (r.status >= 500) { serverError(); return; }
-        if (r.status === 409 || r.status === 400) idemKey.current = null; // changed input → new attempt
         setSummary({ head: 'Dine svar blev ikke gemt.', items: errs });
         focusSel.current = d.code === 'name_taken' ? '#name' : '#summary';
         return;
       }
-      idemKey.current = null;
+      idem.current = null;
       setEv(d.event);
       const pid = d.participant_id as number;
       let editUrl: string | null = null;
@@ -169,7 +180,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
       }
       setMyId(pid);
       const shown = d.event.participants.find((p: { id: number }) => p.id === pid)?.name ?? name;
-      setSaved({ name: shown, editUrl });
+      setSaved({ name: shown, editUrl, fresh: true });
       setEditing(false); setName(''); setMe(opts.map(() => null)); setNameErr('');
       setLive(editUrl ? 'Dine svar er gemt. Dit redigeringslink vises nu.' : 'Dine ændringer er gemt.');
     } catch {
@@ -199,7 +210,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
       {tokenErr && <div className="alert" role="alert">Redigeringslinket er ugyldigt. Du kan stadig se afstemningen, men ikke ændre svarene.</div>}
       {saved && !editing && (
         <div id="banner">
-          <div className="success" role="status">✓ Tak, {saved.name}! Dine svar er gemt.</div>
+          <div className={closed ? 'meta' : 'success'} role="status" id="saved-msg">{savedMessage(saved.name, saved.fresh, closed)}</div>
           {saved.editUrl && (
             <div className="linkbox linkbox--secret" role="group" aria-labelledby="el-l" aria-describedby="el-d" style={{ margin: '0 0 var(--s-4)' }}>
               <p className="linkbox__label" id="el-l"><span className="icon-lock" aria-hidden="true">!</span> Dit personlige redigeringslink</p>
@@ -227,7 +238,11 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
           <label className="field__label" htmlFor="name">Dit navn *</label>
           <input className="input" id="name" autoComplete="name" placeholder="F.eks. Mette" aria-required="true" value={name}
             aria-describedby="name-err name-count" aria-invalid={nameErr ? true : undefined}
-            onChange={(e) => { setName(e.target.value); if (nameErr && !nameError(e.target.value, ev.participants, editing ? myId : null, { isBlank, textLength })) setNameErr(''); }} />
+            onChange={(e) => {
+              setName(e.target.value);
+              // V4: any change clears the name error (and its summary line); it is re-checked on save.
+              if (nameErr) { setNameErr(''); setSummary((s) => (s ? { ...s, items: s.items.filter((x) => x !== nameErr) } : s)); }
+            }} />
           <div className="field__meta">
             <div className="field__error" id="name-err" aria-live="polite">{nameErr}</div>
             <span className={`counter${nameSt === 'over' ? ' counter--over' : nameSt === 'warn' ? ' counter--warn' : ''}`} id="name-count">{counterText(nameLen, 100)}</span>
@@ -246,7 +261,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
         <p className="editing-note" id="editing">✎ Du redigerer dine svar som {ev.participants.find((p) => p.id === myId)?.name}.{' '}
           <button type="button" onClick={cancelEditing} style={{ background: 'none', border: 0, padding: 0, color: 'var(--c-primary)', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>Annullér redigering</button></p>
       )}
-      {showInput && <p className="tz-note" id="hint">Tryk på en celle for at skifte: ikke svaret → ja → måske → nej. Tastatur: J / M / N, Delete nulstiller, ← → flytter.</p>}
+      {showInput && <p className="tz-note" id="hint">{wide ? HINT_GRID : HINT_CARDS}</p>}
       {ev.participants.length === 0 && <div className="vote-empty">Ingen har stemt endnu – vær den første! 🎉</div>}
 
       <div className="vgrid-wrap" tabIndex={0} role="region" aria-labelledby="grid-h">
@@ -282,7 +297,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
                 {me.map((v, i) => (
                   <td className={cls(i)} key={i}>
                     <button type="button" className="tri" data-i={i} data-state={String(v)} aria-label={`${optLabel(i)}: ${LABEL[String(v)][1]}. Tryk for at skifte.`}
-                      onClick={() => set(i, nextVote(v), `.tri[data-i="${i}"]`)} onKeyDown={(e) => triKey(e, i)}>
+                      onClick={() => set(i, nextVote, `.tri[data-i="${i}"]`)} onKeyDown={(e) => triKey(e, i)}>
                       <span aria-hidden="true">{LABEL[String(v)][0]}</span>{v ? LABEL[v][1] : 'Vælg'}
                     </button>
                   </td>
@@ -309,7 +324,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
                 {(['yes', 'maybe', 'no'] as const).map((v) => (
                   <button type="button" role="radio" key={v} data-i={i} data-v={v} aria-checked={me[i] === v}
                     tabIndex={me[i] === v || (!me[i] && v === 'yes') ? 0 : -1}
-                    onClick={() => set(i, me[i] === v ? null : v, `.seg button[data-i="${i}"][data-v="${v}"]`)} onKeyDown={(e) => segKey(e, i, v)}>
+                    onClick={() => set(i, (cur) => (cur === v ? null : v), `.seg button[data-i="${i}"][data-v="${v}"]`)} onKeyDown={(e) => segKey(e, i, v)}>
                     <span aria-hidden="true">{LABEL[v][0]}</span> {LABEL[v][1]}
                   </button>
                 ))}

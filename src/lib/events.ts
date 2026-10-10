@@ -180,10 +180,24 @@ export async function updateEvent(eventId: number, v: CleanEvent, confirmRemoveV
       throw new ApiError(409, ['Nogle af de fjernede tidsforslag har svar. Bekræft for at slette dem.'],
         { voted_option_ids: voted.map((o) => o.id) });
     }
-    if (removing.length) await tx.timeOption.deleteMany({ where: { id: { in: removing.map((o) => o.id) } } });
+    if (removing.length) {
+      const { chosenOptionId } = (await tx.event.findUnique({ where: { id: eventId }, select: { chosenOptionId: true } }))!;
+      await tx.timeOption.deleteMany({ where: { id: { in: removing.map((o) => o.id) } } });
+      // Deleting the chosen option clears the choice (FK SET NULL) → calendar entry changes too.
+      if (chosenOptionId !== null && removing.some((o) => o.id === chosenOptionId)) {
+        await tx.event.update({ where: { id: eventId }, data: { icsSequence: { increment: 1 }, chosenChangedAt: new Date() } });
+      }
+    }
     await tx.event.update({ where: { id: eventId }, data: { title: v.title, description: v.description } });
     for (const [i, o] of v.timeOptions.entries()) {
-      if (o.id !== undefined) await tx.timeOption.update({ where: { id: o.id }, data: { startAt: o.startAt, endAt: o.endAt, position: i } });
+      if (o.id !== undefined) {
+        const before = await tx.timeOption.update({ where: { id: o.id }, data: { position: i }, select: { startAt: true, endAt: true, chosenBy: { select: { id: true } } } });
+        const moved = before.startAt.getTime() !== o.startAt.getTime() || (before.endAt?.getTime() ?? null) !== (o.endAt?.getTime() ?? null);
+        if (moved) {
+          await tx.timeOption.update({ where: { id: o.id }, data: { startAt: o.startAt, endAt: o.endAt } });
+          if (before.chosenBy) await tx.event.update({ where: { id: eventId }, data: { icsSequence: { increment: 1 }, chosenChangedAt: new Date() } });
+        }
+      }
       else await tx.timeOption.create({ data: { eventId, startAt: o.startAt, endAt: o.endAt, position: i } });
     }
   });
@@ -193,16 +207,23 @@ export async function existingOptions(eventId: number) {
   return prisma.timeOption.findMany({ where: { eventId }, select: { id: true, startAt: true, endAt: true } });
 }
 
+
+/** Fields to set when the chosen time may change: bump SEQUENCE + LAST-MODIFIED only on a real change. */
+async function chosenChange(eventId: number, next: number | null) {
+  const cur = await prisma.event.findUnique({ where: { id: eventId }, select: { chosenOptionId: true } });
+  return cur?.chosenOptionId === next ? {} : { icsSequence: { increment: 1 }, chosenChangedAt: new Date() };
+}
+
 export async function closeEvent(eventId: number, chosenOptionId: number | null) {
   if (chosenOptionId !== null) {
     const ok = await prisma.timeOption.count({ where: { id: chosenOptionId, eventId } });
     if (!ok) throw new ApiError(400, ['Det valgte tidspunkt findes ikke i afstemningen.']);
   }
-  await prisma.event.update({ where: { id: eventId }, data: { closedAt: new Date(), chosenOptionId } });
+  await prisma.event.update({ where: { id: eventId }, data: { closedAt: new Date(), chosenOptionId, ...(await chosenChange(eventId, chosenOptionId)) } });
 }
 
 export async function reopenEvent(eventId: number) {
-  await prisma.event.update({ where: { id: eventId }, data: { closedAt: null, chosenOptionId: null } });
+  await prisma.event.update({ where: { id: eventId }, data: { closedAt: null, chosenOptionId: null, ...(await chosenChange(eventId, null)) } });
 }
 
 /** New admin token; the old one stops working immediately. Returns the raw token (shown once). */
@@ -222,7 +243,7 @@ export async function chooseOption(eventId: number, chosenOptionId: number | nul
     const ok = await prisma.timeOption.count({ where: { id: chosenOptionId, eventId } });
     if (!ok) throw new ApiError(400, ['Det valgte tidspunkt findes ikke i afstemningen.']);
   }
-  await prisma.event.update({ where: { id: eventId }, data: { chosenOptionId } });
+  await prisma.event.update({ where: { id: eventId }, data: { chosenOptionId, ...(await chosenChange(eventId, chosenOptionId)) } });
 }
 
 /** Organizer removes a participant; votes cascade. */
