@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ImageResponse } from 'next/og';
+import { BRAND } from '@/lib/brand';
 import { loadEvent } from '@/lib/events';
 import { dateRangeDa } from '@/lib/meta';
 import { countLabel, OG_SIZE, ogTitle } from '@/lib/og';
@@ -11,6 +12,14 @@ export const dynamic = 'force-dynamic';
 // Inter (OFL) from @fontsource; files are traced into the function via next.config outputFileTracingIncludes.
 type Weight = 400 | 700 | 800;
 let fontsPromise: Promise<{ name: string; data: Buffer; weight: Weight; style: 'normal' }[]> | null = null;
+// Logo artwork lives only in public/brand (see src/lib/brand.ts); embedded as data URIs.
+let artPromise: Promise<{ mark: string; background: string }> | null = null;
+function brandArt() {
+  const uri = async (p: string) => `data:image/svg+xml;base64,${(await readFile(join(process.cwd(), p))).toString('base64')}`;
+  artPromise ??= Promise.all([uri(BRAND.og.mark), uri(BRAND.og.background)]).then(([mark, background]) => ({ mark, background }));
+  return artPromise;
+}
+
 function fonts() {
   fontsPromise ??= Promise.all(
     (['latin', 'latin-ext'] as const).flatMap((sub) => ([400, 700, 800] as const).map(async (weight) => ({
@@ -28,24 +37,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const ev = await loadEvent((await params).id);
   if (!ev) return new Response('Ikke fundet', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
 
+  const art = await brandArt();
   const title = ogTitle(ev.title);
   const count = countLabel(ev.time_options.length);
   const dates = dateRangeDa(ev.time_options.map((o) => o.start_at));
   const el = (
     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
       backgroundImage: 'linear-gradient(135deg, #2B6CB0 0%, #63B3ED 100%)', fontFamily: 'Inter' }}>
-      <div style={{ position: 'absolute', width: 440, height: 440, right: -120, top: -160, borderRadius: 9999, background: 'rgba(255,255,255,0.10)' }} />
-      <div style={{ position: 'absolute', width: 320, height: 320, left: -100, bottom: -140, borderRadius: 9999, background: 'rgba(255,255,255,0.10)' }} />
-      <div style={{ width: 1072, height: 502, background: '#fff', borderRadius: 32, padding: '56px 64px', display: 'flex', flexDirection: 'column',
+      <img src={art.background} width={1200} height={630} alt="" style={{ position: 'absolute', left: 0, top: 0 }} />
+      <div style={{ width: 1000, height: 470, marginTop: 40, background: '#fff', borderRadius: 32, padding: '56px 64px', display: 'flex', flexDirection: 'column',
         boxShadow: '0 20px 60px rgba(14,40,70,.25)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 34, fontWeight: 700, color: '#2B6CB0' }}>
           {/* Temporary logo (favicon mark) */}
-          <svg width="56" height="56" viewBox="0 0 64 64">
-            <rect x="4" y="8" width="56" height="52" rx="12" fill="#2B6CB0" />
-            <rect x="18" y="2" width="6" height="14" rx="3" fill="#163E66" />
-            <rect x="40" y="2" width="6" height="14" rx="3" fill="#163E66" />
-            <path d="M20 40l8 8 16-17" fill="none" stroke="#fff" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <img src={art.mark} width={64} height={64} alt="" />
           Mødetid
         </div>
         <div style={{ marginTop: 36, fontSize: title.long ? 56 : 68, lineHeight: 1.12, fontWeight: 800, color: '#1A2B3C',

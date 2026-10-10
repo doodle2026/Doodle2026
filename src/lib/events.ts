@@ -251,3 +251,24 @@ export async function deleteParticipant(eventId: number, participantId: number) 
   const r = await prisma.participant.deleteMany({ where: { id: participantId, eventId } });
   if (!r.count) throw new ApiError(404, ['Deltageren findes ikke.']);
 }
+
+/**
+ * Edit ONE time option (design §31). `resetVotes` deletes its votes. 409 duplicate_option if another option
+ * has the same start+end; past start rejected; moving the chosen option bumps the ICS SEQUENCE.
+ */
+export async function editOption(eventId: number, optionId: number, startAt: Date, endAt: Date | null, resetVotes: boolean) {
+  return prisma.$transaction(async (tx) => {
+    const o = await tx.timeOption.findFirst({ where: { id: optionId, eventId }, select: { startAt: true, endAt: true, chosenBy: { select: { id: true } } } });
+    if (!o) throw new ApiError(404, ['Tidsforslaget findes ikke (længere). Genindlæs siden.']);
+    const dup = await tx.timeOption.count({ where: { eventId, id: { not: optionId }, startAt, endAt } });
+    if (dup) throw new ApiError(409, ['Det tidspunkt findes allerede som et andet forslag.'], { code: 'duplicate_option' });
+    const changed = o.startAt.getTime() !== startAt.getTime() || (o.endAt?.getTime() ?? null) !== (endAt?.getTime() ?? null);
+    if (changed && startAt.getTime() < Date.now() && o.startAt.getTime() !== startAt.getTime()) {
+      throw new ApiError(400, ['Tidspunktet ligger i fortiden.'], { code: 'past' });
+    }
+    await tx.timeOption.update({ where: { id: optionId }, data: { startAt, endAt } });
+    const reset = resetVotes ? (await tx.vote.deleteMany({ where: { timeOptionId: optionId } })).count : 0;
+    if (changed && o.chosenBy) await tx.event.update({ where: { id: eventId }, data: { icsSequence: { increment: 1 }, chosenChangedAt: new Date() } });
+    return { changed, reset };
+  });
+}

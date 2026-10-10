@@ -1,9 +1,8 @@
 'use client';
-import { whenLabel } from '@/lib/format';
 import { useEffect, useRef, useState } from 'react';
 import Header from '@/components/Header';
 import VoteSection from './VoteSection';
-import { bestMask, totals } from '@/lib/vote-client';
+import ResultBanner from '@/components/ResultBanner';
 import type { ApiEvent } from '@/lib/events';
 import { adminMailto, canNativeShare, copyText, participantMailto, shareLink, shareText } from '@/lib/share';
 
@@ -30,9 +29,9 @@ export default function PollView({ event, shareUrl, justCreated }:
   const [open, setOpen] = useState(justCreated); // organizer (?created=1) sees it open; visitors closed
   const [copy, setCopy] = useState<Record<Which, CopyState>>({ url: 'idle', admin: 'idle' });
   const [status, setStatus] = useState('');
-  const [savedOk, setSavedOk] = useState(false);
+  const [acked, setAcked] = useState(false); // V7: "✓ Jeg har gemt det"
   const adminRef = useRef<HTMLInputElement>(null);
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const ackShowRef = useRef<HTMLButtonElement>(null);
   const [canShare, setCanShare] = useState(false);
   const [adminUrl, setAdminUrl] = useState<string | null>(null); // shown once, right after creation
   const urlRef = useRef<HTMLInputElement>(null);
@@ -76,23 +75,16 @@ export default function PollView({ event, shareUrl, justCreated }:
     const res = await shareLink({ title: event.title, text: shareText(event.title), url: shareUrl }, navigator);
     if (res === 'fallback') doCopy('url', shareUrl, urlRef.current);
   }
-  const closeBtnFocus = () => setTimeout(() => shareOpenRef.current?.focus(), 0);
-  function close() {
-    setOpen(false);
-    setAdminUrl(null); // the admin link is shown once; it is gone after closing
-    try { sessionStorage.setItem(storeKey, 'closed'); } catch { /* ignore */ }
-    closeBtnFocus();
-  }
-  /** Closing with an unconfirmed admin link asks first (native modal <dialog>, design §19/§20.3). */
-  function requestClose() {
-    if (adminUrl && !savedOk && dialogRef.current?.showModal) dialogRef.current.showModal();
-    else close();
-  }
-  function toggle() {
-    if (open) { requestClose(); return; }
-    const n = !open; setOpen(n);
+  /** V7 (design §32): "↗ Del" only opens; "Skjul ▴" always closes, never asks. The admin link stays in memory for this page. */
+  function setPanel(n: boolean) {
+    setOpen(n);
     try { sessionStorage.setItem(storeKey, n ? 'open' : 'closed'); } catch { /* ignore */ }
   }
+  function openPanel(focusAdmin = false) {
+    setPanel(true);
+    setTimeout(() => (focusAdmin ? adminRef.current : document.getElementById('share-h'))?.focus(), 0);
+  }
+  function hidePanel() { setPanel(false); setTimeout(() => shareOpenRef.current?.focus(), 0); }
   const mailMe = adminUrl ? adminMailto(event.title, adminUrl, shareUrl) : '';
   const mailto = participantMailto(event.title, shareUrl);
 
@@ -100,15 +92,22 @@ export default function PollView({ event, shareUrl, justCreated }:
     <>
       <Header>
         <button type="button" className="icon-btn" id="share-open" ref={shareOpenRef} aria-controls="share"
-          aria-expanded={open} aria-label="Del afstemningen" onClick={toggle}>↗ Del</button>
+          aria-expanded={open} aria-label="Del afstemningen" onClick={() => openPanel()}>↗ Del</button>
       </Header>
       <main className="container">
         <article className="card poll-view">
+          {adminUrl && !acked && !open && (
+            <div className="share-reminder" role="status" id="share-reminder">
+              <span className="icon-lock" aria-hidden="true">!</span>
+              <span style={{ flex: 1, minWidth: 200 }}><strong>Har du gemt dit admin-link?</strong> Det er eneste vej til at redigere eller lukke afstemningen.</span>
+              <button type="button" className="link-btn" id="rem-show" onClick={() => openPanel(true)}>Vis admin-link</button>
+            </div>
+          )}
           <section className="share" id="share" aria-labelledby="share-h" hidden={!open}>
             {justCreated
-              ? <p className="share__confirm" id="share-h"><span aria-hidden="true">✓</span> Din afstemning er oprettet</p>
-              : <p className="share__confirm" id="share-h">Del afstemningen</p>}
-            <button type="button" className="icon-btn share__close" aria-label="Luk delingsboksen" onClick={requestClose}>✕</button>
+              ? <p className="share__confirm" id="share-h" tabIndex={-1}><span aria-hidden="true">✓</span> Din afstemning er oprettet</p>
+              : <p className="share__confirm" id="share-h" tabIndex={-1}>Del afstemningen</p>}
+            <button type="button" className="btn btn--ghost btn--sm share__close" id="share-close" aria-controls="share" onClick={hidePanel}>Skjul <span aria-hidden="true">▴</span></button>
             <div className="linkbox" id="pub">
               <p className="linkbox__label"><span aria-hidden="true">🔗</span> Link til deltagerne</p>
               <p className="linkbox__desc">Send dette link til alle, der skal stemme. Ingen login.</p>
@@ -127,7 +126,7 @@ export default function PollView({ event, shareUrl, justCreated }:
               </div>
               {copy.url === 'error' && <p className="share__hint share__hint--error">{MANUAL_COPY}</p>}
             </div>
-            {adminUrl && (
+            {adminUrl && !acked && (
               <div className="linkbox linkbox--secret" id="admin" role="group" aria-labelledby="admin-l" aria-describedby="admin-d">
                 <p className="linkbox__label" id="admin-l"><span className="icon-lock" aria-hidden="true">!</span> Dit hemmelige admin-link – gem det nu</p>
                 <p className="linkbox__desc" id="admin-d"><strong>Del det ikke.</strong> Med dette link kan du redigere og lukke afstemningen.
@@ -141,24 +140,25 @@ export default function PollView({ event, shareUrl, justCreated }:
                   </div>
                 </div>
                 {copy.admin === 'error' && <p className="share__hint share__hint--error">{MANUAL_COPY}</p>}
-                <label className="check">
-                  <input type="checkbox" id="saved-ok" checked={savedOk} onChange={(e) => setSavedOk(e.target.checked)} />
-                  {' '}Jeg har gemt admin-linket et sikkert sted
-                </label>
+                <div className="linkbox__ack">
+                  <button type="button" className="btn btn--secondary" id="ack" onClick={() => {
+                    setAcked(true); setStatus('Admin-link markeret som gemt. Boksen er foldet sammen.');
+                    setTimeout(() => ackShowRef.current?.focus(), 0);
+                  }}><span aria-hidden="true">✓</span> Jeg har gemt det</button>
+                  <span className="field__hint">Så folder vi boksen sammen. Du kan altid vise linket igen her.</span>
+                </div>
+              </div>
+            )}
+            {adminUrl && acked && (
+              <div className="linkbox linkbox--done" id="admin-done">
+                <span aria-hidden="true">✓</span> <strong>Admin-link gemt.</strong> <span className="meta">Vises kun på denne side, indtil du lukker den.</span>{' '}
+                <button type="button" className="link-btn" id="admin-show" aria-controls="admin" ref={ackShowRef}
+                  onClick={() => { setAcked(false); setTimeout(() => adminRef.current?.focus(), 0); }}>Vis admin-link igen</button>
               </div>
             )}
             <span className="sr-only" role="status" aria-live="polite">{status}</span>
           </section>
-          <dialog className="modal" ref={dialogRef} aria-labelledby="dlg-h" aria-describedby="dlg-p">
-            <h2 id="dlg-h">Har du gemt dit admin-link?</h2>
-            <p id="dlg-p">Det vises ikke igen. Uden linket kan du ikke redigere eller lukke afstemningen.</p>
-            <div className="modal__actions">
-              {/* Cancel ("go back") gets default focus so Enter doesn't discard the link by accident. */}
-              <button type="button" className="btn btn--ghost" autoFocus onClick={() => dialogRef.current?.close()}>Tilbage</button>
-              <button type="button" className="btn btn--danger" onClick={() => { dialogRef.current?.close(); close(); }}>Luk alligevel</button>
-            </div>
-          </dialog>
-          <ResultBanner event={event} />
+          <ResultBanner event={event} appUrl={shareUrl.replace(/\/p\/[^/]+$/, '')} />
           <h1>{event.title}</h1>
           {event.description && <p className="lead">{event.description}</p>}
           <p className="tz-note">{tz ? `Tider vist i ${tz}.` : ''}</p>
@@ -166,43 +166,5 @@ export default function PollView({ event, shareUrl, justCreated }:
         </article>
       </main>
     </>
-  );
-}
-
-/**
- * Design §21 + results: shown when the poll is closed and/or the organizer picked a final time.
- * Open + chosen ("Tidspunktet er valgt") has no own mockup – it reuses .closed-banner with a calendar icon.
- * Times are formatted after mount only, so they're always in the viewer's time zone.
- */
-function ResultBanner({ event }: { event: ApiEvent }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const chosen = event.time_options.find((o) => o.id === event.chosen_option_id);
-  if (!event.is_closed && !chosen) return null;
-  const T = totals(event.participants.map((p) => p.votes), event.time_options.length);
-  const best = bestMask(T);
-  const bestOpts = event.time_options.filter((_, i) => best[i]);
-  const label = (o: { start_at: string; end_at: string | null }) => (mounted ? whenLabel(o.start_at, o.end_at) : '…');
-  return (
-    <div className="closed-banner" role="status" id="result-banner">
-      <span className="closed-banner__icon" aria-hidden="true">{event.is_closed ? '🔒' : '📅'}</span>
-      <div>
-        <h2>{event.is_closed ? 'Afstemningen er lukket' : 'Tidspunktet er valgt'}</h2>
-        {chosen ? (
-          <>
-            <p>{event.is_closed ? 'Arrangøren har lukket for svar. Det valgte tidspunkt er:' : 'Arrangøren har valgt tidspunktet. Du kan stadig ændre dine svar.'}</p>
-            <span className="chosen">✓ {label(chosen)}</span>
-            <p style={{ marginTop: 'var(--s-3)' }}>
-              <a className="btn btn--secondary btn--sm" id="ics" href={`/api/events/${event.slug}/ics`} download>📅 Tilføj til kalender (.ics)</a>
-            </p>
-          </>
-        ) : (
-          <>
-            <p>Arrangøren har lukket for svar.</p>
-            {bestOpts.length > 0 && <p>Bedste tidspunkt: <strong>★ {bestOpts.map(label).join(' / ')}</strong></p>}
-          </>
-        )}
-      </div>
-    </div>
   );
 }

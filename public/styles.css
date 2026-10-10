@@ -218,3 +218,48 @@ dialog.modal h2{margin:0 0 var(--s-2)}dialog.modal p{margin:0 0 var(--s-3);color
 .linkbox__actions .btn{flex-basis:100%}
 @media (min-width:640px){.linkbox__actions .btn{flex-basis:auto}.vote-bar{position:static}}
 .vote-bar[hidden]{display:none!important}
+/* ===== Runde 4: resultat/valg, slet deltager, inline-redigering, del-flow ===== */
+.result-banner{display:flex;gap:var(--s-3);align-items:flex-start;border-radius:var(--r-md);padding:var(--s-4);background:var(--c-yes-50);border:2px solid var(--c-yes);margin-bottom:var(--s-4);color:var(--c-text)}
+.result-banner__icon{font-size:1.5rem;line-height:1}
+.result-banner__body{flex:1;min-width:0}
+.result-banner__eyebrow{font-size:var(--fs-sm);font-weight:700;color:var(--c-yes);margin:0;display:flex;gap:var(--s-2);align-items:center;flex-wrap:wrap}
+.result-banner__when{display:block;font-size:var(--fs-lg);font-weight:800;margin:2px 0 var(--s-1)}
+.result-banner__note{font-size:var(--fs-sm);color:var(--c-muted);margin:0 0 var(--s-2)}
+.result-banner__actions{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+.result-banner .btn--secondary{background:var(--c-surface);color:var(--c-text);border:1px solid var(--c-border-strong)}
+.result-banner--closed{border-color:var(--c-primary);background:var(--c-primary-50)}
+.choose-btn{font:inherit;font-size:var(--fs-sm);font-weight:600;min-height:44px;min-width:96px;padding:0 var(--s-3);border-radius:var(--r-md);border:1.5px solid var(--c-border-strong);background:var(--c-surface);color:var(--c-primary);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.choose-btn:hover{background:var(--c-primary-50)}.choose-btn:focus-visible{outline:none;box-shadow:var(--focus)}
+.choose-btn[aria-pressed=true]{background:var(--c-yes);border-color:var(--c-yes);color:var(--c-surface)}
+.choose-btn:disabled{opacity:.6;cursor:progress}
+.vgrid tr.choose-row td,.vgrid tr.choose-row th{background:var(--c-bg);border-bottom:0}
+.del-btn{width:36px;height:36px;min-width:36px;border-radius:var(--r-sm);border:1px solid transparent;background:transparent;color:var(--c-muted);cursor:pointer;display:inline-grid;place-items:center;margin-left:auto}
+.del-btn:hover{color:var(--c-error);background:var(--c-error-50);border-color:var(--c-error)}.del-btn:focus-visible{outline:none;box-shadow:var(--focus);color:var(--c-error)}
+.vgrid__name .name-cell{display:flex;align-items:center;gap:var(--s-2)}
+.people{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.people li{display:flex;align-items:center;gap:var(--s-2);padding:var(--s-1) 0;border-bottom:1px solid var(--c-border);min-height:48px}
+.people .meta{margin-left:auto}
+.toast-undo{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);display:flex;align-items:center;gap:var(--s-3);background:var(--c-text);color:var(--c-bg);padding:var(--s-2) var(--s-2) var(--s-2) var(--s-4);border-radius:var(--r-full);box-shadow:var(--sh-md);font-size:var(--fs-sm);z-index:50;max-width:calc(100% - 32px)}
+.toast-undo button{font:inherit;font-weight:700;background:transparent;color:var(--c-bg);border:1.5px solid var(--c-bg);border-radius:var(--r-full);min-height:36px;padding:0 var(--s-3);cursor:pointer}
+.toast-undo button:focus-visible{outline:3px solid var(--c-best-border);outline-offset:2px}
+/* inline-redigering af tidsforslag */
+.opt-edit{border:2px solid var(--c-primary);border-radius:var(--r-md);padding:var(--s-3);background:var(--c-primary-50)}
+.opt-edit__grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-2)}
+.opt-edit__grid .field{margin:0}.opt-edit__grid .field:first-child{grid-column:1/-1}
+.opt-edit__actions{display:flex;gap:var(--s-2);margin-top:var(--s-3);flex-wrap:wrap}
+.opt-edit fieldset{border:0;margin:var(--s-3) 0 0;padding:0}
+.opt-edit legend{font-size:var(--fs-sm);font-weight:700;padding:0;margin-bottom:var(--s-1)}
+.radio{display:flex;gap:var(--s-2);align-items:flex-start;font-size:var(--fs-sm);margin-top:var(--s-1)}
+.radio input{width:20px;height:20px;margin:1px 0 0;accent-color:var(--c-primary)}
+.edit-btn{color:var(--c-primary)!important}
+@media (min-width:640px){.opt-edit__grid{grid-template-columns:2fr 1fr 1fr}.opt-edit__grid .field:first-child{grid-column:auto}}
+/* del-flow v2 */
+.share-reminder{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2) var(--s-3);border-left:4px solid var(--c-warn);background:var(--c-warn-50);color:var(--c-text);padding:var(--s-2) var(--s-3);border-radius:var(--r-sm);font-size:var(--fs-sm);margin-bottom:var(--s-4)}
+.share-reminder strong{color:var(--c-warn)}
+.linkbox__ack{display:flex;flex-wrap:wrap;gap:var(--s-2);align-items:center;margin-top:var(--s-3)}
+.linkbox--done{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap;font-size:var(--fs-sm);background:var(--c-surface);border:1px solid var(--c-yes)}
+.linkbox--done strong{color:var(--c-yes)}
+.link-btn{font:inherit;background:none;border:0;color:var(--c-primary);text-decoration:underline;cursor:pointer;padding:var(--s-1);min-height:32px}
+.link-btn:focus-visible{outline:none;box-shadow:var(--focus);border-radius:4px}
+.share__confirm{padding-right:96px}
+.toast-undo{width:max-content;max-width:calc(100% - 32px)}.toast-undo span{flex:1}
