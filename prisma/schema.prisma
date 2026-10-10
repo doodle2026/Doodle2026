@@ -18,6 +18,9 @@ model Event {
   createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   /// Set when the organizer closes the poll; isClosed = closedAt != null.
   closedAt        DateTime?        @map("closed_at") @db.Timestamptz(3)
+  /// Final time chosen by the organizer when closing (optional). Reset on reopen.
+  chosenOptionId  Int?             @unique @map("chosen_option_id")
+  chosenOption    TimeOption?      @relation("ChosenOption", fields: [chosenOptionId], references: [id], onDelete: SetNull)
   timeOptions     TimeOption[]
   idempotencyKeys IdempotencyKey[]
   participants    Participant[]
@@ -33,6 +36,7 @@ model TimeOption {
   position Int
   event    Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   votes    Vote[]
+  chosenBy Event?    @relation("ChosenOption")
 
   @@index([eventId])
   @@map("time_options")

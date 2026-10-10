@@ -1,5 +1,6 @@
 // Pure helpers for the create form (unit-tested in tests/form.test.ts).
 export { textLength, isBlank } from './validate';
+import { textLength, isBlank } from './validate';
 
 export type CounterState = 'ok' | 'warn' | 'over';
 export const counterState = (n: number, max: number, warnAt = 0.9): CounterState =>
@@ -67,4 +68,10 @@ export function focusAfterDateRemoval(groups: { date: string; slots: { id: numbe
   const rest = groups.filter((g) => g.date !== date);
   const target = rest[i] ?? rest[i - 1];
   return target ? ({ kind: 'slot', id: target.slots[0].id } as const) : ({ kind: 'newdate' } as const);
+}
+
+/** N2: while an error is shown, clear it as soon as the title is valid again (never add errors while typing). */
+export function liveTitleError(currentErr: string, value: string, max = 200): string {
+  if (!currentErr) return '';
+  return !isBlank(value) && textLength(value.trim()) <= max ? '' : currentErr;
 }

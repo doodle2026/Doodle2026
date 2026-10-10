@@ -2,8 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
   counterState, counterText, duplicateRowError, findDuplicates, focusAfterDateRemoval, focusAfterRemoval,
-  isBlank, mapServerErrors, rowsSummary, shouldBlockEnter, textLength,
-} from '@/lib/form';
+  isBlank, mapServerErrors, rowsSummary, shouldBlockEnter, textLength, liveTitleError } from '@/lib/form';
 
 const TITLE_MAX = 200;
 const DESC_MAX = 2000;
@@ -183,7 +182,7 @@ export default function CreateForm() {
           <label className="field__label" htmlFor="title">Titel *</label>
           <input className="input" id="title" name="title" placeholder="F.eks. Teammøde om Q4" autoComplete="off"
             aria-describedby="title-err title-count" aria-invalid={titleErr ? true : undefined}
-            value={title} onChange={(e) => setTitle(e.target.value)} />
+            value={title} onChange={(e) => { setTitle(e.target.value); setTitleErr((err) => liveTitleError(err, e.target.value)); }} />
           <div className="field__meta">
             <div className="field__error" id="title-err" aria-live="polite">{titleErr}</div>
             <Counter id="title-count" value={title} max={TITLE_MAX} />

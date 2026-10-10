@@ -20,7 +20,7 @@ export function textLength(s: string): number {
 const INVISIBLE_RE = /[\s\u00AD\u180E\u200B-\u200F\u2028-\u202F\u2060-\u2064\uFEFF]/gu;
 export const isBlank = (s: string) => s.replace(INVISIBLE_RE, '') === '';
 
-export interface CleanOption { startAt: Date; endAt: Date | null }
+export interface CleanOption { id?: number; startAt: Date; endAt: Date | null }
 export interface CleanEvent { title: string; description: string; timeOptions: CleanOption[] }
 
 /** Parse ISO datetime with offset → Date, or null if invalid (incl. impossible calendar dates). */
@@ -38,7 +38,15 @@ export function parseIsoWithOffset(s: unknown): Date | null {
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
-export function validateEvent(body: unknown, now: Date = new Date()): { errors: string[]; value: CleanEvent | null } {
+export interface ValidateOptions {
+  /** PATCH: options may carry an existing `id` (positive int). */
+  allowIds?: boolean;
+  /** PATCH: unchanged existing options may stay even if they now lie in the past. */
+  pastAllowed?: (o: CleanOption) => boolean;
+}
+
+export function validateEvent(body: unknown, now: Date = new Date(), opts: ValidateOptions = {}):
+  { errors: string[]; value: CleanEvent | null } {
   const errors: string[] = [];
   if (!isPlainObject(body)) return { errors: ['Forespørgslen skal være et JSON-objekt.'], value: null };
 
@@ -61,9 +69,19 @@ export function validateEvent(body: unknown, now: Date = new Date()): { errors: 
   else if (raw.length > LIMITS.timeOptions) errors.push(`Højst ${LIMITS.timeOptions} tidsforslag.`);
   else {
     const seen = new Set<string>();
+    const seenIds = new Set<number>();
     raw.forEach((o: unknown, i: number) => {
       const n = i + 1;
       if (!isPlainObject(o)) { errors.push(`Tidsforslag ${n}: skal være et objekt.`); return; }
+      let id: number | undefined;
+      if (o.id !== undefined && o.id !== null) {
+        if (!opts.allowIds || typeof o.id !== 'number' || !Number.isSafeInteger(o.id) || o.id <= 0) {
+          errors.push(`Tidsforslag ${n}: ugyldigt id.`); return;
+        }
+        if (seenIds.has(o.id)) { errors.push(`Tidsforslag ${n}: id findes to gange.`); return; }
+        seenIds.add(o.id);
+        id = o.id;
+      }
       const start = parseIsoWithOffset(o.start);
       if (!start) {
         errors.push(`Tidsforslag ${n}: ugyldigt starttidspunkt (ISO 8601 med tidszone, fx 2026-11-03T09:00:00+01:00).`);
@@ -75,11 +93,11 @@ export function validateEvent(body: unknown, now: Date = new Date()): { errors: 
         if (!end) { errors.push(`Tidsforslag ${n}: ugyldigt sluttidspunkt (ISO 8601 med tidszone).`); return; }
         if (end <= start) { errors.push(`Tidsforslag ${n}: sluttidspunkt skal være efter starttidspunkt.`); return; }
       }
-      if (start < now) { errors.push(`Tidsforslag ${n}: tidspunktet ligger i fortiden.`); return; }
+      if (start < now && !opts.pastAllowed?.({ id, startAt: start, endAt: end })) { errors.push(`Tidsforslag ${n}: tidspunktet ligger i fortiden.`); return; }
       const key = `${start.getTime()}|${end?.getTime() ?? ''}`;
       if (seen.has(key)) return; // dedupe identical instants, even if written with different offsets
       seen.add(key);
-      clean.push({ startAt: start, endAt: end });
+      clean.push({ ...(id !== undefined ? { id } : {}), startAt: start, endAt: end });
     });
   }
   return { errors, value: errors.length ? null : { title, description, timeOptions: clean } };

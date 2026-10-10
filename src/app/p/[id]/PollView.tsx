@@ -1,4 +1,5 @@
 'use client';
+import { whenLabel } from '@/lib/format';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Header from '@/components/Header';
 import type { ApiEvent } from '@/lib/events';
@@ -25,8 +26,8 @@ function CopyButton({ state, label, className, onClick }: { state: CopyState; la
 
 export const adminStoreKey = (slug: string) => `mt-admin-${slug}`;
 
-export default function PollView({ event, shareUrl, justCreated, isAdmin = false }:
-  { event: ApiEvent; shareUrl: string; justCreated: boolean; isAdmin?: boolean }) {
+export default function PollView({ event, shareUrl, justCreated }:
+  { event: ApiEvent; shareUrl: string; justCreated: boolean }) {
   // Times depend on the browser's timezone → formatted only after mount (no SSR/hydration mismatch).
   const [tz, setTz] = useState<string | null>(null);
   const [open, setOpen] = useState(justCreated); // organizer (?created=1) sees it open; visitors closed
@@ -181,8 +182,7 @@ export default function PollView({ event, shareUrl, justCreated, isAdmin = false
               <button type="button" className="btn btn--danger" onClick={() => { dialogRef.current?.close(); close(); }}>Luk alligevel</button>
             </div>
           </dialog>
-          {isAdmin && <p className="meta" role="status">Du ser afstemningen som arrangør.</p>}
-          {event.is_closed && <p className="meta">Afstemningen er lukket.</p>}
+          {event.is_closed && <ClosedBanner event={event} />}
           <h1>{event.title}</h1>
           {event.description && <p className="lead">{event.description}</p>}
           <h2>Foreslåede tidspunkter <span className="meta">({event.time_options.length})</span></h2>
@@ -202,5 +202,24 @@ export default function PollView({ event, shareUrl, justCreated, isAdmin = false
         </article>
       </main>
     </>
+  );
+}
+
+/** Design §21: closed polls are flagged for everyone; voting (next step) will be rejected server-side. */
+function ClosedBanner({ event }: { event: ApiEvent }) {
+  const chosen = event.time_options.find((o) => o.id === event.chosen_option_id);
+  return (
+    <div className="closed-banner" role="status">
+      <span className="closed-banner__icon" aria-hidden="true">🔒</span>
+      <div>
+        <h2>Afstemningen er lukket</h2>
+        {chosen ? (
+          <>
+            <p>Arrangøren har lukket for svar. Det valgte tidspunkt er:</p>
+            <span className="chosen" suppressHydrationWarning>✓ {whenLabel(chosen.start_at, chosen.end_at)}</span>
+          </>
+        ) : <p>Arrangøren har lukket for svar.</p>}
+      </div>
+    </div>
   );
 }

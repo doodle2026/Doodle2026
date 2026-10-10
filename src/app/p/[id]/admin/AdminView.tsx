@@ -1,0 +1,399 @@
+'use client';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import type { AdminEvent } from '@/lib/events';
+import { storeAdminToken, takeAdminToken } from '@/lib/admin-client';
+import { bestIds, whenLabel } from '@/lib/format';
+import { copyText } from '@/lib/share';
+import { counterState, counterText, isBlank, liveTitleError, mapServerErrors, textLength } from '@/lib/form';
+
+const TITLE_MAX = 200;
+const DESC_MAX = 2000;
+
+type Opt = { key: string; id?: number; start_at: string; end_at: string | null; votes: number };
+type Dialog = null | 'close' | 'reopen' | 'rotate';
+let seq = 0;
+
+export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: string }) {
+  const [token, setToken] = useState<string | null>(null);
+  const [state, setState] = useState<'loading' | 'ready' | 'denied' | 'error'>('loading');
+  const [ev, setEv] = useState<AdminEvent | null>(null);
+  const [title, setTitle] = useState('');
+  const [desc, setDesc] = useState('');
+  const [opts, setOpts] = useState<Opt[]>([]);
+  const [confirmedRemovals, setConfirmedRemovals] = useState(0);
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null);
+  const [titleErr, setTitleErr] = useState('');
+  const [optErr, setOptErr] = useState('');
+  const [summary, setSummary] = useState<string[]>([]);
+  const [banner, setBanner] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [newDate, setNewDate] = useState('');
+  const [newTime, setNewTime] = useState('');
+  const [newEnd, setNewEnd] = useState('');
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [chosen, setChosen] = useState<string>('');
+  const [busy, setBusy] = useState(false);
+  const [newAdminUrl, setNewAdminUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState<'' | 'url' | 'admin'>('');
+  const [live, setLive] = useState('');
+  const dlgRef = useRef<HTMLDialogElement>(null);
+  const lastFocus = useRef<HTMLElement | null>(null);
+  const focusAfter = useRef<string | null>(null);
+
+  const api = useCallback(async (path: string, init: RequestInit = {}) => {
+    const res = await fetch(`/api/events/${slug}${path}`, {
+      ...init,
+      headers: { ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}), Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+    const data = await res.json().catch(() => ({}));
+    return { res, data };
+  }, [slug, token]);
+
+  const load = useCallback((data: AdminEvent) => {
+    setEv(data);
+    setTitle(data.title); setDesc(data.description);
+    setOpts(data.time_options.map((o) => ({ key: `o${o.id}`, id: o.id, start_at: o.start_at, end_at: o.end_at, votes: o.votes.total })));
+    setConfirmedRemovals(0); setPendingRemove(null);
+  }, []);
+
+  useEffect(() => {
+    const t = takeAdminToken(slug, location, sessionStorage, (u) => history.replaceState(null, '', u));
+    if (!t) { setState('denied'); return; }
+    setToken(t);
+  }, [slug]);
+
+  useEffect(() => {
+    if (!token) return;
+    (async () => {
+      try {
+        const { res, data } = await api('/admin');
+        if (res.status === 401 || res.status === 403) { setState('denied'); return; }
+        if (!res.ok) { setState('error'); return; }
+        load(data); setState('ready');
+      } catch { setState('error'); }
+    })();
+  }, [token, api, load]);
+
+  useEffect(() => {
+    if (!focusAfter.current) return;
+    document.querySelector<HTMLElement>(focusAfter.current)?.focus();
+    focusAfter.current = null;
+  });
+
+  if (state === 'loading') return <div className="card"><p>Indlæser…</p></div>;
+  if (state === 'denied') {
+    return (
+      <section className="card notfound" aria-labelledby="den-h">
+        <h1 id="den-h">Admin-linket virker ikke</h1>
+        <p className="lead">Linket mangler en del, er skrevet forkert eller er blevet udskiftet med et nyt.
+          Brug det seneste admin-link, du har gemt. Store og små bogstaver har betydning.</p>
+        <div className="notfound__actions"><a className="btn btn--primary" href={`/p/${slug}`}>Se afstemningen</a></div>
+      </section>
+    );
+  }
+  if (state === 'error' || !ev) return <div className="card"><div className="alert" role="alert">Kunne ikke hente afstemningen. Prøv igen.</div></div>;
+
+  const best = bestIds(ev.time_options);
+  const optById = new Map(ev.time_options.map((o) => [o.id, o]));
+
+  function onTitle(v: string) {
+    setTitle(v);
+    // N2: clear the error as soon as the field is valid again.
+    setTitleErr((err) => liveTitleError(err, v, TITLE_MAX));
+  }
+
+  function removeOpt(o: Opt, idx: number) {
+    if (opts.length === 1) { setOptErr('Der skal være mindst ét tidsforslag.'); return; }
+    if (o.votes > 0 && pendingRemove !== o.key) {
+      setPendingRemove(o.key);
+      focusAfter.current = '[data-confirm-remove]';
+      return;
+    }
+    if (o.votes > 0) setConfirmedRemovals((n) => n + 1);
+    const next = opts.filter((x) => x.key !== o.key);
+    setOpts(next); setPendingRemove(null); setOptErr('');
+    setLive(`${whenLabel(o.start_at, o.end_at)} fjernet`);
+    const target = next[idx] ?? next[idx - 1];
+    focusAfter.current = target ? `[data-rm="${target.key}"]` : '#nd';
+  }
+
+  function addOpt() {
+    if (!newDate || !newTime) { setOptErr('Vælg dato og starttid.'); return; }
+    if (newEnd && newEnd <= newTime) { setOptErr('Sluttid skal være efter starttid.'); return; }
+    const start = new Date(`${newDate}T${newTime}`);
+    if (start.getTime() < Date.now()) { setOptErr('Tidspunktet ligger i fortiden.'); return; }
+    const s = start.toISOString(), e = newEnd ? new Date(`${newDate}T${newEnd}`).toISOString() : null;
+    if (opts.some((o) => o.start_at === s && o.end_at === e)) { setOptErr('Det tidsforslag findes allerede.'); return; }
+    if (opts.length >= 100) { setOptErr('Du kan højst have 100 tidsforslag.'); return; }
+    setOptErr('');
+    setOpts([...opts, { key: `n${++seq}`, start_at: s, end_at: e, votes: 0 }].sort((a, b) => a.start_at.localeCompare(b.start_at)));
+    setLive('Tidsforslag tilføjet');
+  }
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    if (saving) return;
+    const tLen = textLength(title.trim());
+    const errs: string[] = [];
+    if (isBlank(title)) { setTitleErr('Giv afstemningen en titel.'); errs.push('Titel skal udfyldes.'); }
+    else if (tLen > TITLE_MAX) { const m = `Titlen er ${tLen - TITLE_MAX} tegn for lang (højst ${TITLE_MAX}).`; setTitleErr(m); errs.push(m); }
+    const dLen = textLength(desc.trim());
+    if (dLen > DESC_MAX) errs.push(`Beskrivelsen er ${dLen - DESC_MAX} tegn for lang (højst ${DESC_MAX}).`);
+    setSummary(errs);
+    if (errs.length) { document.getElementById(isBlank(title) || tLen > TITLE_MAX ? 'title' : 'desc')?.focus(); return; }
+    setSaving(true); setBanner('');
+    try {
+      const { res, data } = await api('', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          title, description: desc, confirm_remove_voted: confirmedRemovals > 0,
+          time_options: opts.map((o) => ({ ...(o.id ? { id: o.id } : {}), start: o.start_at, end: o.end_at })),
+        }),
+      });
+      if (res.status === 401 || res.status === 403) { setState('denied'); return; }
+      if (!res.ok) {
+        const { rows, general } = mapServerErrors(Array.isArray(data.errors) ? data.errors : ['Ukendt fejl.']);
+        setSummary([...general, ...[...rows].map(([n, m]) => `Tidsforslag ${n} (${opts[n - 1] ? whenLabel(opts[n - 1].start_at, opts[n - 1].end_at) : '?'}): ${m}`)]);
+        document.getElementById('summary')?.focus();
+        return;
+      }
+      load(data);
+      setSummary([]);
+      setBanner('✓ Ændringerne er gemt. Deltagerne ser dem med det samme.');
+    } catch {
+      setSummary(['Kunne ikke kontakte serveren. Prøv igen.']);
+    } finally { setSaving(false); }
+  }
+
+  function openDialog(kind: Exclude<Dialog, null>) {
+    lastFocus.current = document.activeElement as HTMLElement;
+    if (kind === 'close') {
+      const firstBest = ev!.time_options.find((o) => best.has(o.id));
+      setChosen(firstBest ? String(firstBest.id) : '');
+    }
+    setDialog(kind);
+    setTimeout(() => { dlgRef.current?.showModal(); document.getElementById('dlg-cancel')?.focus(); }, 0);
+  }
+  function closeDialog() { dlgRef.current?.close(); }
+
+  async function confirmDialog() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const path = dialog === 'close' ? '/close' : dialog === 'reopen' ? '/reopen' : '/rotate-admin';
+      const body = dialog === 'close' ? { chosen_option_id: chosen ? Number(chosen) : null } : {};
+      const { res, data } = await api(path, { method: 'POST', body: JSON.stringify(body) });
+      if (res.status === 401 || res.status === 403) { closeDialog(); setState('denied'); return; }
+      if (!res.ok) { setSummary(Array.isArray(data.errors) ? data.errors : ['Ukendt fejl.']); closeDialog(); return; }
+      setEv(data);
+      if (dialog === 'close') {
+        const c = data.chosen_option_id ? optById.get(data.chosen_option_id) : null;
+        setBanner(`✓ Afstemningen er lukket.${c ? ` Valgt tidspunkt: ${whenLabel(c.start_at, c.end_at)}.` : ''}`);
+      } else if (dialog === 'reopen') {
+        setBanner('✓ Afstemningen er åbnet igen.');
+      } else {
+        storeAdminToken(slug, data.admin_token, sessionStorage);
+        setToken(data.admin_token);
+        setNewAdminUrl(`${location.origin}${data.admin_url}`);
+        setBanner('✓ Nyt admin-link oprettet. Det gamle virker ikke længere.');
+      }
+      closeDialog();
+    } catch {
+      setSummary(['Kunne ikke kontakte serveren. Prøv igen.']); closeDialog();
+    } finally { setBusy(false); }
+  }
+
+  async function copy(which: 'url' | 'admin', text: string, inputId: string) {
+    const input = document.getElementById(inputId) as HTMLInputElement | null;
+    const r = await copyText(text, { clipboard: navigator.clipboard, legacyCopy: () => { input?.select(); return document.execCommand?.('copy') ?? false; } });
+    if (r === 'copied') { setCopied(which); setLive(which === 'url' ? 'Linket til deltagerne er kopieret' : 'Admin-linket er kopieret'); setTimeout(() => setCopied(''), 2000); }
+    else { input?.focus(); input?.select(); setLive('Kunne ikke kopiere. Markér og kopiér manuelt.'); }
+  }
+
+  const closed = ev.is_closed;
+  const dlgText = dialog === 'close'
+    ? { h: 'Luk afstemningen?', p: 'Ingen kan længere stemme eller ændre svar. Du kan genåbne senere.', ok: 'Luk afstemning', cls: 'btn--danger' }
+    : dialog === 'reopen'
+      ? { h: 'Genåbn afstemningen?', p: 'Deltagerne kan igen stemme og ændre deres svar. Det valgte tidspunkt nulstilles.', ok: 'Genåbn', cls: 'btn--primary' }
+      : { h: 'Lav et nyt admin-link?', p: 'Det nuværende admin-link holder op med at virke med det samme. Gem det nye link et sikkert sted.', ok: 'Lav nyt link', cls: 'btn--danger' };
+
+  return (
+    <div className="card">
+      <div className="admin-head">
+        <span className="admin-badge">🔒 Admin – kun for dig</span>
+        <span className={`status ${closed ? 'status--closed' : 'status--open'}`}>
+          <span aria-hidden="true">●</span> {closed ? 'Lukket' : 'Åben for svar'}
+        </span>
+      </div>
+      <div className="alert" id="summary" role="alert" tabIndex={-1}>
+        {summary.length > 0 && (<><strong>Ret venligst følgende:</strong><ul>{summary.map((x) => <li key={x}>{x}</li>)}</ul></>)}
+      </div>
+      <div id="banner" role="status">{banner && <div className="success">{banner}</div>}</div>
+
+      {newAdminUrl && (
+        <div className="linkbox linkbox--secret" role="group" aria-labelledby="na-l" aria-describedby="na-d">
+          <p className="linkbox__label" id="na-l"><span className="icon-lock" aria-hidden="true">!</span> Dit nye hemmelige admin-link – gem det nu</p>
+          <p className="linkbox__desc" id="na-d"><strong>Del det ikke.</strong> Det gamle link virker ikke længere. Linket vises kun her.</p>
+          <div className="linkbox__row">
+            <input className="input" id="new-admin-url" readOnly value={newAdminUrl} aria-label="Nyt hemmeligt admin-link" onFocus={(e) => e.currentTarget.select()} />
+            <div className="linkbox__actions">
+              <button type="button" className={`btn btn--secondary${copied === 'admin' ? ' btn--copied' : ''}`} onClick={() => copy('admin', newAdminUrl, 'new-admin-url')}>
+                {copied === 'admin' ? '✓ Kopieret' : 'Kopiér admin-link'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <section aria-labelledby="sh-h">
+        <h1 id="sh-h" style={{ fontSize: 'var(--fs-lg)' }}>Del med deltagerne</h1>
+        <div className="linkbox" style={{ marginTop: 'var(--s-2)' }}>
+          <div className="linkbox__row">
+            <input className="input" id="url" readOnly value={shareUrl} aria-label="Offentligt link" onFocus={(e) => e.currentTarget.select()} />
+            <div className="linkbox__actions">
+              <button type="button" className={`btn ${copied === 'url' ? 'btn--copied' : 'btn--primary'}`} onClick={() => copy('url', shareUrl, 'url')}>
+                {copied === 'url' ? '✓ Kopieret' : 'Kopiér link'}
+              </button>
+              <a className="btn btn--ghost" href={`/p/${slug}`} target="_blank" rel="noopener noreferrer">Åbn som deltager ↗</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="section" aria-labelledby="res-h">
+        <h2 id="res-h">Resultat <span className="meta">({ev.participants.length} deltagere)</span></h2>
+        <ul className="opt-list" id="results">
+          {ev.time_options.map((o) => (
+            <li key={o.id} className={`opt${best.has(o.id) ? ' is-best' : ''}`}>
+              <span className="opt__when">
+                {whenLabel(o.start_at, o.end_at)}{' '}
+                {best.has(o.id) && <span className="best-badge">★ Bedst</span>}{' '}
+                {ev.chosen_option_id === o.id && <span className="chosen-badge">✓ Valgt</span>}
+              </span>
+              <span className="opt__votes">✓ {o.votes.yes} · ( ) {o.votes.maybe} · ✕ {o.votes.no}</span>
+            </li>
+          ))}
+        </ul>
+        <details style={{ marginTop: 'var(--s-3)' }}>
+          <summary style={{ cursor: 'pointer', color: 'var(--c-primary)', fontWeight: 600 }}>Se alle deltagere</summary>
+          {ev.participants.length
+            ? <ul className="vcard__people">{ev.participants.map((p, i) => <li key={i}><span>{p.name}</span><span className="meta">svaret</span></li>)}</ul>
+            : <p className="meta">Ingen har svaret endnu.</p>}
+        </details>
+      </section>
+
+      <form className="section" id="edit" noValidate aria-labelledby="ed-h" onSubmit={save}
+        onKeyDown={(e) => { if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') e.preventDefault(); }}>
+        <h2 id="ed-h">Redigér afstemning</h2>
+        <div className="field">
+          <label className="field__label" htmlFor="title">Titel *</label>
+          <input className="input" id="title" value={title} onChange={(e) => onTitle(e.target.value)} autoComplete="off"
+            aria-describedby="title-err title-count" aria-invalid={titleErr ? true : undefined} />
+          <div className="field__meta">
+            <div className="field__error" id="title-err" aria-live="polite">{titleErr}</div>
+            <Counter id="title-count" value={title} max={TITLE_MAX} />
+          </div>
+        </div>
+        <div className="field">
+          <label className="field__label" htmlFor="desc">Beskrivelse <span className="field__hint">(valgfri)</span></label>
+          <textarea className="input" id="desc" value={desc} onChange={(e) => setDesc(e.target.value)} aria-describedby="desc-count" />
+          <div className="field__meta"><span /><Counter id="desc-count" value={desc} max={DESC_MAX} /></div>
+        </div>
+        <h3 style={{ margin: 'var(--s-4) 0 var(--s-2)' }}>Tidsforslag</h3>
+        <ul className="opt-list" id="opts">
+          {opts.map((o, i) => {
+            const label = whenLabel(o.start_at, o.end_at);
+            const removing = pendingRemove === o.key;
+            return (
+              <li key={o.key}>
+                <div className={`opt${removing ? ' opt--removing' : ''}`}>
+                  <span className="opt__when">{label}</span>
+                  <span className="opt__votes">{o.votes ? `${o.votes} svar` : 'Ingen svar'}</span>
+                  <button type="button" className="btn btn--icon" data-rm={o.key} aria-label={`Fjern ${label}`} onClick={() => removeOpt(o, i)}>✕</button>
+                </div>
+                {removing && (
+                  <div className="inline-warn" role="alert">
+                    <strong>{o.votes} {o.votes === 1 ? 'deltager har' : 'deltagere har'} svaret på dette tidspunkt.</strong> Fjerner du det,
+                    slettes deres svar på det for altid. Deres øvrige svar bevares.
+                    <div className="inline-warn__actions">
+                      <button type="button" className="btn btn--danger btn--sm" data-confirm-remove onClick={() => removeOpt(o, i)}>Fjern alligevel</button>
+                      <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setPendingRemove(null); focusAfter.current = `[data-rm="${o.key}"]`; }}>Behold</button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <div className="add-date" style={{ marginTop: 'var(--s-3)' }}>
+          <div className="field"><label className="field__label" htmlFor="nd">Ny dato</label>
+            <input className="input" type="date" id="nd" lang="da" value={newDate} onChange={(e) => setNewDate(e.target.value)} /></div>
+          <div className="field"><label className="field__label" htmlFor="nt">Starttid</label>
+            <input className="input" type="time" id="nt" lang="da" step={300} value={newTime} onChange={(e) => setNewTime(e.target.value)} /></div>
+          <div className="field"><label className="field__label" htmlFor="ne">Sluttid <span className="field__hint">(valgfri)</span></label>
+            <input className="input" type="time" id="ne" lang="da" step={300} value={newEnd} onChange={(e) => setNewEnd(e.target.value)} /></div>
+          <button type="button" className="btn btn--secondary" id="addopt" onClick={addOpt}>+ Tilføj tidsforslag</button>
+        </div>
+        <div className="field__error" id="opt-err" aria-live="polite">{optErr}</div>
+        <div className="form-actions">
+          <button type="submit" className="btn btn--primary" id="save" disabled={saving} aria-busy={saving || undefined}>
+            {saving ? (<><span className="spinner" aria-hidden="true" /> Gemmer…</>) : 'Gem ændringer'}
+          </button>
+        </div>
+      </form>
+
+      <section className="section" aria-labelledby="dz-h">
+        <div className="danger">
+          {closed ? (
+            <>
+              <h2 id="dz-h">Afstemningen er lukket</h2>
+              <p>Deltagerne kan se resultatet, men ikke stemme. Du kan åbne den igen når som helst.</p>
+              <button type="button" className="btn btn--danger-ghost" id="toggle" onClick={() => openDialog('reopen')}>Genåbn afstemning</button>
+            </>
+          ) : (
+            <>
+              <h2 id="dz-h">Farezone</h2>
+              <p>Når du lukker afstemningen, kan ingen længere stemme eller ændre svar. Du kan vælge det endelige tidspunkt, og du kan genåbne senere.</p>
+              <button type="button" className="btn btn--danger" id="toggle" onClick={() => openDialog('close')}>Luk afstemning…</button>
+            </>
+          )}
+          <p>Har du delt admin-linket ved en fejl? Lav et nyt – det gamle holder op med at virke.</p>
+          <button type="button" className="btn btn--danger-ghost" id="rotate" onClick={() => openDialog('rotate')}>Lav nyt admin-link…</button>
+        </div>
+      </section>
+
+      <dialog className="modal" ref={dlgRef} aria-labelledby="dlg-h" aria-describedby="dlg-p"
+        onClose={() => { setDialog(null); lastFocus.current?.focus(); }}>
+        {dialog && (
+          <>
+            <h2 id="dlg-h">{dlgText.h}</h2>
+            <p id="dlg-p">{dlgText.p}</p>
+            {dialog === 'close' && (
+              <div>
+                <label className="field__label" htmlFor="pick">Endeligt tidspunkt (valgfrit)</label>
+                <select className="input" id="pick" value={chosen} onChange={(e) => setChosen(e.target.value)}>
+                  <option value="">Vælg ikke nu</option>
+                  {ev.time_options.map((o) => (
+                    <option key={o.id} value={o.id}>{whenLabel(o.start_at, o.end_at)}{best.has(o.id) ? ' – ★ flest ja' : ''}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="modal__actions">
+              <button type="button" className="btn btn--ghost" id="dlg-cancel" onClick={closeDialog}>Annullér</button>
+              <button type="button" className={`btn ${dlgText.cls}`} id="dlg-ok" onClick={confirmDialog} disabled={busy} aria-busy={busy || undefined}>{dlgText.ok}</button>
+            </div>
+          </>
+        )}
+      </dialog>
+      <p className="sr-only" aria-live="polite">{live}</p>
+    </div>
+  );
+}
+
+function Counter({ id, value, max }: { id: string; value: string; max: number }) {
+  const n = textLength(value.trim());
+  const st = counterState(n, max);
+  return <span className={`counter${st === 'over' ? ' counter--over' : st === 'warn' ? ' counter--warn' : ''}`} id={id}>{counterText(n, max)}</span>;
+}
