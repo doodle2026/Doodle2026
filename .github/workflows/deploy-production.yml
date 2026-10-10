@@ -25,18 +25,13 @@ jobs:
           DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
       - run: npm i -g vercel@latest
       - run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-      # Runtime env comes from GitHub secrets (no DB credentials stored in Vercel).
+      # DATABASE_URL / DIRECT_URL come from Vercel project env vars (Production, type "sensitive"),
+      # pulled above by `vercel pull`. Only the non-secret APP_URL is passed here.
       - run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
-          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
           APP_URL: ${{ vars.APP_URL || 'https://doodle2026.vercel.app' }}
-      - name: vercel deploy --prod (runtime env from secrets)
+      - name: vercel deploy --prod
         env:
-          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
           APP_URL: ${{ vars.APP_URL || 'https://doodle2026.vercel.app' }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN" \
-            --env DATABASE_URL="$DATABASE_URL" --env DIRECT_URL="$DIRECT_URL" --env APP_URL="$APP_URL"
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN" --env APP_URL="$APP_URL"
