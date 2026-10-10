@@ -13,6 +13,8 @@ export interface EmailMessage {
   to: string | string[]; subject: string; text: string; html?: string; idempotencyKey?: string;
   /** Overrides EMAIL_REPLY_TO (e.g. the organizer). Dropped if not a valid address. */
   replyTo?: string;
+  /** Display name for From (e.g. "Mette via Mødetid"); the address is always EMAIL_FROM. Sanitized here too. */
+  fromName?: string;
   headers?: Record<string, string>;
   tags?: { name: string; value: string }[];
 }
@@ -26,6 +28,26 @@ type Log = (level: 'info' | 'error', msg: string) => void;
 const RESEND_URL = 'https://api.resend.com/emails';
 const RESEND_BATCH_URL = 'https://api.resend.com/emails/batch';
 export const BATCH_MAX = 100;
+/**
+ * Organizer name for the From display name: strips quotes, angle brackets, CR/LF/control + invisible chars,
+ * "@" and anything URL-like, collapses spaces, max 50 graphemes. Empty → ''.
+ */
+export function sanitizeDisplayName(raw: string, max = 50): string {
+  const s = raw
+    .replace(/[\u0000-\u001F\u007F-\u009F\u00AD\u034F\u061C\u180E\u200B-\u200F\u2028-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g, ' ')
+    .replace(/\b(?:https?:\/\/|www\.)\S*/gi, ' ')
+    .replace(/\S*@\S*/g, ' ')
+    .replace(/[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.[a-z]{2,24}\b\S*/giu, ' ')
+    .replace(/["'`<>@\\,;:()[\]]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+  const g = [...new Intl.Segmenter('da', { granularity: 'grapheme' }).segment(s)].map((x) => x.segment);
+  return g.slice(0, max).join('').trim();
+}
+const fromWithName = (from: string, name?: string) => {
+  const n = name ? sanitizeDisplayName(name, 70) : '';
+  return n ? `"${n}" <${addr(from)}>` : from;
+};
+
 const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 /** Plain address or `Name <address>`. */
 const addr = (s: string) => { const m = /<([^>]+)>\s*$/.exec(s); return (m ? m[1] : s).trim(); };
@@ -81,7 +103,7 @@ export function createMailer(opts: { env?: Env; fetch?: typeof fetch; log?: Log;
     // Header values must be single-line (no header injection).
     const headers = m.headers ? Object.fromEntries(Object.entries(m.headers).filter(([k, v]) => /^[A-Za-z0-9-]+$/.test(k) && !/[\r\n]/.test(v))) : undefined;
     const tags = m.tags?.map((t) => ({ name: t.name.replace(/[^\w-]/g, '_').slice(0, 256), value: t.value.replace(/[^\w-]/g, '_').slice(0, 256) }));
-    return { from: cfg.from, to: recipients(m), subject: m.subject, text: m.text, ...(m.html ? { html: m.html } : {}),
+    return { from: fromWithName(cfg.from, m.fromName), to: recipients(m), subject: m.subject, text: m.text, ...(m.html ? { html: m.html } : {}),
       ...(replyTo ? { reply_to: replyTo } : {}), ...(headers && Object.keys(headers).length ? { headers } : {}), ...(tags?.length ? { tags } : {}) };
   };
 

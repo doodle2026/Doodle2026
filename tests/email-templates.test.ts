@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createMailer, groupDates, planInvitations, planReminders, renderInvitation, renderReminder, pollEmailData, assertPublicOnly, type PollForEmail } from '../src/lib/email';
+import { sanitizeDisplayName, createMailer, groupDates, planInvitations, planReminders, renderInvitation, renderReminder, pollEmailData, assertPublicOnly, type PollForEmail } from '../src/lib/email';
 
 const poll: PollForEmail = {
   slug: 'Gsrire3V9kntecH6ffjlqA', title: 'Teammøde <script>alert(1)</script> & kage', description: 'Lokale 3', isClosed: false,
-  organizerName: 'Mette Hansen', organizerEmail: 'mette@example.com',
+  organizerName: 'Mette Hansen',
   options: [
     { startAt: new Date('2026-10-16T13:00:00Z'), endAt: new Date('2026-10-16T14:00:00Z') },
     { startAt: new Date('2026-10-14T07:00:00Z'), endAt: new Date('2026-10-14T08:00:00Z') },
@@ -65,26 +65,31 @@ describe('email policy', () => {
     { email: 'nope' },
     { email: 'gone@example.com', unsubscribedAt: new Date() },
     { email: 'done@example.com', respondedAt: new Date() },
-    { email: 'twice@example.com', remindedAt: new Date() },
   ];
 
-  it('invitations: one message per recipient, replyTo organizer, idempotency invite:<poll>:<email>, List-Unsubscribe', () => {
+  it('invitations: one message per recipient, no replyTo, idempotency invite:<poll>:<email>, List-Unsubscribe', () => {
     const p = planInvitations(poll, invitees, ctx);
-    expect(p.messages.map((m) => m.to)).toEqual(['Jan@Example.com', 'done@example.com', 'twice@example.com']);
+    expect(p.messages.map((m) => m.to)).toEqual(['Jan@Example.com', 'done@example.com']);
     const m = p.messages[0];
-    expect(m.replyTo).toBe('mette@example.com');
+    expect(m.replyTo).toBeUndefined();
     expect(m.idempotencyKey).toBe(`invite:${poll.slug}:jan@example.com`);
     expect(m.headers).toEqual({ 'List-Unsubscribe': '<https://moedetid.dk/u/abc>', 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' });
     expect(p.messages[1].headers).toBeUndefined();
     expect(p.skipped.map((s) => s.reason)).toEqual(['duplicate', 'invalid_email', 'unsubscribed']);
   });
 
-  it('reminders: only non-responders, max one per recipient, none after close', () => {
-    const p = planReminders(poll, invitees, ctx);
-    expect(p.messages.map((m) => m.to)).toEqual(['Jan@Example.com']);
+  it('reminders: all non-unsubscribed invitees; per poll max one per 24 h, max 3 total, none after close', () => {
+    const now = new Date('2026-10-12T12:00:00Z');
+    const p = planReminders(poll, invitees, ctx, now);
+    expect(p.blocked).toBeNull();
+    expect(p.messages.map((m) => m.to)).toEqual(['Jan@Example.com', 'done@example.com']);
     expect(p.messages[0].idempotencyKey).toBe(`reminder:${poll.slug}:jan@example.com`);
-    expect(p.skipped.map((s) => s.reason)).toEqual(['duplicate', 'invalid_email', 'unsubscribed', 'responded', 'already_reminded']);
-    expect(planReminders({ ...poll, isClosed: true }, invitees, ctx).messages).toEqual([]);
+    expect(p.skipped.map((s) => s.reason)).toEqual(['duplicate', 'invalid_email', 'unsubscribed']);
+    const h = (n: number) => new Date(now.getTime() - n * 3600_000);
+    expect(planReminders({ ...poll, isClosed: true }, invitees, ctx, now)).toMatchObject({ blocked: 'closed', messages: [] });
+    expect(planReminders({ ...poll, remindersSent: 1, lastReminderAt: h(23) }, invitees, ctx, now)).toMatchObject({ blocked: 'too_soon', messages: [] });
+    expect(planReminders({ ...poll, remindersSent: 2, lastReminderAt: h(25) }, invitees, ctx, now).blocked).toBeNull();
+    expect(planReminders({ ...poll, remindersSent: 3, lastReminderAt: h(100) }, invitees, ctx, now)).toMatchObject({ blocked: 'limit_reached', messages: [] });
     expect(planInvitations({ ...poll, isClosed: true }, invitees, ctx).messages).toEqual([]);
   });
 
@@ -124,5 +129,23 @@ describe('adapter: headers, replyTo override, batch', () => {
     const r = await createMailer({ env: { EMAIL_MODE: 'log' }, fetch: f as never, log: () => {} }).sendBatch([{ to: 'a@b.dk', subject: 's', text: 't' }]);
     expect(r).toEqual([{ ok: true, mode: 'log' }]);
     expect(f).not.toHaveBeenCalled();
+  });
+});
+
+describe('From display name (organizer)', () => {
+  it('sanitizes against header injection and spoofing', () => {
+    expect(sanitizeDisplayName('Mette "Boss" <ceo@bank.dk>\r\nBcc: x@y.z')).toBe('Mette Boss Bcc');
+    expect(sanitizeDisplayName('Jan\u202Eknab www.evil.com https://x.y/z paypal.com')).toBe('Jan knab');
+    expect(sanitizeDisplayName('A'.repeat(80))).toHaveLength(50);
+    expect(sanitizeDisplayName('Ærø-Søren 😀')).toBe('Ærø-Søren 😀');
+  });
+  it('From = "<name> via Mødetid" <EMAIL_FROM address>; app name only without organizer name', async () => {
+    const f = vi.fn(async () => new Response('{"id":"1"}'));
+    const m = createMailer({ env: { EMAIL_MODE: 'send', RESEND_API_KEY: 'k', EMAIL_FROM: 'Mødetid <noreply@moedetid.dk>' }, fetch: f as never, log: () => {} });
+    const [withName] = planInvitations({ ...poll, organizerFromName: 'Mette <x@y.z>' }, [{ email: 'a@b.dk' }], ctx).messages;
+    const [noName] = planInvitations(poll, [{ email: 'a@b.dk' }], ctx).messages;
+    await m.send(withName); await m.send(noName);
+    const froms = (f.mock.calls as unknown as [string, RequestInit][]).map((c) => JSON.parse(String(c[1].body)).from);
+    expect(froms).toEqual(['"Mette via Mødetid" <noreply@moedetid.dk>', '"Mødetid" <noreply@moedetid.dk>']);
   });
 });
