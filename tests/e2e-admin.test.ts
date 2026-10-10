@@ -76,15 +76,14 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
     expect(await p.$('.opt-edit')).toBeNull();
     await p.click('[data-oe] >> nth=0');
     await p.fill('#oe-s', '07:15');
-    expect(await p.isChecked('input[name="oe-v"][value="reset"]')).toBe(true);
+    await expect.poll(() => p.isChecked('input[name="oe-v"][value="reset"]')).toBe(true);
     await p.fill('#oe-e', '06:00');
     await p.click('[data-oe-save]');
     expect(await p.textContent('#oe-err')).toContain('Sluttid');
     await p.fill('#oe-e', '');
     await p.press('#oe-s', 'Enter');
     await p.waitForSelector('.opt-edit', { state: 'detached' });
-    const ev = await pub(e.id);
-    expect(ev.participants.every((x: { votes: unknown[] }) => x.votes[0] === null)).toBe(true);
+    await expect.poll(async () => (await pub(e.id)).participants.map((x: { votes: unknown[] }) => x.votes[0])).toEqual([null, null]);
     await p.close();
   }, 30_000);
 
