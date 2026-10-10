@@ -9,3 +9,4 @@ data/
 .next-test.pid
 .email-capture/
 .next-capture/
+node_modules

@@ -38,6 +38,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
   const [namePrefilled, setNamePrefilled] = useState(false);
   const [summary, setSummary] = useState<{ head: string; items: string[] } | null>(null);
   const [tokenErr, setTokenErr] = useState(false);
+  const [deletedMine, setDeletedMine] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState<'' | 'ok' | 'err'>('');
   const [live, setLive] = useState('');
@@ -92,7 +93,9 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
       try {
         const r = await fetch(`/api/events/${initial.slug}/votes/me`, { headers: { Authorization: `Bearer ${t}` }, cache: 'no-store' });
         if (!r.ok) {
-          if (r.status === 401 || r.status === 403) { if (fromHash) setTokenErr(true); writeStored(initial.slug, null, localStorage); }
+          // P1: the organizer deleted this participant → say so (410), instead of "invalid link".
+          if (r.status === 410) { setDeletedMine(true); writeStored(initial.slug, null, localStorage); }
+          else if (r.status === 401 || r.status === 403) { if (fromHash) setTokenErr(true); writeStored(initial.slug, null, localStorage); }
           return;
         }
         const d = await r.json();
@@ -177,6 +180,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
         if (d.code === 'name_taken') setNameErr(errs[0]);
         if (d.code === 'idempotency_mismatch') idem.current = null;
         if (r.status === 423) setEv((x) => ({ ...x, is_closed: true }));
+        if (r.status === 410) { setDeletedMine(true); setEditing(false); writeStored(ev.slug, null, localStorage); setToken(null); setMyId(null); setSaved(null); setSaving(false); return; }
         if (r.status === 403) { setTokenErr(true); setEditing(false); writeStored(ev.slug, null, localStorage); setToken(null); setMyId(null); }
         if (r.status >= 500) { serverError(); return; }
         setSummary({ head: 'Dine svar blev ikke gemt.', items: errs });
@@ -221,6 +225,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
   return (
     <form className={`vote-view${others.length >= 20 ? ' vgrid--many' : ''}`} id="vote" noValidate onSubmit={submit} aria-labelledby="grid-h"
       onKeyDown={(e) => { if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') e.preventDefault(); }}>
+      {deletedMine && <div className="alert" role="status" id="deleted-mine">Dit svar er slettet af arrangøren. Du kan svare igen som ny deltager.</div>}
       {tokenErr && <div className="alert" role="alert">Redigeringslinket er ugyldigt. Du kan stadig se afstemningen, men ikke ændre svarene.</div>}
       {saved && !editing && (
         <div id="banner">

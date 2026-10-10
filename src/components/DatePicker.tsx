@@ -24,7 +24,8 @@ export default function DatePicker({ selected, onChange, max = 100, min, taken =
   const lo = min ?? today;
   const sel = new Set(selected), tk = new Set(taken);
   const [focus, setFocus] = useState(() => initialMonth ?? [...selected].sort()[0] ?? '');
-  const cur = focus || lo || selected[0] || '2026-01-01';
+  // P2: no deterministic start month on the server (today is the browser's) → the grid renders after mount only.
+  const cur = focus || lo || selected[0] || '';
   const anchor = useRef<string | null>(null);
   const hasFocus = useRef(false);
   const grid = useRef<HTMLTableElement>(null);
@@ -63,6 +64,7 @@ export default function DatePicker({ selected, onChange, max = 100, min, taken =
     e.preventDefault(); hasFocus.current = true; setFocus(clampMin(n));
   }
 
+  if (!cur) return <div className="dp" id={id} aria-busy="true" />;
   const first = firstOfMonth(cur);
   const start = addDays(first, -weekdayMon(first));
   const weeks: string[][] = [];

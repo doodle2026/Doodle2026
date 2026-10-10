@@ -120,6 +120,13 @@ async function lockOpenEvent(tx: Prisma.TransactionClient, eventId: number) {
 }
 
 /** Participant owning `token` in poll `eventId`, or null. 256-bit token → lookup by its SHA-256 is safe. */
+/** P1: was this edit token's participant deleted by the organizer? */
+export async function wasDeleted(eventId: number, token: string | null) {
+  if (!token || !TOKEN_RE.test(token)) return false;
+  const d = await prisma.deletedParticipant.findUnique({ where: { editTokenHash: sha256Hex(token) }, select: { eventId: true } });
+  return d?.eventId === eventId;
+}
+
 export async function participantByToken(eventId: number, token: string | null) {
   if (!token || !TOKEN_RE.test(token)) return null;
   const p = await prisma.participant.findUnique({
