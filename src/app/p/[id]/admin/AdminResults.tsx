@@ -25,7 +25,6 @@ export default function AdminResults({ ev, setEv, api, appUrl, onDenied, onStatu
   ev: AdminEvent; setEv: (e: AdminEvent) => void; api: Api; appUrl: string;
   onDenied: () => void; onStatus: (msg: string) => void; onError: (errs: string[]) => void;
 }) {
-  const [mounted, setMounted] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [toast, setToast] = useState<{ msg: string; prev: number | null; target: number | null } | null>(null);
   const [toastHold, setToastHold] = useState(false);
@@ -34,7 +33,6 @@ export default function AdminResults({ ev, setEv, api, appUrl, onDenied, onStatu
   const dlg = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLElement | null>(null);
   const focusSel = useRef<string | null>(null);
-  useEffect(() => setMounted(true), []);
   useEffect(() => {
     if (!focusSel.current) return;
     // Grid and cards both exist (one hidden by CSS) → focus the visible match.
@@ -50,8 +48,7 @@ export default function AdminResults({ ev, setEv, api, appUrl, onDenied, onStatu
   }, [toast, toastHold]);
 
   const opts = ev.time_options;
-  const label = (o: { date: string | null; start_at: string | null; end_at: string | null }) => (o.date || mounted ? optionLabel(o) : '');
-  const what = ev.mode === 'datetime' ? 'tidspunkt' : 'dato';
+  const label = (o: { date: string }) => optionLabel(o);
   const T = totals(ev.participants.map((p) => p.votes), opts.length);
   const best = bestMask(T);
   const cls = (i: number) => (ev.chosen_option_id === opts[i].id ? 'is-chosen' : best[i] ? 'is-best' : '');
@@ -103,7 +100,7 @@ export default function AdminResults({ ev, setEv, api, appUrl, onDenied, onStatu
     return (
       <button type="button" className="choose-btn" data-choose={o.id} aria-pressed={on} disabled={closed || choosing} aria-busy={choosing || undefined}
         style={full ? { width: '100%' } : undefined}
-        aria-label={on ? `Valgt som endelig ${what}: ${l}. Tryk for at fjerne valget` : `Vælg ${l} som endelig ${what}`}
+        aria-label={on ? `Valgt som endelig dato: ${l}. Tryk for at fjerne valget` : `Vælg ${l} som endelig dato`}
         onClick={() => choose(on ? null : o.id, { focus: `[data-choose="${o.id}"]` })}>
         {on ? <><span aria-hidden="true">✓</span> Valgt</> : ev.chosen_option_id !== null ? 'Skift hertil' : 'Vælg'}
       </button>
@@ -119,10 +116,10 @@ export default function AdminResults({ ev, setEv, api, appUrl, onDenied, onStatu
       <ResultBanner event={ev} isAdmin appUrl={appUrl} busy={choosing}
         onClear={() => choose(null, { focus: ev.chosen_option_id ? `[data-choose="${ev.chosen_option_id}"]` : undefined })} />
       <h2 id="res-h">Resultat <span className="meta">({ev.participants.length} deltagere)</span></h2>
-      {!closed && <p className="tz-note" id="choose-hint">Tryk «Vælg» ved {ev.mode === 'datetime' ? 'det tidspunkt' : 'den dato'}, I ender med. Deltagerne ser det straks, og du kan skifte eller fortryde når som helst.</p>}
+      {!closed && <p className="tz-note" id="choose-hint">Tryk «Vælg» ved den dato, I ender med. Deltagerne ser det straks, og du kan skifte eller fortryde når som helst.</p>}
       <div className="vgrid-wrap" tabIndex={0} role="region" aria-labelledby="res-h">
         <table className="vgrid" id="admin-grid">
-          <caption className="sr-only">Resultat. Kolonner er {ev.mode === 'datetime' ? 'tidsforslag' : 'datoer'}, rækker er deltagere. Nederst totaler og valg af endelig {what}.</caption>
+          <caption className="sr-only">Resultat. Kolonner er datoer, rækker er deltagere. Nederst totaler og valg af endelig dato.</caption>
           <thead><tr>
             <th className="vgrid__name" scope="col">Deltager ({ev.participants.length})</th>
             {opts.map((o, i) => (

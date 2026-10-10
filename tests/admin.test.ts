@@ -1,7 +1,6 @@
 import { describe, test, expect, inject, afterAll } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
-import { createLegacyPoll } from './legacy';
 
 const BASE = inject('baseUrl');
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -23,17 +22,14 @@ const json = (method: string, body: unknown, token?: string, extra: Record<strin
   ({ method, token, headers: { 'Content-Type': 'application/json', ...extra }, body: JSON.stringify(body) });
 
 const Y = new Date().getUTCFullYear() + 1;
-const at = (md: string) => `${Y}-${md}:00Z`;
-/** LEGACY timed poll (mode 'datetime'): this file keeps the legacy admin flow covered end to end. */
+const at = (md: string) => `${Y}-${md}`;
 async function create() {
-  const p = await createLegacyPoll(prisma, { title: 'Teammøde', description: 'Q4',
-    options: [{ start: at('11-03T09:00') }, { start: at('11-04T09:00'), end: at('11-04T10:00') }, { start: at('11-05T09:00') }] });
-  const r = await call(`/api/events/${p.id}`);
-  return { id: p.id, token: p.admin_token, opts: r.body.time_options as Json[] };
+  const c = await call('/api/events', json('POST', { title: 'Teammøde', description: 'Q4', options: [{ date: at('11-03') }, { date: at('11-04') }, { date: at('11-05') }] }));
+  return { id: c.body.id as string, token: c.body.admin_token as string, opts: c.body.time_options as Json[] };
 }
 const patchBody = (opts: Json[], extra: Json = {}): Json => ({
   title: 'Nyt navn', description: 'Ny tekst',
-  time_options: opts.map((o) => ({ id: o.id, start: o.start_at, end: o.end_at })), ...extra,
+  options: opts.map((o) => ({ id: o.id, date: o.date })), ...extra,
 });
 
 describe('admin auth', () => {
@@ -75,13 +71,12 @@ describe('admin auth', () => {
 describe('PATCH /api/events/:id', () => {
   test('edits title/description/options (keep, move, add, remove without votes)', async () => {
     const a = await create();
-    const body = patchBody([a.opts[0], { ...a.opts[1], start_at: at('11-04T11:00'), end_at: null }]);
-    body.time_options.push({ start: at('11-06T12:00') } as Json);
+    const body = patchBody([a.opts[0], { ...a.opts[1], date: at('11-07') }]);
+    body.options.push({ date: at('11-06') } as Json);
     const r = await call(`/api/events/${a.id}`, json('PATCH', body, a.token));
     expect(r.status).toBe(200);
     expect(r.body.title).toBe('Nyt navn');
-    expect(r.body.time_options.map((o: Json) => o.start_at)).toEqual([
-      `${Y}-11-03T09:00:00.000Z`, `${Y}-11-04T11:00:00.000Z`, `${Y}-11-06T12:00:00.000Z`]);
+    expect(r.body.time_options.map((o: Json) => o.date)).toEqual([at('11-03'), at('11-06'), at('11-07')]);
     expect(r.body.time_options[0].id).toBe(a.opts[0].id); // kept options keep their id (and votes)
     const pub = await call(`/api/events/${a.id}`);
     expect(pub.body.description).toBe('Ny tekst');
@@ -94,10 +89,10 @@ describe('PATCH /api/events/:id', () => {
       patchBody(a.opts, { title: 'x'.repeat(201) }),
       patchBody(a.opts, { description: 'x'.repeat(2001) }),
       patchBody([], {}),
-      { ...patchBody(a.opts), time_options: [{ start: '2020-01-01T10:00:00Z' }] },
-      { ...patchBody(a.opts), time_options: 'nope' },
-      { ...patchBody(a.opts), time_options: [{ id: 'x', start: at('11-03T09:00') }] },
-      { ...patchBody(a.opts), time_options: [{ id: a.opts[0].id, start: at('11-03T09:00') }, { id: a.opts[0].id, start: at('11-04T09:00') }] },
+      { ...patchBody(a.opts), options: [{ date: '2020-01-01' }] },
+      { ...patchBody(a.opts), options: 'nope' },
+      { ...patchBody(a.opts), options: [{ id: 'x', date: at('11-03') }] },
+      { ...patchBody(a.opts), options: [{ id: a.opts[0].id, date: at('11-03') }, { id: a.opts[0].id, date: at('11-04') }] },
       null, [],
     ];
     for (const c of cases) {
@@ -117,11 +112,11 @@ describe('PATCH /api/events/:id', () => {
 
   test('unchanged existing option in the past may stay; moving it into the past is rejected', async () => {
     const a = await create();
-    await prisma.timeOption.update({ where: { id: a.opts[0].id }, data: { startAt: new Date('2020-01-01T10:00:00Z') } });
+    await prisma.timeOption.update({ where: { id: a.opts[0].id }, data: { date: new Date('2020-01-01T00:00:00Z') } });
     const adm = await call(`/api/events/${a.id}/admin`, { token: a.token });
     const keep = await call(`/api/events/${a.id}`, json('PATCH', patchBody(adm.body.time_options), a.token));
     expect(keep.status).toBe(200);
-    const moved = adm.body.time_options.map((o: Json, i: number) => (i === 0 ? { ...o, start_at: '2020-01-02T10:00:00.000Z' } : o));
+    const moved = adm.body.time_options.map((o: Json, i: number) => (i === 0 ? { ...o, date: '2020-01-02' } : o));
     expect((await call(`/api/events/${a.id}`, json('PATCH', patchBody(moved), a.token))).status).toBe(400);
   });
 
@@ -166,7 +161,7 @@ describe('close / reopen', () => {
     const page = await call(`/p/${a.id}`);
     expect(page.text).toContain('id="result-banner"');
     expect(page.text).toContain('Afstemningen er lukket');
-    expect(page.text).toContain('Afstemningen er lukket – endeligt tidspunkt');
+    expect(page.text).toContain('Afstemningen er lukket – endelig dato');
 
     const r = await call(`/api/events/${a.id}/reopen`, json('POST', {}, a.token));
     expect(r.status).toBe(200);

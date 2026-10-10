@@ -16,7 +16,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   // Personal edit links (?edit=<token>, feature 3) get no OG/canonical tags (design §18).
   if ((await searchParams).edit !== undefined) return { title: ev.title, robots: { index: false, follow: false } };
   const url = `${appUrl()}/p/${ev.slug}`;
-  const description = pollDescription(ev.time_options.length, ev.time_options.map((o) => o.date ?? o.start_at!), ev.mode);
+  const description = pollDescription(ev.time_options.length, ev.time_options.map((o) => o.date));
   const image = { url: `${appUrl()}${ogImagePath(ev.slug)}`, ...OG_SIZE, alt: `GrabAday-afstemning: ${ev.title}`, type: 'image/png' };
   const ogDescription = ev.description ? truncateGraphemes(ev.description, 160) : description;
   return {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminJson, adminRoute } from '@/lib/admin-api';
-import { ApiError, deleteEvent, eventMode, existingOptions, loadEvent, updateEvent, withDesignShape } from '@/lib/events';
+import { ApiError, deleteEvent, existingOptions, loadEvent, updateEvent, withDesignShape } from '@/lib/events';
 import { jsonError } from '@/lib/http';
 import { validateEvent } from '@/lib/validate';
 import { fromUtcDate } from '@/lib/dates';
@@ -12,7 +12,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   const ev = await loadEvent(id);
   if (!ev) return jsonError(404, ['Afstemningen findes ikke.']);
-  return NextResponse.json(withDesignShape(ev, new URL(req.url).searchParams.get('tz')), {
+  return NextResponse.json(withDesignShape(ev), {
     headers: { 'Cache-Control': 'no-store' },
   });
 }
@@ -24,14 +24,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
  */
 export const PATCH = adminRoute(async ({ slug, eventId, body }) => {
   const existing = new Map((await existingOptions(eventId)).map((o) => [o.id, o]));
-  const mode = await eventMode(eventId); // date polls: options [{id?, date}]; legacy timed polls keep time_options
   const { errors, value } = validateEvent(body, new Date(), {
-    allowIds: true, mode,
+    allowIds: true,
     pastAllowed: (o) => {
       const e = o.id !== undefined ? existing.get(o.id) : undefined;
       if (!e) return false;
-      if (o.date !== null) return !!e.date && fromUtcDate(e.date) === o.date; // already-passed dates may stay
-      return e.startAt?.getTime() === o.startAt?.getTime() && (e.endAt?.getTime() ?? null) === (o.endAt?.getTime() ?? null);
+      return fromUtcDate(e.date) === o.date; // already-passed dates may stay
     },
   });
   if (errors.length || !value) throw new ApiError(400, errors);

@@ -21,7 +21,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const body = await readJson(req, LIMITS.bodyBytes);
     if ('response' in body) return body.response;
     const { id: slug } = await params;
-    const tz = new URL(req.url).searchParams.get('tz');
     const idemKey = req.headers.get('idempotency-key') ?? undefined;
     if (idemKey !== undefined && !IDEMPOTENCY_RE.test(idemKey)) return jsonError(400, ['Ugyldig Idempotency-Key (16-100 tegn: A-Z, a-z, 0-9, _ eller -).']);
     const ev = await eventForVoting(slug);
@@ -29,7 +28,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const respond = async (participantId: number, token: string | null, status: 200 | 201) => NextResponse.json({
       participant_id: participantId,
       ...(token ? { edit_token: token, edit_url: editPath(slug, token) } : {}),
-      event: await publicEvent(slug, tz),
+      event: await publicEvent(slug),
     }, { status, headers: status === 200 ? { 'Idempotent-Replayed': 'true' } : {} });
     const { errors, value } = validateVote(body.data, new Set(ev.timeOptions.map((o) => o.id)));
     if (idemKey) {

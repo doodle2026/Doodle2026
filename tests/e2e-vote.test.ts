@@ -6,7 +6,6 @@ import { describe, test, expect, inject, beforeAll, afterAll } from 'vitest';
 import { existsSync } from 'node:fs';
 import type { Browser } from 'playwright-core';
 import { PrismaClient } from '@prisma/client';
-import { createLegacyPoll } from './legacy';
 const prisma = new PrismaClient();
 
 const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
@@ -108,20 +107,6 @@ describe.skipIf(!existsSync(CHROME))('voting UI (headless Chrome)', () => {
     expect(heads[0]).toContain('29. mar.');
     expect(heads[0]).toContain('1. nov.');
     expect(heads[0]).not.toMatch(/\d\d[:.]\d\d/);
-  }, 30_000);
-
-  test('LEGACY timed poll page: times + legacy badge, V8 next-day marker still shown', async () => {
-    const lp = await createLegacyPoll(prisma, { title: 'Gammel', options: [{ start: `${Y}-11-03T09:00:00Z` }, { start: `${Y}-11-04T21:30:00Z`, end: `${Y}-11-05T00:30:00Z` }] });
-    const d = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await d.goto(`${BASE}/p/${lp.id}`);
-    await d.waitForSelector('#legacy-badge');
-    expect(await d.textContent('#legacy-badge')).toContain('Ældre afstemning med klokkeslæt');
-    await expect.poll(() => d.textContent('thead')).toMatch(/\(\+1 dag\)/);
-    await d.fill('#name', 'Lis');
-    await d.click('.tri[data-i="0"]');
-    await d.click('#save');
-    await expect.poll(async () => (await (await fetch(`${BASE}/api/events/${lp.id}`)).json()).participants.length).toBe(1);
-    await d.close();
   }, 30_000);
 
   test('V5: returning voter sees a different message once the poll is closed', async () => {

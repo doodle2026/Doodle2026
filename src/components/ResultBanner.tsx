@@ -1,32 +1,27 @@
 'use client';
-import { useEffect, useState } from 'react';
 import { googleCalendarUrlFor, optionLong } from '@/lib/format';
 import { formatDateLongCap, formatDateShort } from '@/lib/dates';
 import { bestMask, totals } from '@/lib/vote-client';
 
-interface Opt { id: number; date: string | null; start_at: string | null; end_at: string | null }
+interface Opt { id: number; date: string }
 export interface ResultEvent {
   slug: string; title: string; description: string; is_closed: boolean; chosen_option_id: number | null;
-  mode?: 'date' | 'datetime'; time_options: Opt[]; participants: { votes: ('yes' | 'maybe' | 'no' | null)[] }[];
+  time_options: Opt[]; participants: { votes: ('yes' | 'maybe' | 'no' | null)[] }[];
 }
 
 /**
  * Design §29 `.result-banner`: green when a time is chosen (open or closed), blue `--closed` when closed
- * without a choice (shows ★ best). Times render after mount only → always the viewer's time zone.
+ * without a choice (shows ★ best). Dates are plain days (same in every time zone).
  */
 export default function ResultBanner({ event, isAdmin = false, appUrl, onClear, busy = false }:
   { event: ResultEvent; isAdmin?: boolean; appUrl: string; onClear?: () => void; busy?: boolean }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
   const idx = event.time_options.findIndex((o) => o.id === event.chosen_option_id);
   const chosen = idx >= 0 ? event.time_options[idx] : null;
   if (!chosen && !event.is_closed) return null;
   const T = totals(event.participants.map((p) => p.votes), event.time_options.length);
-  // Dates are time-zone free → render immediately; legacy times only after mount (viewer's zone).
-  const label = (o: Opt) => (o.date || mounted ? optionLong(o) : '…');
+  const label = (o: Opt) => optionLong(o);
   // Design §0.5: "fre. 16. okt. 2026 (hele dagen)" with the suffix muted.
-  const when = (o: Opt) => (o.date ? <>{formatDateShort(o.date)} <span className="allday">(hele dagen)</span></> : label(o));
-  const what = event.mode === 'datetime' ? 'tidspunkt' : 'dato';
+  const when = (o: Opt) => <>{formatDateShort(o.date)} <span className="allday">(hele dagen)</span></>;
 
   if (!chosen) {
     const best = bestMask(T);
@@ -35,7 +30,7 @@ export default function ResultBanner({ event, isAdmin = false, appUrl, onClear, 
       <div className="result-banner result-banner--closed" role="status" id="result-banner">
         <span className="result-banner__icon" aria-hidden="true">🔒</span>
         <div className="result-banner__body">
-          <p className="result-banner__eyebrow">Afstemningen er lukket{bests.length ? ` · Bedste ${what}:` : ''}</p>
+          <p className="result-banner__eyebrow">Afstemningen er lukket{bests.length ? ' · Bedste dato:' : ''}</p>
           {bests.length > 0
             ? <span className="result-banner__when" suppressHydrationWarning>★ {bests.map(label).join(' / ')}</span>
             : <p className="result-banner__note">Arrangøren har lukket for svar.</p>}
@@ -44,8 +39,8 @@ export default function ResultBanner({ event, isAdmin = false, appUrl, onClear, 
     );
   }
   const eyebrow = event.is_closed
-    ? `Afstemningen er lukket – endelig${what === 'dato' ? '' : 't'} ${what}`
-    : isAdmin ? `Endelig${what === 'dato' ? '' : 't'} ${what} (afstemningen er stadig åben)` : what === 'dato' ? 'Den endelige dato er' : 'Tidspunktet er valgt';
+    ? 'Afstemningen er lukket – endelig dato'
+    : isAdmin ? 'Endelig dato (afstemningen er stadig åben)' : 'Den endelige dato er';
   const t = T[idx];
   return (
     <div className="result-banner" role="status" id="result-banner">
@@ -53,7 +48,7 @@ export default function ResultBanner({ event, isAdmin = false, appUrl, onClear, 
       <div className="result-banner__body">
         <p className="result-banner__eyebrow"><span className="chosen-badge">✓ Valgt</span> {eyebrow}</p>
         <span className="result-banner__when" suppressHydrationWarning>{when(chosen)}</span>
-        {isAdmin && chosen.date && <span className="meta" style={{ display: 'block' }}>{formatDateLongCap(chosen.date).replace(/^(\S+) /, '$1 den ')}</span>}
+        {isAdmin && <span className="meta" style={{ display: 'block' }}>{formatDateLongCap(chosen.date).replace(/^(\S+) /, '$1 den ')}</span>}
         <p className="result-banner__note">{t.yes} ja, {t.maybe} måske.{isAdmin ? ' Deltagerne ser dette øverst på siden.' : ''}</p>
         <div className="result-banner__actions">
           <a className="btn btn--secondary btn--sm" id="ics" href={`/api/events/${event.slug}/ics`} download>📅 Tilføj til kalender (.ics)</a>

@@ -67,10 +67,10 @@ describe('create form helpers', () => {
 
 describe('link-preview helpers', () => {
   test('date ranges in Danish', () => {
-    expect(dateRangeDa(['2026-10-14T07:00:00Z', '2026-10-16T07:00:00Z'])).toBe('14.–16. oktober 2026');
-    expect(dateRangeDa(['2026-10-30T07:00:00Z', '2026-11-02T08:00:00Z'])).toBe('30. oktober – 2. november 2026');
-    expect(dateRangeDa(['2026-12-30T08:00:00Z', '2027-01-02T08:00:00Z'])).toBe('30. december 2026 – 2. januar 2027');
-    expect(dateRangeDa(['2026-10-14T07:00:00Z'])).toBe('14. oktober 2026');
+    expect(dateRangeDa(['2026-10-14', '2026-10-16'])).toBe('14.–16. oktober 2026');
+    expect(dateRangeDa(['2026-10-30', '2026-11-02'])).toBe('30. oktober – 2. november 2026');
+    expect(dateRangeDa(['2026-12-30', '2027-01-02'])).toBe('30. december 2026 – 2. januar 2027');
+    expect(dateRangeDa(['2026-10-14'])).toBe('14. oktober 2026');
   });
   test('truncation never splits a grapheme', () => {
     const fam = '👨‍👩‍👧‍👦';

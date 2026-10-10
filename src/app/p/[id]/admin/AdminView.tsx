@@ -15,8 +15,8 @@ import { counterState, counterText, isBlank, liveTitleError, mapServerErrors, te
 const TITLE_MAX = 200;
 const DESC_MAX = 2000;
 
-type Opt = { key: string; id?: number; date: string | null; start_at: string | null; end_at: string | null; votes: number };
-const sortKey = (o: Opt) => o.date ?? o.start_at ?? '';
+type Opt = { key: string; id?: number; date: string; votes: number };
+const sortKey = (o: Opt) => o.date;
 type Dialog = null | 'close' | 'reopen' | 'rotate' | 'delete-poll';
 let seq = 0;
 
@@ -24,7 +24,6 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   const [token, setToken] = useState<string | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'denied' | 'error'>('loading');
   const [ev, setEv] = useState<AdminEvent | null>(null);
-  const dateMode = ev?.mode !== 'datetime';
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [opts, setOpts] = useState<Opt[]>([]);
@@ -61,7 +60,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   const load = useCallback((data: AdminEvent) => {
     setEv(data);
     setTitle(data.title); setDesc(data.description);
-    setOpts(data.time_options.map((o) => ({ key: `o${o.id}`, id: o.id, date: o.date, start_at: o.start_at, end_at: o.end_at, votes: o.votes.total })));
+    setOpts(data.time_options.map((o) => ({ key: `o${o.id}`, id: o.id, date: o.date, votes: o.votes.total })));
     setConfirmedRemovals(0); setPendingRemove(null);
   }, []);
 
@@ -135,7 +134,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     if (!fresh.length) return;
     if (opts.length + fresh.length > MAX_DATE_OPTIONS) { setOptErr(`Du kan højst have ${MAX_DATE_OPTIONS} datoer.`); return; }
     setOptErr('');
-    setOpts([...opts, ...fresh.map((d) => ({ key: `n${++seq}`, date: d, start_at: null, end_at: null, votes: 0 }))].sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
+    setOpts([...opts, ...fresh.map((d) => ({ key: `n${++seq}`, date: d, votes: 0 }))].sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
     setLive(`${fresh.length} ${fresh.length === 1 ? 'dato' : 'datoer'} tilføjet`);
     setAddSel([]); setAddOpen(false);
     focusAfter.current = '#addopt';
@@ -158,10 +157,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
         method: 'PATCH',
         body: JSON.stringify({
           title, description: desc, confirm_remove_voted: confirmedRemovals > 0,
-          ...(dateMode
-            ? { options: opts.map((o) => ({ ...(o.id ? { id: o.id } : {}), date: o.date })) }
-            // legacy: timed options keep start/end, new/changed ones are plain dates
-            : { time_options: opts.map((o) => ({ ...(o.id ? { id: o.id } : {}), ...(o.date ? { date: o.date } : { start: o.start_at, end: o.end_at }) })) }),
+          options: opts.map((o) => ({ ...(o.id ? { id: o.id } : {}), date: o.date })),
         }),
       });
       if (res.status === 401 || res.status === 403) { setState('denied'); return; }
@@ -188,7 +184,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
       if (!res.ok) return { msg: (Array.isArray(data.errors) && data.errors[0]) || 'Datoen kunne ikke gemmes.', fields: ['date'] };
       setEv(data);
       const fresh = data.time_options.find((x: AdminEvent['time_options'][number]) => x.id === id);
-      setOpts((prev) => prev.map((o) => (o.id === id ? { ...o, date: fresh.date, start_at: fresh.start_at, end_at: fresh.end_at, votes: fresh.votes.total } : o))
+      setOpts((prev) => prev.map((o) => (o.id === id ? { ...o, date: fresh.date, votes: fresh.votes.total } : o))
         .sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
       setEditingId(null);
       const n = data.reset_votes_count as number;
@@ -230,7 +226,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
       setEv(data);
       if (dialog === 'close') {
         const c = data.chosen_option_id ? optById.get(data.chosen_option_id) : null;
-        setBanner(`✓ Afstemningen er lukket.${c ? ` Valgt ${dateMode ? 'dato' : 'tidspunkt'}: ${optionLabel(c)}.` : ''}`);
+        setBanner(`✓ Afstemningen er lukket.${c ? ` Valgt dato: ${optionLabel(c)}.` : ''}`);
       } else if (dialog === 'reopen') {
         setBanner('✓ Afstemningen er åbnet igen.');
       } else {
@@ -325,9 +321,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
           <textarea className="input" id="desc" value={desc} onChange={(e) => setDesc(e.target.value)} aria-describedby="desc-count" />
           <div className="field__meta"><span /><Counter id="desc-count" value={desc} max={DESC_MAX} /></div>
         </div>
-        <h3 style={{ margin: 'var(--s-4) 0 var(--s-2)' }}>Datoforslag{' '}
-          {!dateMode && (<><span className="legacy-badge" id="legacy-badge">🕘 Ældre afstemning med klokkeslæt</span>
-            <span className="field__hint" style={{ display: 'block', fontWeight: 400, marginTop: 4 }}>Eksisterende forslag beholder deres klokkeslæt. Nye forslag kan kun være datoer.</span></>)}</h3>
+        <h3 style={{ margin: 'var(--s-4) 0 var(--s-2)' }}>Datoforslag</h3>
         <ul className="opt-list" id="opts">
           {opts.map((o, i) => {
             const label = optionLabel(o);
@@ -335,7 +329,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
             if (o.id !== undefined && editingId === o.id) {
               return (
                 <li key={o.key}>
-                  <OptionEditRow opt={{ id: o.id, date: o.date, start_at: o.start_at, end_at: o.end_at, votes: o.votes }}
+                  <OptionEditRow opt={{ id: o.id, date: o.date, votes: o.votes }}
                     others={opts.filter((x) => x.key !== o.key)}
                     onCancel={() => { setEditingId(null); focusAfter.current = `[data-oe="${o.id}"]`; }}
                     onSave={(v) => saveOption(o.id!, v)} />

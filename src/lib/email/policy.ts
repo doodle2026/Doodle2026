@@ -21,8 +21,7 @@ export interface PollForEmail {
   remindersSent?: number; lastReminderAt?: Date | null;
   /** Step 5 tracking on → reminder footer says they go only to those who haven't answered. */
   trackingEnabled?: boolean;
-  /** Date polls: { date }; legacy timed polls: { startAt, endAt }. */
-  options: ({ date: string } | { startAt: Date; endAt: Date | null })[];
+  options: { date: string }[];
   deadline?: Date | null; respondedCount?: number; timeZone?: string;
 }
 export interface Invitee {
@@ -52,7 +51,7 @@ export function pollEmailData(p: PollForEmail, inv: Invitee, ctx: EmailCtx): Pol
     assetBaseUrl: `${app}/email-assets`, appUrl: app,
     eventTitle: p.title, organizerName: p.organizerName, recipientName: inv.name?.trim() || undefined,
     description: p.description, pollUrl: `${app}/p/${encodeURIComponent(p.slug)}${inv.inviteToken ? `#inv=${inv.inviteToken}` : ''}`,
-    optionCount: p.options.length, dates: dateLabels(p.options, tz), trackingEnabled: !!p.trackingEnabled, deadline: p.deadline ? formatters(tz).deadline(p.deadline) : undefined,
+    optionCount: p.options.length, dates: dateLabels(p.options), trackingEnabled: !!p.trackingEnabled, deadline: p.deadline ? formatters(tz).deadline(p.deadline) : undefined,
     respondedCount: p.respondedCount, footerText: ctx.footerText ?? 'GrabAday · Planlæg møder uden login',
     personalMessage: ctx.personalMessage,
     unsubscribePollUrl: `${app}/u/p/${inv.linkToken}`,

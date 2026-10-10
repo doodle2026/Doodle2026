@@ -70,8 +70,3 @@ export function savedMessage(name: string, fresh: boolean, closed: boolean): str
 export const HINT_GRID = 'Tryk på en celle for at skifte: ikke svaret → ja → måske → nej. Tastatur: J / M / N, Delete nulstiller, ← → flytter.';
 export const HINT_CARDS = 'Tryk på Ja, Måske eller Nej ved hver dato. Tryk igen på dit valg for at nulstille.';
 
-/** V8: " (+1 dag)" / " (+2 dage)" when the end falls on a later local day than the start (YYYY-MM-DD keys). */
-export function nextDayMarker(startKey: string, endKey: string): string {
-  const d = Math.round((Date.parse(`${endKey}T00:00:00Z`) - Date.parse(`${startKey}T00:00:00Z`)) / 86_400_000);
-  return d >= 1 ? ` (+${d} ${d === 1 ? 'dag' : 'dage'})` : '';
-}

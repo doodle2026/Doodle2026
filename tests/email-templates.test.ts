@@ -18,15 +18,6 @@ describe('email templates (the design spec (doodle-ui))', () => {
     expect(r.text + r.html).not.toMatch(/tidszone|Europe\/Copenhagen|\d\d:\d\d/);
   });
 
-  it('legacy timed options keep their time (Europe/Copenhagen) in the label, +1 dag across midnight', () => {
-    expect(dateLabels([
-      { startAt: new Date('2026-10-14T21:30:00Z'), endAt: new Date('2026-10-14T22:30:00Z') },
-      { startAt: new Date('2026-10-14T07:00:00Z'), endAt: new Date('2026-10-14T08:00:00Z') },
-      { startAt: new Date('2026-10-15T08:30:00Z'), endAt: null },
-    ])).toEqual([
-      { dateLabel: 'ons. 14. okt. 2026 kl. 09:00–10:00' }, { dateLabel: 'ons. 14. okt. 2026 kl. 23:30–00:30 (+1 dag)' }, { dateLabel: 'tors. 15. okt. 2026 kl. 10:30' }]);
-  });
-
   it('reminder footer follows tracking: all non-unsubscribed vs. only those who have not answered', () => {
     const inv = { email: 'a@b.dk', linkToken: 'T'.repeat(43) };
     const off = renderReminder(pollEmailData(poll, inv, ctx));

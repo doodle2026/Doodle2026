@@ -43,6 +43,6 @@ export async function PUT(req: Request, { params }: Ctx) {
     const { errors, value } = validateVote(body.data, new Set(ev.timeOptions.map((o) => o.id)));
     if (errors.length || !value) return jsonError(400, errors);
     await updateParticipant(ev.id, p.id, value);
-    return NextResponse.json({ participant_id: p.id, event: await publicEvent(slug, new URL(req.url).searchParams.get('tz')) });
+    return NextResponse.json({ participant_id: p.id, event: await publicEvent(slug) });
   });
 }

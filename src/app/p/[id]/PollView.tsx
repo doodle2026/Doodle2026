@@ -24,8 +24,6 @@ export const adminStoreKey = (slug: string) => `mt-admin-${slug}`;
 
 export default function PollView({ event, shareUrl, justCreated }:
   { event: ApiEvent; shareUrl: string; justCreated: boolean }) {
-  // Times depend on the browser's timezone → formatted only after mount (no SSR/hydration mismatch).
-  const [tz, setTz] = useState<string | null>(null);
   const [open, setOpen] = useState(justCreated); // organizer (?created=1) sees it open; visitors closed
   const [copy, setCopy] = useState<Record<Which, CopyState>>({ url: 'idle', admin: 'idle' });
   const [status, setStatus] = useState('');
@@ -39,7 +37,6 @@ export default function PollView({ event, shareUrl, justCreated }:
   const storeKey = `mt-share-${event.slug}`;
 
   useEffect(() => {
-    setTz(Intl.DateTimeFormat().resolvedOptions().timeZone);
     setCanShare(typeof navigator !== 'undefined' && canNativeShare(navigator)); // after hydration only (not in SSR HTML)
     if (justCreated) {
       try {
@@ -161,9 +158,7 @@ export default function PollView({ event, shareUrl, justCreated }:
           <ResultBanner event={event} appUrl={shareUrl.replace(/\/p\/[^/]+$/, '')} />
           <h1>{event.title}</h1>
           {event.description && <p className="lead">{event.description}</p>}
-          {event.mode === 'datetime'
-            ? <p className="tz-note"><span className="legacy-badge" id="legacy-badge">🕘 Ældre afstemning med klokkeslæt</span> {tz ? `Tider vist i ${tz}.` : ''}</p>
-            : <p className="tz-note">Vælg de datoer, der passer dig.</p>}
+          <p className="tz-note">Vælg de datoer, der passer dig.</p>
           <VoteSection initial={event} />
         </article>
       </main>

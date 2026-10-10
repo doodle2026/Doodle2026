@@ -1,0 +1,84 @@
+{
+  "pages": {
+    "/api/events/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/events/route.js"
+    ],
+    "/api/events/[id]/invitations/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/events/[id]/invitations/route.js"
+    ],
+    "/api/events/[id]/invite/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/events/[id]/invite/route.js"
+    ],
+    "/layout": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/layout.js"
+    ],
+    "/not-found": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/not-found.js"
+    ],
+    "/api/events/[id]/invitations/preview/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/events/[id]/invitations/preview/route.js"
+    ],
+    "/api/events/[id]/reminders/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/events/[id]/reminders/route.js"
+    ],
+    "/api/events/[id]/close/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/events/[id]/close/route.js"
+    ],
+    "/api/events/[id]/invitations/[action]/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/events/[id]/invitations/[action]/route.js"
+    ],
+    "/api/events/[id]/votes/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/events/[id]/votes/route.js"
+    ],
+    "/api/u/[scope]/[token]/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/u/[scope]/[token]/route.js"
+    ],
+    "/api/events/[id]/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/events/[id]/route.js"
+    ],
+    "/api/events/[id]/choose/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/events/[id]/choose/route.js"
+    ],
+    "/api/events/[id]/ics/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/events/[id]/ics/route.js"
+    ],
+    "/api/events/[id]/reopen/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/events/[id]/reopen/route.js"
+    ],
+    "/api/events/[id]/admin/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/events/[id]/admin/route.js"
+    ]
+  }
+}

@@ -17,7 +17,7 @@ export async function guarded(where: string, fn: () => Promise<Response>): Promi
 export const editBearer = bearer;
 export const editPath = (slug: string, token: string) => `/p/${slug}#edit=${token}`;
 
-export async function publicEvent(slug: string, tz: string | null) {
+export async function publicEvent(slug: string) {
   const ev = await loadEvent(slug);
-  return ev ? withDesignShape(ev, tz) : null;
+  return ev ? withDesignShape(ev) : null;
 }

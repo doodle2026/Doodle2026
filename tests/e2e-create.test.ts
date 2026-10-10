@@ -49,7 +49,7 @@ describe.skipIf(!existsSync(CHROME))('create with calendar (headless Chrome)', (
     await p.waitForURL(/\/p\/[A-Za-z0-9_-]{22}\?created=1/);
     const id = new URL(p.url()).pathname.split('/')[2];
     const ev = await (await fetch(`${BASE}/api/events/${id}`)).json();
-    expect(ev.mode).toBe('date');
+    expect(ev).not.toHaveProperty('mode');
     expect(ev.time_options.map((o: { date: string }) => o.date)).toEqual(picked.filter((_, i) => i !== 1 && i !== 8));
     expect(await p.textContent('#grid-h')).toBe('Hvilke datoer passer dig?');
     await p.close();

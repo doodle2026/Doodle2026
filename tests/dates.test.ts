@@ -17,7 +17,7 @@ describe('date helpers (UTC strings only)', () => {
     expect(formatDateShort('2026-10-16')).toBe('fre. 16. okt. 2026');
     expect(formatDateLong('2026-11-03')).toBe('tirsdag 3. november 2026');
     expect(columnHead('2026-10-16')).toEqual(['Fre.', '16. okt.']);
-    expect(optionLong({ date: '2026-10-16', start_at: null, end_at: null })).toBe('fre. 16. okt. 2026 (hele dagen)');
+    expect(optionLong({ date: '2026-10-16' })).toBe('fre. 16. okt. 2026 (hele dagen)');
   });
   test('calendar math', () => {
     expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
@@ -51,7 +51,7 @@ describe('date helpers (UTC strings only)', () => {
     expect(t).toContain('DTSTART;VALUE=DATE:20261016\r\nDTEND;VALUE=DATE:20261017\r\n');
     expect(t).toContain('SEQUENCE:2');
     expect(t).not.toMatch(/TZID|DTSTART:/);
-    expect(googleCalendarUrlFor({ date: '2026-12-31', start_at: null, end_at: null }, { title: 'T', url: 'https://x' })).toContain('dates=20261231%2F20270101');
+    expect(googleCalendarUrlFor({ date: '2026-12-31' }, { title: 'T', url: 'https://x' })).toContain('dates=20261231%2F20270101');
   });
 });
 

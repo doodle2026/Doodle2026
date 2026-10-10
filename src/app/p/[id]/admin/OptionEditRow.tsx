@@ -5,9 +5,8 @@ import { formatDateShort, localTodayIso } from '@/lib/dates';
 import type { EditErr } from '@/lib/admin-ui';
 import DatePicker from '@/components/DatePicker';
 
-type O = { date: string | null; start_at: string | null; end_at: string | null };
+type O = { date: string };
 export interface EditableOpt extends O { id: number; votes: number }
-/** Always a plain date (§0.6/§0.7): changing a legacy timed option turns it into a whole-day date option. */
 export interface EditResult { date: string; reset_votes: boolean }
 
 /** Design §0.6: "Skift dato" inline row with a single-select calendar. Esc cancels, Enter (on a radio-free input) saves. */
@@ -22,7 +21,7 @@ export default function OptionEditRow({ opt, others, onSave, onCancel }: {
   const [saving, setSaving] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => { box.current?.querySelector<HTMLElement>('td[tabindex="0"]')?.focus(); }, []);
-  const taken = others.filter((o) => o.date).map((o) => o.date!);
+  const taken = others.map((o) => o.date);
 
   async function save() {
     if (saving) return;

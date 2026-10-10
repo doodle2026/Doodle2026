@@ -1,7 +1,7 @@
 /**
  * the design spec (doodle-ui) e-mail templates (invitation / reminder) → { subject, html, text }.
  * Templates are synced verbatim into ./templates.ts (scripts/sync-email-templates.mjs); Mustache escapes all
- * user values in HTML. Times are formatted server-side in Danish, 24 h, in the poll's time zone.
+ * user values in HTML. Dates are plain days; only a deadline (instant) uses a time zone.
  */
 import Mustache from 'mustache';
 import { TEMPLATES } from './templates';
@@ -10,7 +10,7 @@ import { formatDateShort } from '../dates';
 export interface PollEmailData {
   assetBaseUrl: string; appUrl: string; eventTitle: string; organizerName: string; recipientName?: string;
   description?: string; pollUrl: string; optionCount: number;
-  /** One per option, chronological: "fre. 16. okt. 2026"; legacy timed options add " kl. 09:00–10:00" (Europe/Copenhagen). */
+  /** One per option, chronological: "fre. 16. okt. 2026". */
   dates: { dateLabel: string }[];
   /** Reminder footer: tracking on → "kun til inviterede, der ikke har svaret". */
   trackingEnabled?: boolean;
@@ -42,13 +42,9 @@ export function formatters(tz = DEFAULT_TZ) {
   };
 }
 
-/** Options → chronological labels. Date options are time-zone free; legacy timed ones get "kl. HH:MM–HH:MM" in `tz`. */
-export function dateLabels(options: ({ date: string } | { startAt: Date; endAt: Date | null })[], tz = DEFAULT_TZ): PollEmailData['dates'] {
-  const f = formatters(tz);
-  const short = new Intl.DateTimeFormat('da-DK', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: tz });
-  const key = (o: (typeof options)[number]) => ('date' in o ? `${o.date}T00:00:00.000Z` : o.startAt.toISOString());
-  return [...options].sort((a, b) => key(a).localeCompare(key(b))).map((o) =>
-    'date' in o ? { dateLabel: formatDateShort(o.date) } : { dateLabel: `${short.format(o.startAt)} kl. ${f.timeLabel(o.startAt, o.endAt)}` });
+/** Options → chronological labels "fre. 16. okt. 2026" (time-zone free). */
+export function dateLabels(options: { date: string }[]): PollEmailData['dates'] {
+  return [...options].sort((a, b) => a.date.localeCompare(b.date)).map((o) => ({ dateLabel: formatDateShort(o.date) }));
 }
 
 /** Public poll link, optionally with a personal invite fragment (#inv=<43-char token>, step 5) – never admin/edit. */

@@ -79,12 +79,12 @@ async function suppressedSet(eventId: number, emails: string[]): Promise<Set<str
 }
 
 async function pollForEmail(eventId: number) {
-  const ev = await prisma.event.findUnique({ where: { id: eventId }, include: { timeOptions: { orderBy: [{ date: 'asc' }, { startAt: 'asc' }] } } });
+  const ev = await prisma.event.findUnique({ where: { id: eventId }, include: { timeOptions: { orderBy: [{ date: 'asc' }] } } });
   if (!ev) throw new ApiError(404, ['Afstemningen findes ikke.']);
   const p: PollForEmail = {
     slug: ev.slug, title: ev.title, description: ev.description, isClosed: ev.closedAt !== null,
     organizerName: ev.organizerName || 'Arrangøren', organizerFromName: ev.organizerName ?? undefined,
-    options: ev.timeOptions.map((o) => (o.date ? { date: fromUtcDate(o.date) } : { startAt: o.startAt!, endAt: o.endAt })),
+    options: ev.timeOptions.map((o) => ({ date: fromUtcDate(o.date) })),
     remindersSent: ev.remindersSent, lastReminderAt: ev.lastReminderAt, trackingEnabled: ev.inviteTracking,
   };
   return { ev, p };

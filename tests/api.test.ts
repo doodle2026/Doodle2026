@@ -38,13 +38,13 @@ describe('create + fetch', () => {
     expect(c.body.id).toMatch(/^[A-Za-z0-9_-]{22}$/);
     expect(c.body.url).toBe(`/p/${c.body.id}`);
     expect(c.headers.get('location')).toBe(`/p/${c.body.id}`);
-    const g = await call(`/api/events/${c.body.id}?tz=Pacific/Kiritimati`); // ?tz is ignored for date polls
+    const g = await call(`/api/events/${c.body.id}`);
     expect(g.status).toBe(200);
     expect(g.body.title).toBe('Teammøde');
     expect(g.body.description).toBe('Kvartalsmøde');
-    expect(g.body.mode).toBe('date');
-    expect(g.body.time_options.map((o: Json) => [o.date, o.start_at, o.end_at])).toEqual([
-      [iso('11-03'), null, null], [iso('11-04'), null, null], [iso('11-05'), null, null]]);
+    expect(g.body.time_options.map((o: Json) => o.date)).toEqual([iso('11-03'), iso('11-04'), iso('11-05')]);
+    expect(g.body.time_options[0]).not.toHaveProperty('start_at');
+    expect(g.body).not.toHaveProperty('mode');
     expect(g.body.options.map((o: Json) => o.date)).toEqual([iso('11-03'), iso('11-04'), iso('11-05')]);
     expect(g.body).not.toHaveProperty('timezone');
   });
@@ -60,7 +60,7 @@ describe('create + fetch', () => {
     expect(r.body.errors).toEqual([`Dato 3: ${iso('11-03')} er valgt flere gange.`]);
   });
 
-  test('legacy body (time_options with times) is rejected for new polls – new polls are always date-only', async () => {
+  test('time_options with times is rejected – polls are date-only', async () => {
     const r = await post({ title: 'x', time_options: [{ start: iso('11-03T09:00:00Z') }] });
     expect(r.status).toBe(400);
     expect(r.body.errors[0]).toMatch(/options/);
@@ -321,7 +321,7 @@ describe('admin token (no accounts)', () => {
     expect(c.body.admin_token).toMatch(TOKEN_RE);
     expect(c.body.admin_url).toBe(`/p/${c.body.id}/admin#${c.body.admin_token}`); // fragment: never sent to servers
     expect(c.headers.get('cache-control')).toMatch(/no-store/);
-    const g = await call(`/api/events/${c.body.id}?tz=Europe/Copenhagen`);
+    const g = await call(`/api/events/${c.body.id}`);
     expect(g.status).toBe(200);
     expect(hasSecretField(g.body)).toBe(false);
     expect(leaks(g.text, c.body.admin_token)).toBe(false);

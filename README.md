@@ -29,7 +29,7 @@ ethvert `?schema=` virker (PR-previews bruger `pr_<nr>`), ingen rå SQL med `pub
 
 ## API
 ### Kun datoer (fra okt. 2026)
-GrabAday bruger **kun hele datoer** – ingen klokkeslæt og ingen tidszoner. `events.mode`: `'date'` (alle nye afstemninger) eller `'datetime'` (ældre afstemninger med klokkeslæt, se *Legacy* nederst). Datoer er rene strenge `YYYY-MM-DD` (DB: `time_options.date DATE`), formateres altid med `timeZone:'UTC'` (`fre. 16. okt. 2026`), så de vises ens i alle tidszoner.
+GrabAday bruger **kun hele datoer** – ingen klokkeslæt og ingen tidszoner. Datoer er rene strenge `YYYY-MM-DD` (DB: `time_options.date DATE`), formateres altid med `timeZone:'UTC'` (`fre. 16. okt. 2026`), så de vises ens i alle tidszoner.
 
 ### `POST /api/events`
 Kræver `Content-Type: application/json` (ellers **415**). Valgfri `Idempotency-Key` (16–100 tegn `[A-Za-z0-9_-]`).
@@ -48,11 +48,11 @@ Kræver `Content-Type: application/json` (ellers **415**). Valgfri `Idempotency-
 ### `GET /api/events/:id`
 ```json
 { "id": "…22…", "slug": "…", "title": "…", "description": "", "created_at": "…Z", "closed_at": null, "is_closed": false,
-  "mode": "date", "chosen_option_id": null,
-  "time_options": [ { "id": 1, "date": "2026-10-14", "start_at": null, "end_at": null, "position": 0 } ],
+  "chosen_option_id": null,
+  "time_options": [ { "id": 1, "date": "2026-10-14", "position": 0 } ],
   "options": [ { "id": 1, "date": "2026-10-14" } ], "url": "/p/<id>", "participants": [] }
 ```
-Ingen `timezone`, `?tz` ignoreres for datoafstemninger. Aldrig tokens/hashes. 404 for ukendt eller forkert formateret id.
+Ingen `timezone`. Aldrig tokens/hashes. 404 for ukendt eller forkert formateret id.
 
 ### Endelig dato og kalender
 `.ics` (`GET /api/events/:id/ics`) er en **heldagsbegivenhed**: `DTSTART;VALUE=DATE:20261016`, `DTEND;VALUE=DATE:20261017` (eksklusiv), ingen TZID; UID (`<id>@grabaday.com`), SEQUENCE og LAST-MODIFIED som før (SEQUENCE stiger når den valgte dato ændres – også via PATCH). Google Kalender: `dates=20261016/20261017`. UI: "Den endelige dato er fre. 16. okt. 2026 (hele dagen)".
@@ -88,5 +88,5 @@ sudo apt-get install -y postgresql
 createdb -h localhost -U doodle doodle_dev; createdb -h localhost -U doodle doodle_test
 ```
 
-### Legacy: ældre afstemninger med klokkeslæt (`mode:'datetime'`)
-Migrationen `20261010235500_date_only` er **kun additiv**: `events.mode` (eksisterende rækker = `'datetime'`, default for nye = `'date'`), `time_options.date DATE NULL`, `start_at` bliver nullable, unik `(event_id, date)` (NULL kolliderer aldrig). Ingen data konverteres. Ældre afstemninger virker uændret (stemme, lukke, admin, `.ics` med tider, `GET ?tz=` → `timezone` + `options:[{date,start,end}]`). Efter design §0.7 kan nye forslag i en ældre afstemning **kun være datoer**: `PATCH` accepterer `time_options:[{id,start,end} | {id?,date}]`, og skifter man dato på et tidsforslag (`PATCH …/options/:oid {date}`), bliver det et rent datoforslag. Al tidszone-kode ligger i `src/lib/legacy-time/` (+ `whenLabel`/`whenLong` i `format.ts` og den gamle gren i `validate.ts`), så den kan fjernes når der ikke er flere ældre afstemninger.
+### Migration til kun datoer
+`20261010235500_date_only` tilføjer `time_options.date`; `20261011003000_dates_only_drop_legacy` fjerner klokkeslæt helt (kører med `prisma migrate deploy`, ingen reset): manglende `date` udfyldes fra `(start_at AT TIME ZONE 'Europe/Copenhagen')::date`, rækker uden dato slettes, kolliderende dubletter (samme afstemning + dato) slettes med deres stemmer – laveste id beholdes, og et valgt dublet-forslag peges om til det beholdte. Derefter `date NOT NULL`, unik `(event_id, date)`, og `start_at`/`end_at`/`events.mode` droppes. `?tz` findes ikke længere.

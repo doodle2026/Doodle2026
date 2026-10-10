@@ -27,15 +27,11 @@ export function icsFold(line: string): string {
 /** 20261103T090000Z */
 export const icsDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
-/** Timed (legacy) event: start/end. All-day (date polls): `date` 'YYYY-MM-DD' → DTSTART;VALUE=DATE + DTEND next day, no TZID. */
-export type IcsEvent = { uid: string; stamp: Date; sequence?: number; lastModified?: Date; summary: string; description?: string; url?: string }
-  & ({ date: string; start?: undefined; end?: undefined } | { date?: undefined; start: Date; end: Date | null });
-export const DEFAULT_DURATION_MS = 60 * 60 * 1000;
+/** All-day event: `date` 'YYYY-MM-DD' → DTSTART;VALUE=DATE + DTEND next day, no TZID. */
+export type IcsEvent = { uid: string; stamp: Date; sequence?: number; lastModified?: Date; summary: string; description?: string; url?: string; date: string };
 
 export function buildIcs(e: IcsEvent): string {
-  const when = e.date !== undefined
-    ? [`DTSTART;VALUE=DATE:${basicDate(e.date)}`, `DTEND;VALUE=DATE:${basicDate(addDays(e.date, 1))}`]
-    : [`DTSTART:${icsDate(e.start)}`, `DTEND:${icsDate(e.end ?? new Date(e.start.getTime() + DEFAULT_DURATION_MS))}`];
+  const when = [`DTSTART;VALUE=DATE:${basicDate(e.date)}`, `DTEND;VALUE=DATE:${basicDate(addDays(e.date, 1))}`];
   const lines = [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//GrabAday//GrabAday//DA', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT',

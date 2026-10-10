@@ -25,7 +25,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const body = buildIcs({
     uid: `${ev.slug}@${ICS_UID_DOMAIN}`, stamp: new Date(), sequence: meta?.icsSequence ?? 0,
     lastModified: meta?.chosenChangedAt ?? meta?.createdAt,
-    ...(o.date ? { date: o.date } : { start: new Date(o.start_at!), end: o.end_at ? new Date(o.end_at) : null }),
+    date: o.date,
     summary: stripInvisible(ev.title), description: stripInvisible(ev.description) || undefined, url: `${app}/p/${ev.slug}`,
   });
   return new Response(body, {
