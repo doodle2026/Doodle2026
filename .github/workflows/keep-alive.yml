@@ -1,0 +1,24 @@
+name: Keep Supabase alive
+# Supabase Free pauses projects after ~7 days without activity. Ping both every 3 days.
+on:
+  schedule:
+    - cron: "23 6 */3 * *"   # 06:23 UTC every 3rd day (odd minute avoids top-of-hour queue)
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      # psql is preinstalled on ubuntu-latest runners; no checkout/setup needed (~15 s)
+      - name: select 1 on prod + staging
+        env:
+          PROD: ${{ secrets.PROD_DIRECT_URL }}
+          STAGING: ${{ secrets.STAGING_DIRECT_URL }}
+        run: |
+          for name in PROD STAGING; do
+            url="${!name}"
+            sep='?'; [[ "$url" == *\?* ]] && sep='&'
+            psql "${url}${sep}sslmode=require&connect_timeout=20" -XqAt -c 'select 1' >/dev/null
+            echo "$name ok"
+          done
