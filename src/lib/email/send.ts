@@ -8,7 +8,8 @@
  *   { ok: false, error: 'config' } – it never throws, so a request using it never crashes.
  * Uses the Resend REST API via fetch (no SDK dependency); 10 s timeout.
  */
-export type EmailMode = 'log' | 'send';
+export type EmailMode = 'log' | 'send' | 'capture';
+import { captureRefusal, recordMail } from './capture';
 export interface EmailMessage {
   to: string | string[]; subject: string; text: string; html?: string; idempotencyKey?: string;
   /** Overrides EMAIL_REPLY_TO (e.g. the organizer). Dropped if not a valid address. */
@@ -58,7 +59,11 @@ export function emailConfig(env: Env = process.env): EmailConfig {
   const raw = (env.EMAIL_MODE ?? '').trim().toLowerCase();
   let mode: EmailMode = 'log';
   if (raw === 'send') mode = 'send';
-  else if (raw && raw !== 'log') problems.push(`EMAIL_MODE must be "send" or "log" (got an unknown value); using "log".`);
+  else if (raw === 'capture') {
+    const why = captureRefusal(env);
+    if (why) problems.push(`EMAIL_MODE=capture refused (${why}); using "log" – nothing is sent or captured.`);
+    else mode = 'capture';
+  } else if (raw && raw !== 'log') problems.push(`EMAIL_MODE must be "send", "log" or "capture" (got an unknown value); using "log".`);
   const from = (env.EMAIL_FROM ?? '').trim();
   const replyTo = (env.EMAIL_REPLY_TO ?? '').trim() || undefined;
   const apiKey = (env.RESEND_API_KEY ?? '').trim() || undefined;
@@ -112,6 +117,15 @@ export function createMailer(opts: { env?: Env; fetch?: typeof fetch; log?: Log;
       ...(replyTo ? { reply_to: replyTo } : {}), ...(headers && Object.keys(headers).length ? { headers } : {}), ...(tags?.length ? { tags } : {}) };
   };
 
+  /** Capture mode: store the full message exactly as it would be sent (gate re-checked inside recordMail). */
+  function capture(m: EmailMessage, batchKey?: string): string {
+    const p = payload(m);
+    const rec = recordMail({ from: p.from, to: p.to, subject: p.subject, text: p.text, html: p.html, replyTo: p.reply_to, headers: p.headers, tags: p.tags,
+      idempotencyKey: m.idempotencyKey ?? batchKey }, opts.env ?? process.env);
+    log('info', `[email:capture] ${summarize(m)}`);
+    return rec.id;
+  }
+
   async function post(url: string, body: unknown, idem: string | undefined, summary: string): Promise<{ ok: true; data: unknown } | { ok: false; error: 'provider' | 'network' }> {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 10_000);
@@ -142,6 +156,7 @@ export function createMailer(opts: { env?: Env; fetch?: typeof fetch; log?: Log;
     }
     const summary = summarize(m);
     if (mode === 'log') { log('info', `[email:log] ${summary}`); return { ok: true, mode, id: logId() }; }
+    if (mode === 'capture') return { ok: true, mode, id: capture(m) };
     if (!cfg.apiKey || !cfg.from) { warnConfig(); log('error', `[email] not sent (config error): ${summary}`); return { ok: false, mode, error: 'config' }; }
 
     const r = await post(RESEND_URL, payload(m), m.idempotencyKey, summary);
@@ -164,6 +179,7 @@ export function createMailer(opts: { env?: Env; fetch?: typeof fetch; log?: Log;
       const chunk = good.slice(c, c + BATCH_MAX);
       const summary = `batch ${chunk.length} msg(s), first ${summarize(chunk[0][0])}`;
       if (mode === 'log') { log('info', `[email:log] ${summary}`); chunk.forEach(([, i]) => { out[i] = { ok: true, mode, id: logId() }; }); continue; }
+      if (mode === 'capture') { chunk.forEach(([m, i]) => { out[i] = { ok: true, mode, id: capture(m, idempotencyKey) }; }); continue; }
       if (!cfg.apiKey || !cfg.from) { warnConfig(); log('error', `[email] not sent (config error): ${summary}`); chunk.forEach(([, i]) => { out[i] = { ok: false, mode, error: 'config' }; }); continue; }
       const r = await post(RESEND_BATCH_URL, chunk.map(([m]) => payload(m)), idempotencyKey ? `${idempotencyKey}:${c / BATCH_MAX}` : undefined, summary);
       if (!r.ok) { chunk.forEach(([, i]) => { out[i] = { ok: false, mode, error: r.error }; }); continue; }
