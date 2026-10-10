@@ -1,5 +1,6 @@
 'use client';
 import { plural } from '@/lib/plural';
+import { useLp } from '@/i18n/link';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { AdminEvent } from '@/lib/events';
 import { forgetAdminToken, storeAdminToken, takeAdminToken } from '@/lib/admin-client';
@@ -22,6 +23,7 @@ type Dialog = null | 'close' | 'reopen' | 'rotate' | 'delete-poll';
 let seq = 0;
 
 export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: string }) {
+  const lp = useLp();
   const [token, setToken] = useState<string | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'denied' | 'error'>('loading');
   const [ev, setEv] = useState<AdminEvent | null>(null);
@@ -99,7 +101,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
         <h1 id="den-h">Admin-linket virker ikke</h1>
         <p className="lead">Linket mangler en del, er skrevet forkert eller er blevet udskiftet med et nyt.
           Brug det seneste admin-link, du har gemt. Store og små bogstaver har betydning.</p>
-        <div className="notfound__actions"><a className="btn btn--primary" href={`/p/${slug}`}>Se afstemningen</a></div>
+        <div className="notfound__actions"><a className="btn btn--primary" href={lp(`/p/${slug}`)}>Se afstemningen</a></div>
       </section>
     );
   }
@@ -218,7 +220,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
         if (res.status === 401 || res.status === 403) { setState('denied'); return; }
         if (!res.ok && res.status !== 404) { dlgRef.current?.close(); setSummary(Array.isArray(data.errors) ? data.errors : ['Sletning mislykkedes.']); return; }
         forgetAdminToken(slug, sessionStorage);
-        location.replace('/?deleted=1');
+        location.replace(lp('/?deleted=1'));
         return;
       }
       const { res, data } = await api(path, { method: 'POST', body: JSON.stringify(body) });
@@ -295,7 +297,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
               <button type="button" className={`btn ${copied === 'url' ? 'btn--copied' : 'btn--primary'}`} onClick={() => copy('url', shareUrl, 'url')}>
                 {copied === 'url' ? '✓ Kopieret' : 'Kopiér link'}
               </button>
-              <a className="btn btn--ghost" href={`/p/${slug}`} target="_blank" rel="noopener noreferrer">Åbn som deltager ↗</a>
+              <a className="btn btn--ghost" href={lp(`/p/${slug}`)} target="_blank" rel="noopener noreferrer">Åbn som deltager ↗</a>
             </div>
           </div>
         </div>

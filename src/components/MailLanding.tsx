@@ -1,4 +1,5 @@
 'use client';
+import { useLp } from '@/i18n/link';
 import { useEffect, useRef, useState } from 'react';
 
 type Info = { email: string; title: string; slug: string; poll_unsubscribed: boolean; all_unsubscribed: boolean };
@@ -11,6 +12,7 @@ async function post(url: string, json: unknown) {
 
 /** Design §40 landing pages: unsubscribe this poll (auto via JS POST), unsubscribe all (one confirm click), report abuse. */
 export default function MailLanding({ kind, token }: { kind: Kind; token: string }) {
+  const lp = useLp();
   const [state, setState] = useState<string>('loading');
   const [info, setInfo] = useState<Info | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,7 +41,7 @@ export default function MailLanding({ kind, token }: { kind: Kind; token: string
     setBusy(false); setState(r.ok ? next : 'error');
   };
   const T = info?.title ?? '', E = info?.email ?? '';
-  const poll = info ? `/p/${info.slug}` : '/';
+  const poll = lp(info ? `/p/${info.slug}` : '/');
   const H = ({ children }: { children: React.ReactNode }) => <h1 tabIndex={-1} ref={h1}>{children}</h1>;
   const icon = (c: string) => <span className="landing__icon" aria-hidden="true">{c}</span>;
 
@@ -50,13 +52,13 @@ export default function MailLanding({ kind, token }: { kind: Kind; token: string
     <p className="lead">Du får ikke flere mails om <strong>{T}</strong> på <strong>{E}</strong>. Andre afstemninger påvirkes ikke.</p>
     <p className="field__hint">Du kan stadig stemme via linket fra invitationen.</p>
     <div className="landing__actions"><button type="button" className="btn btn--secondary" id="undo" disabled={busy} onClick={() => act('p', 'resubscribe', 'undone')}>Fortryd – tilmeld mig igen</button><a className="btn btn--ghost" href={poll}>Gå til afstemningen</a></div>
-    <p className="privacy" style={{ marginTop: 'var(--s-5)' }}>Vil du slet ikke have mails fra GrabAday? <a href={`/u/all/${token}`}>Afmeld alle mails</a>.</p></>;
+    <p className="privacy" style={{ marginTop: 'var(--s-5)' }}>Vil du slet ikke have mails fra GrabAday? <a href={lp(`/u/all/${token}`)}>Afmeld alle mails</a>.</p></>;
   else if (kind === 'poll' && state === 'undone') body = <>{icon('✅')}<H>Du er tilmeldt igen</H>
     <p className="lead">Du får igen mails om <strong>{T}</strong>, fx påmindelser fra arrangøren.</p>
     <div className="landing__actions"><a className="btn btn--primary" href={poll}>Gå til afstemningen</a><button type="button" className="btn btn--ghost" id="re" disabled={busy} onClick={() => act('p', 'unsubscribe', 'done')}>Afmeld igen</button></div></>;
   else if (kind === 'all' && state === 'confirm') body = <>{icon('✉️')}<H>Afmeld alle mails fra GrabAday?</H>
     <p className="lead">Vi sender ikke flere invitationer eller påmindelser til <strong>{E}</strong> – fra nogen arrangør, om nogen afstemning.</p>
-    <div className="landing__actions"><button type="button" className="btn btn--primary" id="go" disabled={busy} onClick={() => act('all', 'unsubscribe', 'done')}>{busy ? <><span className="spinner" aria-hidden="true" /> Afmelder …</> : 'Ja, afmeld alle mails'}</button><a className="btn btn--ghost" href={`/u/p/${token}`}>Kun denne afstemning</a></div>
+    <div className="landing__actions"><button type="button" className="btn btn--primary" id="go" disabled={busy} onClick={() => act('all', 'unsubscribe', 'done')}>{busy ? <><span className="spinner" aria-hidden="true" /> Afmelder …</> : 'Ja, afmeld alle mails'}</button><a className="btn btn--ghost" href={lp(`/u/p/${token}`)}>Kun denne afstemning</a></div>
     <p className="privacy" style={{ marginTop: 'var(--s-4)' }}>Vi beder dig bekræfte, så et automatisk link-tjek i dit mailprogram ikke afmelder dig ved en fejl.</p></>;
   else if (kind === 'all' && state === 'done') body = <>{icon('🔕')}<H>Du er afmeldt alle mails</H>
     <p className="lead">GrabAday sender ikke flere mails til <strong>{E}</strong>. Arrangører kan se, at du er afmeldt, men ikke hvorfor.</p>
@@ -83,7 +85,7 @@ export default function MailLanding({ kind, token }: { kind: Kind; token: string
   else if (kind === 'abuse' && state === 'reported') body = <>{icon('🙏')}<H>Tak – vi har modtaget din rapport</H>
     <p className="lead">Vi gennemgår den hurtigst muligt. Ved gentagne rapporter stopper vi arrangørens mulighed for at sende mails.</p>
     {alsoUnsub && <p className="field__hint">Du er afmeldt mails om denne afstemning.</p>}
-    <div className="landing__actions"><a className="btn btn--ghost" href={`/u/all/${token}`}>Afmeld alle mails fra GrabAday</a></div></>;
+    <div className="landing__actions"><a className="btn btn--ghost" href={lp(`/u/all/${token}`)}>Afmeld alle mails fra GrabAday</a></div></>;
 
   return <section className="card landing" aria-live="polite" id="main">{body}</section>;
 }

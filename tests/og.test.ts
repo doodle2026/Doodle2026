@@ -27,6 +27,7 @@ describe('OG image text rules (design §14.4)', () => {
   test('labels', () => {
     expect(countLabel(1)).toBe('1 datoforslag');
     expect(countLabel(5)).toBe('5 datoforslag');
-    expect(ogImagePath('abc')).toBe('/p/abc/opengraph-image');
+    expect(ogImagePath('abc')).toBe('/en/p/abc/opengraph-image');
+    expect(ogImagePath('abc', 'da')).toBe('/da/p/abc/opengraph-image');
   });
 });

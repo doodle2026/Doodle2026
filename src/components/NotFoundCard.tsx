@@ -1,8 +1,11 @@
+'use client';
 import Link from 'next/link';
 import BackLink from './BackLink';
+import { useLp } from '@/i18n/link';
 
 // Port of doodle-ui/404.html (design §12).
 export default function NotFoundCard({ heading }: { heading: string }) {
+  const lp = useLp();
   return (
     <section className="card notfound" aria-labelledby="nf-h">
       <svg className="notfound__art" viewBox="0 0 160 140" aria-hidden="true">
@@ -21,7 +24,7 @@ export default function NotFoundCard({ heading }: { heading: string }) {
         bogstaver i linket har betydning.
       </p>
       <div className="notfound__actions">
-        <Link className="btn btn--primary" href="/">Opret en ny afstemning</Link>
+        <Link className="btn btn--primary" href={lp('/')}>Opret en ny afstemning</Link>
         <BackLink />
       </div>
     </section>
