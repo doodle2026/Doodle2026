@@ -28,6 +28,10 @@ export async function middleware(req: NextRequest) {
     // Old form /p/<id>/admin/<token> → token moves into the fragment (never sent to servers again).
     // 302 + no-store so no cache keeps the token; no DB lookup, same response for valid/invalid tokens.
     res = redirect(req, `/p/${legacyAdmin[1]}/admin#${legacyAdmin[2]}`, 302);
+  } else if (/^\/p\/[^/]+$/.test(path) && req.nextUrl.searchParams.has('edit')) {
+    // Old form /p/<id>?edit=<token> → /p/<id>#edit=<token> (fragment; sent only as Bearer to the API).
+    const t = req.nextUrl.searchParams.get('edit') ?? '';
+    res = redirect(req, `${path}#edit=${/^[A-Za-z0-9_-]{1,100}$/.test(t) ? t : ''}`, 302);
   } else if (path.length > 1 && path.endsWith('/')) {
     // We handle trailing-slash redirects ourselves (skipTrailingSlashRedirect) so they get our headers.
     res = redirect(req, path.replace(/\/+$/, '') + req.nextUrl.search, 308);
