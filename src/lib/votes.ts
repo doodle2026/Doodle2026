@@ -2,18 +2,17 @@ import { Prisma } from '@prisma/client';
 import { prisma } from './db';
 import { ApiError } from './events';
 import { newToken, openForKey, sealForKey, sha256Hex, TOKEN_RE } from './tokens';
-import { isBlank, textLength } from './validate';
+import { isBlank, nameKey, normalizeName, textLength } from './validate';
 
 export const NAME_MAX = 100;
 export type VoteValue = 'yes' | 'maybe' | 'no';
 export interface CleanVote { name: string; nameKey: string; votes: Map<number, VoteValue> }
 
 // Strip invisible spacers, but keep ZWJ/ZWNJ (U+200C/D): they are part of emoji sequences and some scripts.
-const ZW = /[\u200B\u2060\uFEFF]/g;
-/** Display name: zero-width chars removed, whitespace collapsed, trimmed. */
-export const cleanName = (s: string) => s.replace(ZW, '').replace(/\s+/g, ' ').trim();
-/** Case-insensitive uniqueness key ("Jan" = "jan" = "ＪＡＮ"). */
-export const participantNameKey = (s: string) => cleanName(s).normalize('NFKC').toLocaleLowerCase('da');
+/** Display name (shared normalizer in validate.ts: invisible chars stripped, emoji ZWJ kept). */
+export const cleanName = normalizeName;
+/** Case-insensitive, invisible-insensitive uniqueness key ("Jan" = "jan" = "ＪＡＮ" = "\u200DJan"). */
+export const participantNameKey = nameKey;
 
 const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 

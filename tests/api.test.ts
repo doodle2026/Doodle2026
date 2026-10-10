@@ -309,6 +309,16 @@ describe('slugs, pages, XSS', () => {
   });
 });
 
+describe('invisible characters in titles (shared INVISIBLE_RE)', () => {
+  test('format chars (ZWJ outside emoji, soft hyphen, ZWNJ, bidi, BOM) are stripped; emoji ZWJ kept', async () => {
+    const r = await post({ title: '\u202EM\u00ADø\u200Cde\u200D\uFEFF\u2066 👨‍👩‍👧', description: 'a\u200Bb', time_options: [opt(iso('11-03T09:00:00Z'))] });
+    expect(r.status).toBe(201);
+    expect(r.body.title).toBe('Møde 👨‍👩‍👧');
+    expect(r.body.description).toBe('ab');
+    for (const t of ['\u00AD', '\u200C\u200D', '\u2066\u2069', '\u202E', '\u034F\u061C']) expect((await post({ title: t, time_options: [opt(iso('11-03T09:00:00Z'))] })).status).toBe(400);
+  });
+});
+
 describe('admin token (no accounts)', () => {
   const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
   const leaks = (text: string, token: string) => text.includes(token);

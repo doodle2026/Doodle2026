@@ -53,3 +53,46 @@ describe('server vote validation', () => {
     expect(validateVote({ name: '👍🏽'.repeat(100), votes: [{ option_id: 1, value: 'no' }] }, ids).errors).toEqual([]);
   });
 });
+
+describe('V1: shared name normalizer (no impersonation with invisible chars)', () => {
+  test('invisible variants of "Jan" all map to the same key and display as "Jan"', async () => {
+    const { normalizeName, nameKey } = await import('../src/lib/validate');
+    const variants = ['\u200DJan', '\u00ADJan', '\u200BJan\u200D', 'J\u200Can', 'Jan\u2060', '\u202EJan', '\u200EJan\u200F', 'Ja\uFEFFn', ' JAN ', 'Ｊａｎ'];
+    for (const v of variants) expect(nameKey(v), JSON.stringify(v)).toBe('jan');
+    for (const v of variants.slice(0, 8)) expect(normalizeName(v), JSON.stringify(v)).toBe('Jan');
+  });
+  test('emoji ZWJ sequences survive (family emoji stays one grapheme)', async () => {
+    const { normalizeName, textLength } = await import('../src/lib/validate');
+    expect(normalizeName('Familie 👨‍👩‍👧‍👦')).toBe('Familie 👨‍👩‍👧‍👦');
+    expect(textLength(normalizeName('👨‍👩‍👧‍👦'))).toBe(1);
+    expect(normalizeName('🏳️‍🌈 Pia')).toBe('🏳️‍🌈 Pia');
+  });
+  test('validateVote stores the normalized name', () => {
+    expect(validateVote({ name: '\u200DJan\u00AD', votes: [{ option_id: 1, value: 'yes' }] }, new Set([1])).value)
+      .toMatchObject({ name: 'Jan', nameKey: 'jan' });
+  });
+});
+
+describe('V3/V5/V8 helpers', async () => {
+  const { savedMessage, nextDayMarker, HINT_CARDS, HINT_GRID } = await import('../src/lib/vote-client');
+  test('V5 saved message: fresh / returning / closed', () => {
+    expect(savedMessage('Jan', true, false)).toBe('✓ Tak, Jan! Dine svar er gemt.');
+    expect(savedMessage('Jan', false, false)).toMatch(/^✓ Du har svaret som Jan\./);
+    expect(savedMessage('Jan', true, true)).toBe('Du har svaret som Jan. Afstemningen er lukket, så svarene kan ikke længere ændres.');
+  });
+  test('V3 hints differ for grid and cards; card hint mentions no keyboard/cell cycling', () => {
+    expect(HINT_GRID).toMatch(/celle/);
+    expect(HINT_CARDS).not.toMatch(/celle|←|Delete/);
+  });
+  test('V8 next-day marker', () => {
+    expect(nextDayMarker('2026-12-01', '2026-12-01')).toBe('');
+    expect(nextDayMarker('2026-12-01', '2026-12-02')).toBe(' (+1 dag)');
+    expect(nextDayMarker('2026-12-31', '2027-01-02')).toBe(' (+2 dage)');
+  });
+  test('V8 whenLabel shows the marker (browser tz)', async () => {
+    const { whenLabel } = await import('../src/lib/format');
+    // 21:30Z–00:30Z crosses local midnight in UTC and in Europe/* zones alike.
+    expect(whenLabel('2026-12-01T21:30:00Z', '2026-12-02T00:30:00Z')).toMatch(/ \(\+1 dag\)$/);
+    expect(whenLabel('2026-12-01T10:00:00Z', '2026-12-01T11:00:00Z')).not.toMatch(/dag/);
+  });
+});

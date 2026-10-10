@@ -1,3 +1,4 @@
+import { nameKey, normalizeName } from './validate';
 // Pure helpers for the voting UI (unit-tested).
 export type Vote = 'yes' | 'maybe' | 'no' | null;
 export const NEXT: Record<string, Vote> = { null: 'yes', yes: 'maybe', maybe: 'no', no: null };
@@ -45,11 +46,26 @@ export function writeStored(slug: string, v: Stored | null, s: Store) {
 /** Client-side name check (server is authoritative). `exceptId` skips your own row while editing. */
 export function nameError(raw: string, others: { id: number; name: string }[], exceptId: number | null,
   helpers: { isBlank: (s: string) => boolean; textLength: (s: string) => number }): string {
-  const v = raw.replace(/[\u200B\u2060\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
+  const v = normalizeName(raw);
   if (helpers.isBlank(raw)) return 'Skriv dit navn, så de andre kan se, hvem der har svaret.';
   const n = helpers.textLength(v);
   if (n > 100) return `Navnet er ${n - 100} tegn for langt (højst 100).`;
-  const key = (s: string) => s.normalize('NFKC').toLocaleLowerCase('da').replace(/\s+/g, ' ').trim();
-  if (others.some((p) => p.id !== exceptId && key(p.name) === key(v))) return `"${v}" har allerede svaret. Tilføj f.eks. et efternavn.`;
+  if (others.some((p) => p.id !== exceptId && nameKey(p.name) === nameKey(v))) return `"${v}" har allerede svaret. Tilføj f.eks. et efternavn.`;
   return '';
+}
+
+/** V5: confirmation text depends on fresh save vs. returning visit, and on whether the poll is closed. */
+export function savedMessage(name: string, fresh: boolean, closed: boolean): string {
+  if (closed) return `Du har svaret som ${name}. Afstemningen er lukket, så svarene kan ikke længere ændres.`;
+  return fresh ? `✓ Tak, ${name}! Dine svar er gemt.` : `✓ Du har svaret som ${name}. Du kan redigere dine svar herunder.`;
+}
+
+/** V3: the grid (≥ 640 px) and the mobile cards are operated differently. */
+export const HINT_GRID = 'Tryk på en celle for at skifte: ikke svaret → ja → måske → nej. Tastatur: J / M / N, Delete nulstiller, ← → flytter.';
+export const HINT_CARDS = 'Tryk på Ja, Måske eller Nej ved hvert tidspunkt. Tryk igen på dit valg for at nulstille.';
+
+/** V8: " (+1 dag)" / " (+2 dage)" when the end falls on a later local day than the start (YYYY-MM-DD keys). */
+export function nextDayMarker(startKey: string, endKey: string): string {
+  const d = Math.round((Date.parse(`${endKey}T00:00:00Z`) - Date.parse(`${startKey}T00:00:00Z`)) / 86_400_000);
+  return d >= 1 ? ` (+${d} ${d === 1 ? 'dag' : 'dage'})` : '';
 }

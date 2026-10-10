@@ -69,7 +69,7 @@ describe('POST /api/events/:id/votes', () => {
   test('names are unique per poll, case-insensitively (409); same name in another poll is fine', async () => {
     const e = await create(); const f = await create();
     expect((await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['yes'], 'Jan')))).status).toBe(201);
-    for (const n of ['jan', ' JAN ', 'Ｊａｎ']) {
+    for (const n of ['jan', ' JAN ', 'Ｊａｎ', '\u200DJan', '\u00ADJan', '\u200BJan\u200D', 'J\u200Can', '\u202EJan']) {
       const r = await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['no'], n)));
       expect(r.status, n).toBe(409);
       expect(r.body.code).toBe('name_taken');
