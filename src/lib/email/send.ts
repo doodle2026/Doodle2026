@@ -65,6 +65,8 @@ export function emailConfig(env: Env = process.env): EmailConfig {
   if (mode === 'send') {
     if (!apiKey) problems.push('EMAIL_MODE=send but RESEND_API_KEY is missing.');
     if (!from) problems.push('EMAIL_MODE=send but EMAIL_FROM is missing.');
+    if (!process.env.EMAIL_LINK_SECRET || process.env.EMAIL_LINK_SECRET.length < 32) problems.push('EMAIL_MODE=send but EMAIL_LINK_SECRET (≥ 32 chars) is missing – invitations are refused.');
+    if (!process.env.RESEND_WEBHOOK_SECRET) problems.push('RESEND_WEBHOOK_SECRET is missing – delivery status (bounces/complaints) will not update.');
   }
   if (from && !isEmail(from)) problems.push('EMAIL_FROM is not a valid address.');
   if (replyTo && !isEmail(replyTo)) problems.push('EMAIL_REPLY_TO is not a valid address.');

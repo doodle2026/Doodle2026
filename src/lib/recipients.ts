@@ -16,7 +16,13 @@ const cleanName = (s: string) =>
 
 /** Split on newlines, commas and semicolons (but not inside "Name <email>"); accepts `Name <email>`. */
 export function parseRecipients(input: string | string[], alreadyInvited: Iterable<string> = []): ParsedRecipients {
-  const items = (Array.isArray(input) ? input : input.split(/[\n,;]+/)).map((s) => s.trim()).filter(Boolean);
+  const items: string[] = [];
+  for (const chunk of Array.isArray(input) ? input : [input]) {
+    // `Name <email>` entries first (names may contain spaces), then split the rest on commas/semicolons/whitespace.
+    const rest = chunk.replace(/([^,;\n<>]*)<([^<>\n]+)>/g, (_, n: string, e: string) => { items.push(`${n.trim()} <${e.trim()}>`); return ' '; });
+    items.push(...rest.split(/[\s,;]+/));
+  }
+  for (let k = items.length - 1; k >= 0; k--) { items[k] = items[k].trim(); if (!items[k]) items.splice(k, 1); }
   const known = new Set([...alreadyInvited].map(normEmail));
   const seen = new Set<string>();
   const out: ParsedRecipients = { valid: [], invalid: [], duplicates: [], alreadyInvited: [] };

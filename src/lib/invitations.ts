@@ -265,3 +265,14 @@ export async function cleanup(now = new Date()) {
   return { invitations_deleted: inv.count, quota_rows_deleted: q.count };
 }
 export type { Recipient };
+
+/** Organizer preview of the real invitation mail (sample recipient, dummy footer token). */
+export async function previewInvitation(eventId: number, body: { message?: unknown; organizer_name?: unknown }) {
+  const { p } = await pollForEmail(eventId);
+  const message = cleanMessage(body.message);
+  const name = typeof body.organizer_name === 'string' ? sanitizeDisplayName(body.organizer_name) : (p.organizerFromName ?? '');
+  p.organizerName = name || 'Arrangøren'; p.organizerFromName = name || undefined;
+  const plan = planInvitations({ ...p, isClosed: false }, [{ email: 'modtager@example.com', linkToken: 'x'.repeat(43) }], { appUrl: appUrl(), personalMessage: message || undefined });
+  const m = plan.messages[0];
+  return { subject: m.subject, html: m.html, from_name: m.fromName };
+}
