@@ -75,7 +75,7 @@ describe('.ics', () => {
     expect(t.split('\r\n').every((l) => Buffer.byteLength(l, 'utf8') <= 75)).toBe(true);
     expect(t.replace(/\r\n/g, '')).not.toMatch(/\n|\r/);
     const unfolded = t.replace(/\r\n /g, '');
-    expect(unfolded).toContain(`UID:${e.id}@localhost\r\n`);
+    expect(unfolded).toContain(`UID:${e.id}@grabaday.com\r\n`);
     expect(unfolded).toMatch(/SEQUENCE:\d+\r\nLAST-MODIFIED:\d{8}T\d{6}Z/);
     expect(unfolded).toMatch(/DTSTAMP:\d{8}T\d{6}Z/);
     expect(unfolded).toContain(`DTSTART:${Y}1103T080000Z`);

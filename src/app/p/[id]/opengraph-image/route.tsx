@@ -50,7 +50,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 34, fontWeight: 700, color: '#2B6CB0' }}>
           {/* Temporary logo (favicon mark) */}
           <img src={art.mark} width={64} height={64} alt="" />
-          Mødetid
+          GrabAday
         </div>
         <div style={{ marginTop: 36, fontSize: title.long ? 56 : 68, lineHeight: 1.12, fontWeight: 800, color: '#1A2B3C',
           letterSpacing: '-0.01em', display: 'block', lineClamp: 2, overflow: 'hidden', wordBreak: 'break-word' }}>

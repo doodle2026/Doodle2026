@@ -32,7 +32,7 @@ export const DEFAULT_DURATION_MS = 60 * 60 * 1000;
 export function buildIcs(e: IcsEvent): string {
   const end = e.end ?? new Date(e.start.getTime() + DEFAULT_DURATION_MS);
   const lines = [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Moedetid//Moedetid 1.0//DA', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//GrabAday//GrabAday//DA', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT',
     `UID:${e.uid}`, `DTSTAMP:${icsDate(e.stamp)}`,
     ...(e.sequence !== undefined ? [`SEQUENCE:${e.sequence}`] : []),

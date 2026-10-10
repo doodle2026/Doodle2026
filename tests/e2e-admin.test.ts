@@ -1,4 +1,4 @@
-/** Headless Chrome: Doodle UI round 4 (§26-32) – choose + undo, delete participant, inline option edit, V7 share flow. */
+/** Headless Chrome: the design spec (doodle-ui) round 4 (§26-32) – choose + undo, delete participant, inline option edit, V7 share flow. */
 import { describe, test, expect, inject, beforeAll, afterAll } from 'vitest';
 import { existsSync } from 'node:fs';
 import type { Browser } from 'playwright-core';

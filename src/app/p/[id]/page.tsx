@@ -17,7 +17,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   if ((await searchParams).edit !== undefined) return { title: ev.title, robots: { index: false, follow: false } };
   const url = `${appUrl()}/p/${ev.slug}`;
   const description = pollDescription(ev.time_options.length, ev.time_options.map((o) => o.start_at));
-  const image = { url: `${appUrl()}${ogImagePath(ev.slug)}`, ...OG_SIZE, alt: `Mødetid-afstemning: ${ev.title}`, type: 'image/png' };
+  const image = { url: `${appUrl()}${ogImagePath(ev.slug)}`, ...OG_SIZE, alt: `GrabAday-afstemning: ${ev.title}`, type: 'image/png' };
   const ogDescription = ev.description ? truncateGraphemes(ev.description, 160) : description;
   return {
     title: ev.title,
@@ -25,7 +25,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     alternates: { canonical: url },
     robots: { index: false, follow: false }, // polls are private-by-link
     openGraph: {
-      type: 'website', siteName: 'Mødetid', locale: 'da_DK', title: ev.title, description: ogDescription, url,
+      type: 'website', siteName: 'GrabAday', locale: 'da_DK', title: ev.title, description: ogDescription, url,
       images: [image],
     },
     twitter: { card: 'summary_large_image', title: ev.title, description: ogDescription, images: [image] },

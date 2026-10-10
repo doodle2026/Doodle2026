@@ -1,4 +1,4 @@
-# Mødetid – Doodle-lignende mødeplanlægger (feature 1: opret afstemning)
+# GrabAday – find en dag, der passer alle
 
 Next.js 15 (App Router, TypeScript) · Prisma 6 · PostgreSQL · design fra `/workspace/doodle-ui` (`public/styles.css` uændret).
 Deploy: Vercel `fra1` + Supabase Postgres (Frankfurt) via `.github/workflows` (se `/workspace/doodle-deploy`).

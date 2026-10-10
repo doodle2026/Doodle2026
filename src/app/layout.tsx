@@ -5,7 +5,7 @@ import { THEME_INIT_SCRIPT } from '@/components/ThemeToggle';
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.APP_URL || 'http://localhost:3000'),
-  title: { default: 'Mødetid', template: '%s – Mødetid' },
+  title: { default: 'GrabAday', template: '%s – GrabAday' },
   icons: {
     icon: [{ url: BRAND.icons.svg, type: 'image/svg+xml' }, { url: BRAND.icons.png32, type: 'image/png', sizes: '32x32' }],
     apple: [{ url: BRAND.icons.appleTouch, sizes: '180x180' }],

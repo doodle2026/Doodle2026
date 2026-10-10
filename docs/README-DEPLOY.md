@@ -1,4 +1,4 @@
-# Deployment – Doodle-like scheduler (Next.js + Prisma) on free tiers
+# Deployment – GrabAday scheduler (Next.js + Prisma) on free tiers
 
 Personal, non-commercial app. Stack: **GitHub Free (private repo) + Vercel Hobby (fra1) + Supabase Free (2 projects, eu-central-1 Frankfurt)**.
 
@@ -118,7 +118,7 @@ Use a sending subdomain (`mail.<domain>`) to keep reputation separate from the r
 2. Add the DNS records Resend shows at your DNS host (template below; copy exact values from the dashboard), then *Verify*.
 3. API Keys → create key, permission **Sending access**, domain `mail.<domain>`.
 4. Set Vercel Production env (Jan sets via API/dashboard): `RESEND_API_KEY` (Sensitive), `EMAIL_MODE=send`,
-   `EMAIL_FROM="Doodle <noreply@mail.<domain>>"`, optional `EMAIL_REPLY_TO`. Redeploy production.
+   `EMAIL_FROM="GrabAday <noreply@mail.<domain>>"`, optional `EMAIL_REPLY_TO`. Redeploy production.
 
 **DNS record template** (host names relative to `<domain>`; Resend's dashboard is authoritative):
 | Type | Name / host | Value | Priority | Purpose |
