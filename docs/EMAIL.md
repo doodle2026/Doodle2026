@@ -58,6 +58,19 @@ without tracking we cannot know who answered, so step 4 sends to **all non-unsub
 | `EMAIL_HASH_PEPPER` | optional | set once, never change |
 | `EMAIL_DAILY_QUOTA` / `EMAIL_MONTHLY_QUOTA` / `EMAIL_POLL_HOURLY_MAX` / `RATE_LIMIT_MAIL_PER_HOUR` | optional | defaults 100 / 3000 / 100 / 10 |
 
+## Personal invite links (step 5) – implemented
+- Opt-in per send ("Spor hvem der har svaret", off by default); once used, `events.invite_tracking` stays on (sent links stay valid until revoked).
+- Mail link: `/p/<id>#inv=<token>` (fragment, never sent to servers except as `Authorization: Bearer` to `GET /api/events/:id/invite`; `#invite=` also accepted). The page strips the fragment, keeps the token in sessionStorage for the tab, shows "Du er inviteret som <email>" + "Ikke dig? Brug det offentlige link", and prefills the name (organizer-given name, else the address' local part) – editable.
+- Token = HMAC(`EMAIL_LINK_SECRET`, invitation id + generation); DB stores only SHA-256(token).
+- **Deviation (documented):** "Gensend link" issues a **new token** (generation + 1) – the old link stops working – because only the hash is stored. Reminders re-derive the *current* token, so they carry a working personal link.
+- Revoke: link stops at once, an existing answer is kept (not editable via the link), optional `reissue: true` sends a new link; UI then offers "Send nyt link".
+- A vote with `X-Invite-Token` marks that invitee "Svaret" (first answer wins; a link from another poll is ignored). Deleting the participant reverts to "Inviteret".
+- Public answers are listed as "Ikke inviteret" when tracking is on; organizer can link one to an unanswered invitee (dialog with select, validation, 8 s "Fortryd" toast); only manual links can be undone.
+- Status axes: Levering (queued/sent/delivered/failed/bounced/unsub) and Svar (invited/answered/revoked) – no "opened" status.
+- Reminders with tracking: only tracked invitees without an answer and with a live link, plus untracked invitees (unknown), never unsubscribed/bounced.
+- Not built: drag-and-drop linking (dropdown is the accessible path; design marks DnD as optional desktop enhancement).
+- Admin API: `POST /api/events/:id/invitations/{resend|revoke|link|unlink}` `{ email, reissue?, participant_id? }`.
+
 ## Business tasks (Jan)
 - Resend DPA, sending region Ireland (eu-west-1) and note that Resend stores account data/logs in the US.
 - Privacy policy text covering invitee addresses, retention (90 days after close) and unsubscribe.

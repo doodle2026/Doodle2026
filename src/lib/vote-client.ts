@@ -33,6 +33,12 @@ export function editTokenFromHash(hash: string): string | null | 'invalid' {
   if (!m) return null;
   return TOKEN_RE.test(m[1]) ? m[1] : 'invalid';
 }
+/** Step 5: personal invite link #inv=<token> (also #invite=). */
+export function inviteTokenFromHash(hash: string): string | null | 'invalid' {
+  const m = /^#(?:inv|invite)=(.*)$/.exec(hash);
+  if (!m) return null;
+  return TOKEN_RE.test(m[1]) ? m[1] : 'invalid';
+}
 export function readStored(slug: string, s: Store): Stored | null {
   try {
     const v = JSON.parse(s.getItem(KEY(slug)) ?? 'null');
