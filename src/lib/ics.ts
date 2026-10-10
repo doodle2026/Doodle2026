@@ -46,6 +46,6 @@ export function buildIcs(e: IcsEvent): string {
 export function icsDisposition(title: string): string {
   const base = title.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/æ/gi, 'ae').replace(/ø/gi, 'oe').replace(/å/gi, 'aa')
     .replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).toLowerCase() || 'moede';
-  const utf8 = encodeURIComponent((title.replace(/[\\/:*?"<>|\u0000-\u001F]+/g, ' ').trim().slice(0, 80) || 'moede') + '.ics');
+  const utf8 = encodeURIComponent((title.replace(/[\\/:*?"<>|\u0000-\u001F]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'moede') + '.ics');
   return `attachment; filename="${base}.ics"; filename*=UTF-8''${utf8}`;
 }
