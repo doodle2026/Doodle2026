@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{TITLE}} – Mødetid</title>
+  <meta name="description" content="{{DESCRIPTION}}">
+  <meta name="robots" content="noindex">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Mødetid">
+  <meta property="og:title" content="{{TITLE}}">
+  <meta property="og:description" content="{{DESCRIPTION}}">
+  <meta property="og:url" content="{{URL}}">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="app-header"><a class="app-header__logo" href="/">📅 Mødetid</a></header>
+  <main class="container">
+    <article class="card poll-view" id="poll" hidden>
+      <h1 id="t"></h1>
+      <p class="lead" id="d"></p>
+      <section class="share" aria-label="Del afstemning">
+        <span class="share__label">Del linket</span>
+        <div class="share__row">
+          <input class="input share__url" id="url" readonly aria-label="Link til afstemningen">
+          <button type="button" class="btn btn--primary share__btn" id="copy">Kopiér</button>
+        </div>
+      </section>
+      <p class="sr-only" id="live" aria-live="polite"></p>
+      <h2>Foreslåede tidspunkter <span class="meta" id="count"></span></h2>
+      <p class="tz-note">Vist i din tidszone: <span id="tz"></span></p>
+      <div id="days"></div>
+    </article>
+    <article class="card not-found" id="status">
+      <p id="status-text">Indlæser…</p>
+    </article>
+  </main>
+  <script src="/poll.js"></script>
+</body>
+</html>

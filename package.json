@@ -1,0 +1,17 @@
+{
+  "name": "doodle",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "express": "^5.3.0"
+  }
+}
