@@ -1,0 +1,73 @@
+name: Deploy preview
+# Preview DB strategy: ONE separate Supabase "staging" project (eu-central-1).
+# Each PR gets its own Postgres schema `pr_<number>` in it, migrated with Prisma,
+# and dropped when the PR is closed. Production data is never touched.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+concurrency:
+  group: preview-${{ github.event.number }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  pull-requests: write
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  NEXT_TELEMETRY_DISABLED: "1"
+  PR_SCHEMA: pr_${{ github.event.number }}
+jobs:
+  deploy:
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: preview
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - name: Build per-PR connection strings
+        env:
+          # Base URLs WITHOUT query string, user `prisma.<project-ref>`:
+          # transaction pooler :6543 and session pooler :5432
+          POOLED_BASE: ${{ secrets.STAGING_DATABASE_URL }}
+          DIRECT_BASE: ${{ secrets.STAGING_DIRECT_URL }}
+        run: |
+          db_url="${POOLED_BASE}?pgbouncer=true&connection_limit=1&schema=${PR_SCHEMA}"
+          direct_url="${DIRECT_BASE}?schema=${PR_SCHEMA}"
+          echo "::add-mask::$db_url"
+          echo "::add-mask::$direct_url"
+          {
+            echo "DATABASE_URL=$db_url"
+            echo "DIRECT_URL=$direct_url"
+          } >> "$GITHUB_ENV"
+      - name: Prisma migrate deploy (creates schema pr_<n> if missing)
+        run: npx prisma migrate deploy
+      - run: npm i -g vercel@latest
+      - run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+      - run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+      - id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} \
+            --env DATABASE_URL="$DATABASE_URL" --env DIRECT_URL="$DIRECT_URL")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - uses: actions/github-script@v7
+        if: github.event.action == 'opened'
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number: context.issue.number,
+              body: `Preview: ${{ steps.deploy.outputs.url }}\nDB: Supabase staging, schema \`${process.env.PR_SCHEMA}\``
+            })
+  cleanup:
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: preview
+    steps:
+      - name: Drop PR schema
+        env:
+          DIRECT_BASE: ${{ secrets.STAGING_DIRECT_URL }}
+        run: |
+          sudo apt-get install -y -qq postgresql-client >/dev/null
+          psql "${DIRECT_BASE}?sslmode=require" -v ON_ERROR_STOP=1 \
+            -c "DROP SCHEMA IF EXISTS \"${PR_SCHEMA}\" CASCADE;"

@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooled (Supabase transaction pooler) – runtime
+  directUrl = env("DIRECT_URL") // direct – migrations
+}
+
+model Event {
+  id              Int              @id @default(autoincrement())
+  slug            String           @unique @db.VarChar(22)
+  title           String          
+  description     String           @default("")
+  /// SHA-256 (hex) of the organizer's 256-bit admin token. The raw token is never stored.
+  adminTokenHash  String           @map("admin_token_hash") @db.Char(64)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Set when the organizer closes the poll; isClosed = closedAt != null.
+  closedAt        DateTime?        @map("closed_at") @db.Timestamptz(3)
+  timeOptions     TimeOption[]
+  idempotencyKeys IdempotencyKey[]
+  participants    Participant[]
+
+  @@map("events")
+}
+
+model TimeOption {
+  id       Int       @id @default(autoincrement())
+  eventId  Int       @map("event_id")
+  startAt  DateTime  @map("start_at") @db.Timestamptz(3)
+  endAt    DateTime? @map("end_at") @db.Timestamptz(3)
+  position Int
+  event    Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  votes    Vote[]
+
+  @@index([eventId])
+  @@map("time_options")
+}
+
+/// Idempotency-Key replay store. The key itself is stored only as SHA-256 (hex); the admin token is
+/// stored AES-256-GCM-encrypted with a key derived (HKDF) from the raw Idempotency-Key, so only the
+/// client that holds the key can recover it on replay. A DB dump reveals neither keys nor tokens.
+model IdempotencyKey {
+  keyHash       String   @id @map("key_hash") @db.Char(64)
+  eventId       Int      @map("event_id")
+  adminTokenEnc String   @map("admin_token_enc")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("idempotency_keys")
+}
+
+/// Feature 3 (voting) – schema only, no API/UI yet.
+model Participant {
+  id            Int      @id @default(autoincrement())
+  eventId       Int      @map("event_id")
+  name          String
+  /// SHA-256 (hex) of the participant's secret edit token.
+  editTokenHash String   @map("edit_token_hash") @db.Char(64)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  votes         Vote[]
+
+  @@index([eventId])
+  @@map("participants")
+}
+
+enum VoteValue {
+  yes
+  maybe
+  no
+
+  @@map("vote_value")
+}
+
+model Vote {
+  participantId Int         @map("participant_id")
+  timeOptionId  Int         @map("time_option_id")
+  value         VoteValue
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  timeOption    TimeOption  @relation(fields: [timeOptionId], references: [id], onDelete: Cascade)
+
+  @@id([participantId, timeOptionId])
+  @@index([timeOptionId])
+  @@map("votes")
+}
