@@ -32,22 +32,11 @@ export async function middleware(req: NextRequest) {
   const L = (p: string) => (p === '/' ? `/${locale}` : `/${locale}${p}`);
   requestHeaders.set('x-locale', locale);
   requestHeaders.set('x-path', path); // locale-less path, for hreflang alternates
-  const legacyAdmin = /^\/p\/([^/]+)\/admin\/([^/]+)\/?$/.exec(path);
-  const legacyEvent = /^\/e\/([A-Za-z0-9_-]{1,64})\/?$/.exec(path);
-  if (legacyAdmin) {
-    // Old form /p/<id>/admin/<token> → token moves into the fragment (never sent to servers again).
-    // 302 + no-store so no cache keeps the token; no DB lookup, same response for valid/invalid tokens.
-    res = redirect(req, `${L(`/p/${legacyAdmin[1]}/admin`)}#${legacyAdmin[2]}`, 302);
-  } else if (/^\/p\/[^/]+$/.test(path) && req.nextUrl.searchParams.has('edit')) {
-    // Old form /p/<id>?edit=<token> → /<locale>/p/<id>#edit=<token> (fragment; sent only as Bearer to the API).
-    const t = req.nextUrl.searchParams.get('edit') ?? '';
-    res = redirect(req, `${L(path)}#edit=${/^[A-Za-z0-9_-]{1,100}$/.test(t) ? t : ''}`, 302);
-  } else if (legacyEvent) {
-    res = redirect(req, L(`/p/${legacyEvent[1]}`), 301); // very old /e/<id> links
-  } else if (path.length > 1 && path.endsWith('/')) {
+  if (path.length > 1 && path.endsWith('/')) {
     // We handle trailing-slash redirects ourselves (skipTrailingSlashRedirect) so they get our headers.
     res = redirect(req, L(path.replace(/\/+$/, '')) + req.nextUrl.search, 308);
   } else if (!prefixed) {
+    // Safety net only (no special handling of old link formats): / and unprefixed paths → detected locale.
     res = redirect(req, L(path) + req.nextUrl.search, 308);
   } else if (!knownPage(path) || (await resolvePollPath(path)) === 'missing') {
     if (/^\/p\//.test(path)) requestHeaders.set('x-not-found', 'poll');

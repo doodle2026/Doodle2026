@@ -196,23 +196,16 @@ describe('limits & idempotency', () => {
 describe('slugs, pages, XSS', () => {
   test('404 for unknown and malformed slugs', async () => {
     expect((await call('/api/events/AAAAAAAAAAAAAAAAAAAAAA')).status).toBe(404);
-    expect((await call('/p/AAAAAAAAAAAAAAAAAAAAAA')).status).toBe(404);
+    expect((await call('/da/p/AAAAAAAAAAAAAAAAAAAAAA')).status).toBe(404);
     for (const s of ['short', '%3Cscript%3E', 'a'.repeat(23), "x'%20OR%201=1--aaaaaaaaaa"]) {
       expect((await call(`/api/events/${s}`)).status, s).toBe(404);
-      expect((await call(`/p/${s}`)).status, s).toBe(404);
+      expect((await call(`/da/p/${s}`)).status, s).toBe(404);
     }
-  });
-  test('/e/:id redirects to /p/:id', async () => {
-    const { body: { id } } = await post(valid());
-    const r = await call(`/e/${id}`);
-    expect(r.status).toBe(301);
-    expect(r.headers.get('location')).toMatch(new RegExp(`/p/${id}$`));
-    expect((await call('/e/bad')).status).toBe(404);
   });
   test('view page server-renders escaped <title> and og tags, og:url from APP_URL', async () => {
     const evil = `</title><script>alert(1)</script>"'&`;
     const { body: { id } } = await post({ title: evil, description: '"><img src=x onerror=alert(1)>', options: [d(iso('11-03'))] });
-    const r = await call(`/p/${id}`, { headers: { Host: 'evil.example' } });
+    const r = await call(`/da/p/${id}`, { headers: { Host: 'evil.example' } });
     expect(r.status).toBe(200);
     expect(r.text).not.toContain('<script>alert');
     expect(r.text).not.toContain('<img src=x');
@@ -225,31 +218,31 @@ describe('slugs, pages, XSS', () => {
     expect(api.body.title).toBe(evil); // stored raw; React escapes on render
   });
   test('frontend never uses innerHTML / dangerouslySetInnerHTML', () => {
-    for (const f of ['src/app/CreateForm.tsx', 'src/app/p/[id]/PollView.tsx', 'src/app/p/[id]/page.tsx']) {
+    for (const f of ['src/app/[locale]/CreateForm.tsx', 'src/app/[locale]/p/[id]/PollView.tsx', 'src/app/[locale]/p/[id]/page.tsx']) {
       expect(readFileSync(join(__dirname, '..', f), 'utf8'), f).not.toMatch(/innerHTML/);
     }
     // The only dangerouslySetInnerHTML is the constant theme-init script (no user data).
-    for (const f of ['src/app/layout.tsx']) {
+    for (const f of ['src/components/HtmlShell.tsx']) {
       expect(readFileSync(join(__dirname, '..', f), 'utf8')).toMatch(/__html: THEME_INIT_SCRIPT \}/);
     }
   });
   test('L4: friendly 404 pages (poll + generic) and favicon', async () => {
-    const p = await call('/p/AAAAAAAAAAAAAAAAAAAAAA');
+    const p = await call('/da/p/AAAAAAAAAAAAAAAAAAAAAA');
     expect(p.status).toBe(404);
     expect(p.text).toContain('Hov, den afstemning kan vi ikke finde');
     expect(p.text).toContain('store og små');
-    expect(p.text).toContain('class="btn btn--primary" href="/"');
+    expect(p.text).toContain('class="btn btn--primary" href="/da"');
     expect(p.text).toContain('← Gå tilbage');
     expect(p.text).toContain('href="/styles.css"');
     expect(p.text).toMatch(/<meta name="robots" content="noindex/);
     expect(p.text).toContain('<html lang="da"');
-    const g = await call('/findes-ikke');
+    const g = await call('/da/findes-ikke');
     expect(g.status).toBe(404);
     expect(g.text).toContain('Hov, den side kan vi ikke finde');
     expect(g.text).toContain('<link rel="icon" href="/brand/favicon.svg" type="image/svg+xml"/>');
     expect(g.text).toContain('<link rel="icon" href="/brand/favicon-32.png" type="image/png" sizes="32x32"/>');
     expect(g.text).toContain('<link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" sizes="180x180"/>');
-    const trav = await call('/p/..%2F..%2Fetc%2Fpasswd');
+    const trav = await call('/da/p/..%2F..%2Fetc%2Fpasswd');
     expect(trav.status).toBe(404);
     expect(trav.text).toContain('Hov, den afstemning kan vi ikke finde');
     for (const [path, type] of [['/brand/favicon.svg', /svg/], ['/brand/favicon-32.png', /png/], ['/brand/apple-touch-icon.png', /png/], ['/brand/icon-512.png', /png/]] as const) {
@@ -259,7 +252,7 @@ describe('slugs, pages, XSS', () => {
     }
   });
   test('M3: create page has counters and no maxlength truncation', async () => {
-    const r = await call('/');
+    const r = await call('/da');
     expect(r.status).toBe(200);
     expect(r.text).not.toMatch(/maxlength/i);
     expect(r.text).toContain('id="title-count"');
@@ -271,8 +264,8 @@ describe('slugs, pages, XSS', () => {
   test('link-preview meta per design §14.3 (absolute URLs, locale, canonical, description)', async () => {
     const { body: { id } } = await post({ title: 'Frokost & "kage"', description: '', options: [
       d(iso('10-14')), d(iso('10-16')) ] });
-    const r = await call(`/p/${id}`);
-    expect(r.text).toContain(`<link rel="canonical" href="${BASE}/p/${id}"`);
+    const r = await call(`/da/p/${id}`);
+    expect(r.text).toContain(`<link rel="canonical" href="${BASE}/da/p/${id}"`);
     expect(r.text).toContain('<meta property="og:locale" content="da_DK"');
     expect(r.text).toContain('<meta property="og:site_name" content="GrabAday"');
     expect(r.text).toContain('<meta property="og:title" content="Frokost &amp; &quot;kage&quot;"');
@@ -282,12 +275,12 @@ describe('slugs, pages, XSS', () => {
   });
   test('?created=1 opens the share box for the organizer; visitors see it closed', async () => {
     const { body: { id } } = await post(valid());
-    const org = await call(`/p/${id}?created=1`);
+    const org = await call(`/da/p/${id}?created=1`);
     expect(org.status).toBe(200);
     expect(org.text).toMatch(/<section class="share" id="share" aria-labelledby="share-h">/);
     expect(org.text).toContain('Din afstemning er oprettet');
     expect(org.text).toMatch(/id="share-open"[^>]*aria-expanded="true"/);
-    const vis = await call(`/p/${id}`);
+    const vis = await call(`/da/p/${id}`);
     expect(vis.text).toMatch(/<section class="share" id="share" aria-labelledby="share-h" hidden="">/);
     expect(vis.text).not.toContain('Din afstemning er oprettet');
     expect(vis.text).toMatch(/id="share-open"[^>]*aria-expanded="false"/);
@@ -345,13 +338,13 @@ describe('admin token (no accounts)', () => {
     const c = await post(valid());
     const { id, admin_token: token } = c.body;
     const pages = [
-      await call(`/p/${id}`), await call(`/p/${id}?created=1`), await call(`/e/${id}`), await call(`/p/${id}/admin`),
+      await call(`/da/p/${id}`), await call(`/da/p/${id}?created=1`), await call(`/da/p/${id}/admin`),
       await call(`/api/events/${id}`), await postRaw('{"title": 1}'),
       await call(`/api/events/${id}/admin`, { headers: { Authorization: `Bearer ${token.slice(0, -1)}x` } }),
     ];
     for (const r of pages) expect(leaks(r.text + JSON.stringify([...r.headers]), token)).toBe(false);
     // Admin page shell: public data only, no canonical/og:url, noindex/no-store/no-referrer.
-    const adm = await call(`/p/${id}/admin`);
+    const adm = await call(`/da/p/${id}/admin`);
     expect(adm.status).toBe(200);
     expect(adm.text).not.toMatch(/rel="canonical"|property="og:/);
     expect(adm.text).toMatch(/<meta name="robots" content="noindex/);
@@ -382,22 +375,8 @@ describe('admin token (no accounts)', () => {
     }
   });
 
-  test('legacy /p/<id>/admin/<token> → 302 to /p/<id>/admin#<token> (no DB check, no cache)', async () => {
-    const c = await post(valid());
-    const { id, admin_token: token } = c.body;
-    for (const t of [token, 'A'.repeat(43)]) {
-      const r = await call(`/p/${id}/admin/${t}`);
-      expect(r.status).toBe(302);
-      expect(r.headers.get('location')).toBe(`/p/${id}/admin#${t}`);
-      expect(r.headers.get('cache-control')).toMatch(/no-store/);
-    }
-    const slash = await call(`/p/${id}/admin/`);
-    expect(slash.status).toBe(308);
-    expect(slash.headers.get('location')).toBe(`/p/${id}/admin`);
-  });
-
   test('admin page for unknown poll → friendly 404', async () => {
-    const r = await call('/p/AAAAAAAAAAAAAAAAAAAAAA/admin');
+    const r = await call('/da/p/AAAAAAAAAAAAAAAAAAAAAA/admin');
     expect(r.status).toBe(404);
     expect(r.text).toContain('Hov, den afstemning kan vi ikke finde');
   });
@@ -408,7 +387,7 @@ describe('OG image route + link preview', () => {
 
   test('GET /p/<id>/opengraph-image → 1200×630 PNG, cacheable', async () => {
     const { body: { id } } = await post({ title: '👨‍👩‍👧‍👦 Familiemiddag </title><script>x</script> ' + 'lang '.repeat(30), options: [d(iso('11-03'))] });
-    const r = await fetch(`${BASE}/p/${id}/opengraph-image`);
+    const r = await fetch(`${BASE}/da/p/${id}/opengraph-image`);
     expect(r.status).toBe(200);
     expect(r.headers.get('content-type')).toBe('image/png');
     expect(r.headers.get('cache-control')).toMatch(/public, max-age=86400/);
@@ -419,7 +398,7 @@ describe('OG image route + link preview', () => {
 
   test('unknown or malformed id → 404, no image', async () => {
     for (const s of ['AAAAAAAAAAAAAAAAAAAAAA', 'short', '%3Cscript%3E']) {
-      const r = await fetch(`${BASE}/p/${s}/opengraph-image`);
+      const r = await fetch(`${BASE}/da/p/${s}/opengraph-image`);
       expect(r.status, s).toBe(404);
       expect(r.headers.get('content-type')).not.toMatch(/image/);
     }
@@ -428,8 +407,8 @@ describe('OG image route + link preview', () => {
   test('poll page: og:image + twitter summary_large_image with absolute URLs, escaped alt, no token', async () => {
     const c = await post({ title: 'Møde "A" & <b>B</b>', options: [d(iso('11-03'))] });
     const { id, admin_token: token } = c.body;
-    const r = await call(`/p/${id}`);
-    const img = `${BASE}/p/${id}/opengraph-image`;
+    const r = await call(`/da/p/${id}`);
+    const img = `${BASE}/da/p/${id}/opengraph-image`;
     expect(r.text).toContain(`<meta property="og:image" content="${img}"/>`);
     expect(r.text).toContain('<meta property="og:image:width" content="1200"/>');
     expect(r.text).toContain('<meta property="og:image:height" content="630"/>');
@@ -438,7 +417,7 @@ describe('OG image route + link preview', () => {
     expect(r.text).toContain(`<meta name="twitter:image" content="${img}"/>`);
     expect(r.text).not.toContain(token);
     // Admin page: still no OG image / preview tags
-    const adm = await call(`/p/${id}/admin`);
+    const adm = await call(`/da/p/${id}/admin`);
     expect(adm.text).not.toMatch(/og:image|twitter:/);
   });
 });

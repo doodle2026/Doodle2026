@@ -32,7 +32,7 @@ describe('choose final time (admin)', () => {
     const c = await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: e.o[0] }, e.admin));
     expect(c.status).toBe(200);
     expect(c.body).toMatchObject({ chosen_option_id: e.o[0], is_closed: false });
-    let page = await call(`/p/${e.id}`);
+    let page = await call(`/da/p/${e.id}`);
     expect(page.text).toContain('Den endelige dato er');
     expect(page.text).toContain(`href="/api/events/${e.id}/ics"`);
     expect(page.text).toContain('is-chosen');
@@ -40,7 +40,7 @@ describe('choose final time (admin)', () => {
     expect(ch.body.chosen_option_id).toBe(e.o[1]);
     const cl = await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: null }, e.admin));
     expect(cl.body.chosen_option_id).toBeNull();
-    page = await call(`/p/${e.id}`);
+    page = await call(`/da/p/${e.id}`);
     expect(page.text).not.toContain('Den endelige dato er');
     expect((await call(`/api/events/${e.id}`)).body.chosen_option_id).toBeNull();
   });
@@ -58,7 +58,7 @@ describe('choose final time (admin)', () => {
     await call(`/api/events/${e.id}/close`, json('POST', {}, e.admin));
     const c = await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: e.o[1] }, e.admin));
     expect(c.body).toMatchObject({ is_closed: true, chosen_option_id: e.o[1] });
-    expect((await call(`/p/${e.id}`)).text).toContain('Afstemningen er lukket – endelig dato');
+    expect((await call(`/da/p/${e.id}`)).text).toContain('Afstemningen er lukket – endelig dato');
   });
 });
 
@@ -134,7 +134,7 @@ describe('.ics', () => {
     const r = await call('/api/events', json('POST', { title: 'Nytår', options: [{ date: `${Y}-12-31` }] }));
     await call(`/api/events/${r.body.id}/choose`, json('POST', { chosen_option_id: r.body.time_options[0].id }, r.body.admin_token));
     expect((await call(`/api/events/${r.body.id}/ics`)).text).toContain(`DTSTART;VALUE=DATE:${Y}1231\r\nDTEND;VALUE=DATE:${Y + 1}0101`);
-    const page = (await call(`/p/${r.body.id}`)).text;
+    const page = (await call(`/da/p/${r.body.id}`)).text;
     expect(page).toContain(`dates=${Y}1231%2F${Y + 1}0101`);
     expect(page).toMatch(/(hele dagen)/);
   });

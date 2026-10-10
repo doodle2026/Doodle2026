@@ -76,7 +76,7 @@ describe('invitations API (step 4)', () => {
     const p = await poll();
     const long = await invite(p, { recipients: `m-${uniq()}@example.com`, message: '😀'.repeat(1012) });
     expect(long.status).toBe(400); expect(long.body.errors[0]).toBe('Beskeden er 12 tegn for lang.');
-    const secret = await invite(p, { recipients: `m-${uniq()}@example.com`, message: `se ${BASE}/p/${p.id}/admin#${p.token}` });
+    const secret = await invite(p, { recipients: `m-${uniq()}@example.com`, message: `se ${BASE}/da/p/${p.id}/admin#${p.token}` });
     expect(secret.body.code).toBe('secret_link');
     const ok = await invite(p, { recipients: `m-${uniq()}@example.com`, message: '😀'.repeat(1000), organizer_name: 'Mette "x" <a@b.dk>\r\nBcc: e' });
     expect(ok.status).toBe(201);
@@ -128,7 +128,7 @@ describe('invitations API (step 4)', () => {
     expect(r.body).toMatchObject({ sent: 0, suppressed: 1 });
     expect(r.body.invitees[0].delivery).toBe('unsub');
     expect((await call(`/api/u/p/${'A'.repeat(43)}`)).status).toBe(404);
-    const h = (await call(`/u/p/${t}`)).headers;
+    const h = (await call(`/da/u/p/${t}`)).headers;
     expect(h.get('referrer-policy')).toBe('no-referrer');
   });
 

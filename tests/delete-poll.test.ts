@@ -24,7 +24,7 @@ describe('DELETE /api/events/:id', () => {
     expect(r.headers.get('cache-control')).toContain('no-store');
     expect(await r.json()).toEqual({ deleted: true });
     expect((await fetch(`${BASE}/api/events/${e.id}`)).status).toBe(404);
-    expect((await fetch(`${BASE}/p/${e.id}`)).status).toBe(404);
+    expect((await fetch(`${BASE}/da/p/${e.id}`)).status).toBe(404);
     expect([401, 403, 404]).toContain((await del(e.id, e.admin_token)).status);
   });
 });
@@ -37,12 +37,12 @@ describe.skipIf(!existsSync(CHROME))('delete poll UI (headless Chrome)', () => {
     try {
       const e = await create();
       const p = await b.newPage();
-      await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+      await p.goto(`${BASE}/da/p/${e.id}/admin#${e.admin_token}`);
       await p.click('#delete-poll');
       await p.waitForSelector('dialog[open]');
       expect(await p.textContent('#dlg-h')).toContain('Slet «Slet mig»?');
       await p.click('dialog[open] .btn--danger');
-      await p.waitForURL(`${BASE}/`);
+      await p.waitForURL(`${BASE}/da`);
       expect(await p.textContent('#deleted-notice')).toContain('Afstemningen er slettet');
       expect((await fetch(`${BASE}/api/events/${e.id}`)).status).toBe(404);
     } finally { await b.close(); }

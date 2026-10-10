@@ -112,7 +112,7 @@ describe('personal invite links (step 5)', () => {
     browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
     const s = await setup(); const t = invTok(s.rows[0].id, 1);
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await p.goto(`${BASE}/p/${s.e.id}#inv=${t}`);
+    await p.goto(`${BASE}/da/p/${s.e.id}#inv=${t}`);
     await p.waitForSelector('#personal-banner');
     expect(await p.textContent('#personal-banner')).toContain(s.a);
     expect(await p.inputValue('#name')).toBe('Jonas Krogh');
@@ -121,16 +121,16 @@ describe('personal invite links (step 5)', () => {
     await p.waitForSelector('#personal-banner', { state: 'detached' });
     expect(await p.inputValue('#name')).toBe('');
     const p1 = await browser.newPage(); // same-document hash change wouldn't reload
-    await p1.goto(`${BASE}/p/${s.e.id}#invite=${invTok(s.rows[1].id, 1)}`);
+    await p1.goto(`${BASE}/da/p/${s.e.id}#invite=${invTok(s.rows[1].id, 1)}`);
     await p1.waitForSelector('#personal-banner');
     await call(`/api/events/${s.e.id}/invitations/revoke`, { method: 'POST', token: s.e.admin_token, json: { email: s.a } });
     const p2 = await browser.newPage();
-    await p2.goto(`${BASE}/p/${s.e.id}#inv=${t}`);
+    await p2.goto(`${BASE}/da/p/${s.e.id}#inv=${t}`);
     await p2.waitForSelector('#invite-inactive');
     // admin: Svar column + public answer link dialog validation
     await vote(s.e.id, 'Kasper', s.opt);
     const a = await browser.newPage({ viewport: { width: 1100, height: 1000 } });
-    await a.goto(`${BASE}/p/${s.e.id}/admin#${s.e.admin_token}`);
+    await a.goto(`${BASE}/da/p/${s.e.id}/admin#${s.e.admin_token}`);
     await a.waitForSelector('#public-answers');
     expect(await a.textContent('#rtable thead')).toContain('Svar');
     expect(await a.isDisabled('#track')).toBe(true);

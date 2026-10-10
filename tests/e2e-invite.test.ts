@@ -27,7 +27,7 @@ describe.skipIf(!existsSync(CHROME))('invitations UI (headless Chrome)', () => {
   test('invite form: groups, counter, send → status list; reminder dialog → 1 af 3 brugt + countdown', async () => {
     const e = await poll(); const k = u();
     const p = await browser.newPage({ viewport: { width: 1100, height: 1000 } });
-    await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+    await p.goto(`${BASE}/da/p/${e.id}/admin#${e.admin_token}`);
     await p.waitForSelector('#inv-form');
     await p.fill('#addr', `a-${k}@firma.dk, Bo Hansen <bo-${k}@firma.dk>; pia@firma a-${k}@firma.dk`);
     expect(await p.textContent('#groups')).toContain('Ugyldige – rettes eller fjernes (1)');
@@ -59,23 +59,23 @@ describe.skipIf(!existsSync(CHROME))('invitations UI (headless Chrome)', () => {
     await fetch(`${BASE}/api/events/${e.id}/invitations`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${e.admin_token}`, 'X-Forwarded-For': ip() }, body: JSON.stringify({ recipients: a }) });
     const inv = await prisma.invitation.findFirstOrThrow({ where: { email: a } });
     const t = linkToken(inv.id);
-    await fetch(`${BASE}/u/p/${t}`); // a link scanner
+    await fetch(`${BASE}/da/u/p/${t}`); // a link scanner
     expect((await prisma.invitation.findUniqueOrThrow({ where: { id: inv.id } })).delivery).not.toBe('unsub');
     const p = await browser.newPage();
-    await p.goto(`${BASE}/u/p/${t}`);
+    await p.goto(`${BASE}/da/u/p/${t}`);
     await p.waitForSelector('#undo');
     expect(await p.textContent('h1')).toBe('Du er afmeldt');
     expect((await prisma.invitation.findUniqueOrThrow({ where: { id: inv.id } })).delivery).toBe('unsub');
     await p.click('#undo'); await p.waitForSelector('#re');
     expect((await prisma.invitation.findUniqueOrThrow({ where: { id: inv.id } })).delivery).toBe('sent');
-    await p.goto(`${BASE}/u/all/${t}`); await p.waitForSelector('#go');
+    await p.goto(`${BASE}/da/u/all/${t}`); await p.waitForSelector('#go');
     expect(await prisma.emailSuppression.count({ where: { scope: 'all', createdAt: { gt: new Date(Date.now() - 60_000) } } })).toBeGreaterThanOrEqual(0);
     await p.click('#go'); await p.waitForFunction(() => document.querySelector('h1')?.textContent === 'Du er afmeldt alle mails');
-    await p.goto(`${BASE}/abuse/${t}`); await p.waitForSelector('#f');
+    await p.goto(`${BASE}/da/abuse/${t}`); await p.waitForSelector('#f');
     await p.check('input[value="phishing"]'); await p.click('#f button');
     await p.waitForFunction(() => document.querySelector('h1')?.textContent?.startsWith('Tak'));
     expect(await prisma.abuseReport.count({ where: { eventId: inv.eventId, reason: 'phishing' } })).toBe(1);
-    await p.goto(`${BASE}/u/p/${'Z'.repeat(43)}`); await p.waitForFunction(() => document.querySelector('h1')?.textContent?.includes('ugyldigt'));
+    await p.goto(`${BASE}/da/u/p/${'Z'.repeat(43)}`); await p.waitForFunction(() => document.querySelector('h1')?.textContent?.includes('ugyldigt'));
     await p.close();
   }, 40_000);
 });

@@ -90,3 +90,13 @@ createdb -h localhost -U doodle doodle_dev; createdb -h localhost -U doodle dood
 
 ### Migration til kun datoer
 `20261010235500_date_only` tilføjer `time_options.date`; `20261011003000_dates_only_drop_legacy` fjerner klokkeslæt helt (kører med `prisma migrate deploy`, ingen reset): manglende `date` udfyldes fra `(start_at AT TIME ZONE 'Europe/Copenhagen')::date`, rækker uden dato slettes, kolliderende dubletter (samme afstemning + dato) slettes med deres stemmer – laveste id beholdes, og et valgt dublet-forslag peges om til det beholdte. Derefter `date NOT NULL`, unik `(event_id, date)`, og `start_at`/`end_at`/`events.mode` droppes. `?tz` findes ikke længere.
+
+## Languages (i18n)
+
+Locales `en` (source + fallback), `da`, `fr`, `de` via `next-intl`; every page lives under `/<locale>/…`
+(`src/app/[locale]/`). `/` and any unprefixed page path get a **308** to the detected locale
+(cookie `NEXT_LOCALE` → `Accept-Language` → `en`), query preserved; the browser keeps `#fragments`.
+The middleware never touches `/api/*`, `_next`, `brand/`, `email-assets/`, favicons, files with an extension
+or `opengraph-image` routes (API security headers come from `next.config.ts`). Admin, edit and mail-token pages
+keep `no-store` / `noindex` / `no-referrer` under every locale. The header language switcher (endonyms, no
+flags) only swaps the locale segment and stores the choice in `NEXT_LOCALE` (1 year).
