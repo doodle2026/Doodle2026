@@ -4,6 +4,7 @@ import type { AdminEvent } from '@/lib/events';
 import { forgetAdminToken, storeAdminToken, takeAdminToken } from '@/lib/admin-client';
 import { bestIds, whenLabel } from '@/lib/format';
 import AdminResults from './AdminResults';
+import InviteSection from './InviteSection';
 import OptionEditRow, { type EditResult } from './OptionEditRow';
 import type { EditErr } from '@/lib/admin-ui';
 import { copyText } from '@/lib/share';
@@ -298,6 +299,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
         </div>
       </section>
 
+      <InviteSection api={api} slug={slug} closed={ev.is_closed} onDenied={() => setState('denied')} onStatus={(m) => { setBanner(m); setLive(m); }} />
       <AdminResults ev={ev} setEv={(e) => { setEv(e); syncVotes(e); }} api={api} appUrl={shareUrl.replace(/\/p\/[^/]+$/, '')}
         onDenied={() => setState('denied')} onStatus={(m) => { setBanner(m); setLive(m); }} onError={(e) => setSummary(e)} />
 

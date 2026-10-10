@@ -18,22 +18,45 @@ Status legend: ✅ enforced in code + tested (this PR) · ⏳ step 4 "Invitation
 - ✅ Subject: plain text, one line, title clipped to 60 graphemes. HTML escapes all user values; plain text is not HTML-escaped.
 - ⏳ No tracking: turn **off open and click tracking** for the sending domain in Resend (domain setting, not per API call). Templates contain no tracking pixels.
 
-## Invitations (step 4)
-- ⏳ Organizer only (admin token). Addresses validated + deduped (✅ in `planInvitations`).
-- ⏳ Max 50 recipients per send, 200 per poll; rate limits per hour and per IP; global daily/monthly quota under Resend Free (100/day, 3 000/month), reserved atomically before sending.
-- ⏳ Optional personal message: max 1 000 graphemes, escaped, rejected if it contains admin/edit links (needs a template slot from Doodle UI).
-- ⏳ Optional organizer name field in the invite request (sanitizer ✅).
+## Invitations (step 4) – implemented
+API (all admin-token, JSON): `GET /api/events/:id/invitations` (status list, limits, reminder state),
+`POST /api/events/:id/invitations` `{ recipients: string | string[], message?, organizer_name? }`,
+`POST /api/events/:id/invitations/preview` (renders the real mail, sends nothing), `POST /api/events/:id/reminders`.
+- ✅ Organizer only (admin token, constant-time). Addresses parsed (`Name <email>`, comma/semicolon/space/newline), validated, deduped, already-invited skipped (`src/lib/recipients.ts`).
+- ✅ ≤ 50 recipients per send, ≤ 200 per poll, ≤ 100 new recipients per poll per hour (DB), ≤ 10 sends per IP per hour (in-memory, best effort on serverless), global quota 100/day and 3 000/month reserved atomically (Postgres advisory lock, `email_quota`); failed sends give the quota back.
+- ✅ Personal message: plain text, ≤ 1 000 graphemes ("Beskeden er N tegn for lang."), control/bidi chars stripped, escaped by the template, rejected if it contains admin/edit/invite links.
+- ✅ From: `"<organizer> via Mødetid" <EMAIL_FROM address>`, sanitized name, **no Reply-To**; open/click tracking off (no pixels); one mail per recipient (batch API), idempotency key `invite:<pollId>:<email>`.
+- ✅ Only the public `/p/<id>` link (render guard throws on admin/edit links).
+- ✅ Per-recipient delivery status: queued → sent → delivered / failed / bounced / unsub, shown in the admin view with filters.
 
-## Reminders
-- ✅ Manual; per poll max one per 24 h and 3 in total; none to closed polls (`reminderBlock`).
-- ✅ Go to all non-unsubscribed invitees.
-- ⏳ Counter/timestamp persisted atomically (row lock) before sending; UI button with countdown.
+## Reminders – implemented
+- ✅ Manual; per poll max one per 24 h and 3 in total; none to closed polls; counter bumped under a row lock (`SELECT … FOR UPDATE`) so parallel clicks can't exceed the limits.
+- ✅ Go to all non-unsubscribed, non-bounced invitees (design §39; §43 resolved, see below). Button and dialog say so.
 
-## Unsubscribe, abuse, privacy
-- ⏳ Every mail carries two unsubscribe links (this poll / all mail from the app) + a report-abuse link, with landing pages (GET shows confirmation, POST one-click per RFC 8058).
-- ⏳ Suppression list stored as hashes (HMAC-SHA256 of the normalized address with a server secret), checked before every send (✅ `unsubscribedAt` skip in policy).
-- ⏳ Invitee addresses deleted immediately with the poll (FK cascade) or 90 days after close (scheduled cleanup – Vercel cron or GitHub Action; coordinate with Doodle Deployment).
-- ⏳ Per-recipient status sent / failed / bounced in the admin view, fed by **signature-verified** Resend webhooks (Svix headers).
+### §43 decision
+§43 asked whether reminders go to *all non-unsubscribed* (spec) or *only those who haven't answered* (project lead). §30 (personal links) resolves it:
+without tracking we cannot know who answered, so step 4 sends to **all non-unsubscribed, non-bounced** invitees with the neutral
+"Har du svaret?" mail (safest: nobody who still has to answer is missed, nothing claims "du mangler at svare" wrongly). With tracking
+(step 5) reminders go only to invitees who haven't answered.
+
+## Unsubscribe, abuse, privacy – implemented
+- ✅ Every mail: "Afmeld denne afstemning" (`/u/p/<t>`), "Afmeld alle mails" (`/u/all/<t>`), "Rapportér misbrug" (`/abuse/<t>`) + privacy line.
+  `<t>` = HMAC(`EMAIL_LINK_SECRET`, invitation id) – stable across invitation and reminders; DB stores only SHA-256(t).
+- ✅ `List-Unsubscribe: <APP_URL/api/u/p/<t>>` + `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058 POST).
+  The landing page unsubscribes via JS POST (link scanners that only GET do nothing); "all" needs one confirm click; both can be undone.
+- ✅ Suppression list (`email_suppressions`) stores only SHA-256(pepper + normalized address) with scope `all` or `poll:<id>`; checked before every invitation and reminder. Hard bounces and spam complaints add an `all` entry.
+- ✅ Abuse reports stored (reason + optional text, no address); by default also unsubscribes; after 2 reports for a poll, its mail is stopped (`mail_blocked_at`).
+- ✅ Addresses deleted with the poll (FK cascade) or 90 days after close by `GET|POST /api/cron/cleanup` (Bearer `CRON_SECRET`, constant-time, idempotent), scheduled daily 03:17 UTC in `vercel.json`. Suppression hashes and abuse reports contain no addresses and are kept.
+- ✅ Resend webhooks `POST /api/webhooks/resend`, Svix signature verified (`RESEND_WEBHOOK_SECRET`, ±5 min), status never downgraded.
+
+### Env (Doodle Deployment)
+| Var | Where | Notes |
+|---|---|---|
+| `CRON_SECRET` | Vercel (prod) | ≥ 16 chars random; Vercel cron sends it as `Authorization: Bearer …`. GitHub Action alternative: `curl -fsS -H "Authorization: Bearer $CRON_SECRET" $APP_URL/api/cron/cleanup` |
+| `EMAIL_LINK_SECRET` | Vercel (prod, preview if sending) | ≥ 32 chars; **never rotate** (old unsubscribe links would break) |
+| `RESEND_WEBHOOK_SECRET` | Vercel (prod) | `whsec_…` from Resend → Webhooks; endpoint `https://<domain>/api/webhooks/resend` |
+| `EMAIL_HASH_PEPPER` | optional | set once, never change |
+| `EMAIL_DAILY_QUOTA` / `EMAIL_MONTHLY_QUOTA` / `EMAIL_POLL_HOURLY_MAX` / `RATE_LIMIT_MAIL_PER_HOUR` | optional | defaults 100 / 3000 / 100 / 10 |
 
 ## Business tasks (Jan)
 - Resend DPA, sending region Ireland (eu-west-1) and note that Resend stores account data/logs in the US.

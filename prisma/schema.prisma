@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // CI builds on Ubuntu (debian-openssl-3.0.x); Vercel functions run on Amazon Linux (rhel-openssl-3.0.x).
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
@@ -13,7 +13,7 @@ datasource db {
 model Event {
   id              Int              @id @default(autoincrement())
   slug            String           @unique @db.VarChar(22)
-  title           String          
+  title           String
   description     String           @default("")
   /// SHA-256 (hex) of the organizer's 256-bit admin token. The raw token is never stored.
   adminTokenHash  String           @map("admin_token_hash") @db.Char(64)
@@ -30,6 +30,14 @@ model Event {
   timeOptions     TimeOption[]
   idempotencyKeys IdempotencyKey[]
   participants    Participant[]
+  invitations     Invitation[]
+  /// Organizer display name for invitation mails ("<name> via Mødetid"), sanitized. Optional.
+  organizerName   String?          @map("organizer_name") @db.VarChar(100)
+  /// Manual reminders: count (max 3) and last send (max one per 24 h).
+  remindersSent   Int              @default(0) @map("reminders_sent")
+  lastReminderAt  DateTime?        @map("last_reminder_at") @db.Timestamptz(3)
+  /// Set after repeated abuse reports: no more invitation/reminder mails for this poll.
+  mailBlockedAt   DateTime?        @map("mail_blocked_at") @db.Timestamptz(3)
 
   @@map("events")
 }
@@ -55,8 +63,8 @@ model IdempotencyKey {
   keyHash       String   @id @map("key_hash") @db.Char(64)
   eventId       Int      @map("event_id")
   adminTokenEnc String   @map("admin_token_enc")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
   @@map("idempotency_keys")
@@ -64,17 +72,17 @@ model IdempotencyKey {
 
 /// Feature 3 (voting) – schema only, no API/UI yet.
 model Participant {
-  id            Int      @id @default(autoincrement())
-  eventId       Int      @map("event_id")
-  name          String
+  id              Int                  @id @default(autoincrement())
+  eventId         Int                  @map("event_id")
+  name            String
   /// Case-insensitive uniqueness key: NFKC + trim + lower-case (see participantNameKey()).
-  nameKey       String   @map("name_key")
+  nameKey         String               @map("name_key")
   /// SHA-256 (hex) of the participant's secret edit token (256-bit random → safe to look up by hash).
-  editTokenHash String   @unique @map("edit_token_hash") @db.Char(64)
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  votes         Vote[]
+  editTokenHash   String               @unique @map("edit_token_hash") @db.Char(64)
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  event           Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  votes           Vote[]
   idempotencyKeys VoteIdempotencyKey[]
 
   @@unique([eventId, nameKey])
@@ -112,4 +120,55 @@ model Vote {
   @@id([participantId, timeOptionId])
   @@index([timeOptionId])
   @@map("votes")
+}
+
+/// Invitation mail recipient (step 4). Addresses are deleted with the poll (cascade) or 90 days after close (cron).
+model Invitation {
+  id            Int      @id @default(autoincrement())
+  eventId       Int      @map("event_id")
+  /// Normalized (trimmed, lower-case) address.
+  email         String   @db.VarChar(320)
+  name          String?  @db.VarChar(100)
+  /// queued | sent | delivered | failed | bounced | unsub
+  delivery      String   @default("queued") @db.VarChar(16)
+  reason        String?  @db.VarChar(200)
+  /// Resend email id of the latest mail (webhook correlation).
+  providerId    String?  @unique @map("provider_id") @db.VarChar(64)
+  /// SHA-256 of the per-recipient footer token (unsubscribe this poll / all, report abuse). Raw token only in the mail.
+  linkTokenHash String   @unique @map("link_token_hash") @db.Char(64)
+  lastEventAt   DateTime @default(now()) @map("last_event_at") @db.Timestamptz(3)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, email])
+  @@map("invitations")
+}
+
+/// Suppression list: SHA-256 of the normalized address only. scope "all" (any mail) or "poll:<eventId>".
+model EmailSuppression {
+  emailHash String   @map("email_hash") @db.Char(64)
+  scope     String   @db.VarChar(32)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([emailHash, scope])
+  @@map("email_suppressions")
+}
+
+/// Global send quota per UTC day (Resend Free: 100/day, 3000/month). Reserved atomically before sending.
+model EmailQuota {
+  day   String @id @db.Char(10)
+  count Int    @default(0)
+
+  @@map("email_quota")
+}
+
+model AbuseReport {
+  id        Int      @id @default(autoincrement())
+  eventId   Int?     @map("event_id")
+  reason    String   @db.VarChar(32)
+  details   String?  @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([eventId])
+  @@map("abuse_reports")
 }

@@ -12,6 +12,10 @@ const num = (v: string | undefined, d: number) => (v !== undefined && v !== '' &
 export const LIMITS = {
   // Defaults: burst 20, then 1 request / 3 s (20/min) per IP for writes.
   write: { capacity: num(process.env.RATE_LIMIT_CAPACITY, 20), refillPerSec: num(process.env.RATE_LIMIT_REFILL_PER_SEC, 1 / 3) },
+  // Mail sends (invitations + reminders) per IP: 10 per hour.
+  mail: { capacity: num(process.env.RATE_LIMIT_MAIL_PER_HOUR, 10), refillPerSec: num(process.env.RATE_LIMIT_MAIL_PER_HOUR, 10) / 3600 },
+  // Public unsubscribe / abuse endpoints.
+  public: { capacity: 30, refillPerSec: 0.5 },
 } satisfies Record<string, Limit>;
 
 const buckets = new Map<string, Bucket>();

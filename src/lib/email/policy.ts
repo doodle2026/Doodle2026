@@ -25,10 +25,13 @@ export interface PollForEmail {
 export interface Invitee {
   email: string; name?: string;
   respondedAt?: Date | null; unsubscribedAt?: Date | null;
-  unsubscribeUrl?: string;
+  /** Raw per-recipient footer token (only its SHA-256 is stored). */
+  linkToken: string;
+  /** Hard bounce / complaint: cannot receive mail. */
+  bounced?: boolean;
 }
-export interface EmailCtx { appUrl: string; footerText?: string }
-export type SkipReason = 'invalid_email' | 'duplicate' | 'unsubscribed' | 'closed';
+export interface EmailCtx { appUrl: string; footerText?: string; personalMessage?: string }
+export type SkipReason = 'invalid_email' | 'duplicate' | 'unsubscribed' | 'closed' | 'bounced';
 export type ReminderBlock = 'closed' | 'too_soon' | 'limit_reached';
 export const REMINDER_MAX = 3;
 export const REMINDER_GAP_MS = 24 * 3600_000;
@@ -47,7 +50,10 @@ export function pollEmailData(p: PollForEmail, inv: Invitee, ctx: EmailCtx): Pol
     optionCount: p.options.length, timeZoneLabel: tz === DEFAULT_TZ ? 'dansk tid (Europe/Copenhagen)' : tz,
     dates: groupDates(p.options, tz), deadline: p.deadline ? formatters(tz).deadline(p.deadline) : undefined,
     respondedCount: p.respondedCount, footerText: ctx.footerText ?? 'Mødetid · Planlæg møder uden login',
-    unsubscribeUrl: inv.unsubscribeUrl && /^https:\/\//.test(inv.unsubscribeUrl) ? inv.unsubscribeUrl : undefined,
+    personalMessage: ctx.personalMessage,
+    unsubscribePollUrl: `${app}/u/p/${inv.linkToken}`,
+    unsubscribeAllUrl: `${app}/u/all/${inv.linkToken}`,
+    reportAbuseUrl: `${app}/abuse/${inv.linkToken}`,
   };
 }
 
@@ -60,7 +66,8 @@ function message(kind: 'invite' | 'reminder', p: PollForEmail, inv: Invitee, ctx
     fromName: who ? `${who} via ${APP_NAME}` : APP_NAME,
     to: inv.email.trim(), subject: r.subject, html: r.html, text: r.text,
     idempotencyKey: `${kind}:${p.slug}:${email}`,
-    headers: d.unsubscribeUrl ? { 'List-Unsubscribe': `<${d.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } : undefined,
+    // RFC 8058 one-click: POST to this URL unsubscribes from this poll.
+    headers: { 'List-Unsubscribe': `<${base(ctx.appUrl)}/api/u/p/${inv.linkToken}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
     tags: [{ name: 'type', value: kind === 'invite' ? 'invitation' : 'reminder' }, { name: 'poll', value: p.slug }],
   };
 }
@@ -75,6 +82,7 @@ function plan(kind: 'invite' | 'reminder', p: PollForEmail, invitees: Invitee[],
     if (seen.has(e)) { skip('duplicate'); continue; }
     seen.add(e);
     if (inv.unsubscribedAt) { skip('unsubscribed'); continue; }
+    if (inv.bounced) { skip('bounced'); continue; }
     if (p.isClosed) { skip('closed'); continue; }
     out.messages.push(message(kind, p, inv, ctx));
   }
