@@ -50,21 +50,21 @@ export default function MailLanding({ kind, token }: { kind: Kind; token: string
     <p className="lead">Du får ikke flere mails om <strong>{T}</strong> på <strong>{E}</strong>. Andre afstemninger påvirkes ikke.</p>
     <p className="field__hint">Du kan stadig stemme via linket fra invitationen.</p>
     <div className="landing__actions"><button type="button" className="btn btn--secondary" id="undo" disabled={busy} onClick={() => act('p', 'resubscribe', 'undone')}>Fortryd – tilmeld mig igen</button><a className="btn btn--ghost" href={poll}>Gå til afstemningen</a></div>
-    <p className="privacy" style={{ marginTop: 'var(--s-5)' }}>Vil du slet ikke have mails fra Mødetid? <a href={`/u/all/${token}`}>Afmeld alle mails</a>.</p></>;
+    <p className="privacy" style={{ marginTop: 'var(--s-5)' }}>Vil du slet ikke have mails fra GrabAday? <a href={`/u/all/${token}`}>Afmeld alle mails</a>.</p></>;
   else if (kind === 'poll' && state === 'undone') body = <>{icon('✅')}<H>Du er tilmeldt igen</H>
     <p className="lead">Du får igen mails om <strong>{T}</strong>, fx påmindelser fra arrangøren.</p>
     <div className="landing__actions"><a className="btn btn--primary" href={poll}>Gå til afstemningen</a><button type="button" className="btn btn--ghost" id="re" disabled={busy} onClick={() => act('p', 'unsubscribe', 'done')}>Afmeld igen</button></div></>;
-  else if (kind === 'all' && state === 'confirm') body = <>{icon('✉️')}<H>Afmeld alle mails fra Mødetid?</H>
+  else if (kind === 'all' && state === 'confirm') body = <>{icon('✉️')}<H>Afmeld alle mails fra GrabAday?</H>
     <p className="lead">Vi sender ikke flere invitationer eller påmindelser til <strong>{E}</strong> – fra nogen arrangør, om nogen afstemning.</p>
     <div className="landing__actions"><button type="button" className="btn btn--primary" id="go" disabled={busy} onClick={() => act('all', 'unsubscribe', 'done')}>{busy ? <><span className="spinner" aria-hidden="true" /> Afmelder …</> : 'Ja, afmeld alle mails'}</button><a className="btn btn--ghost" href={`/u/p/${token}`}>Kun denne afstemning</a></div>
     <p className="privacy" style={{ marginTop: 'var(--s-4)' }}>Vi beder dig bekræfte, så et automatisk link-tjek i dit mailprogram ikke afmelder dig ved en fejl.</p></>;
   else if (kind === 'all' && state === 'done') body = <>{icon('🔕')}<H>Du er afmeldt alle mails</H>
-    <p className="lead">Mødetid sender ikke flere mails til <strong>{E}</strong>. Arrangører kan se, at du er afmeldt, men ikke hvorfor.</p>
+    <p className="lead">GrabAday sender ikke flere mails til <strong>{E}</strong>. Arrangører kan se, at du er afmeldt, men ikke hvorfor.</p>
     <div className="landing__box"><p className="field__hint">Fortrudt? Hvis du senere vil have invitationer igen, så klik på &quot;Tilmeld igen&quot; herunder, eller bed en arrangør om at sende dig linket direkte.</p></div>
     <div className="landing__actions"><button type="button" className="btn btn--ghost" id="re" disabled={busy} onClick={() => act('all', 'resubscribe', 'resub')}>Tilmeld igen</button></div></>;
-  else if (kind === 'all' && state === 'resub') body = <>{icon('✅')}<H>Du er tilmeldt igen</H><p className="lead">Du kan igen modtage invitationer via Mødetid.</p></>;
+  else if (kind === 'all' && state === 'resub') body = <>{icon('✅')}<H>Du er tilmeldt igen</H><p className="lead">Du kan igen modtage invitationer via GrabAday.</p></>;
   else if (kind === 'abuse' && state === 'form') body = <>{icon('🚩')}<H>Rapportér misbrug</H>
-    <p className="lead">Fik du en mail fra Mødetid, du ikke forventede eller som virker som spam? Fortæl os det – vi kigger på det.</p>
+    <p className="lead">Fik du en mail fra GrabAday, du ikke forventede eller som virker som spam? Fortæl os det – vi kigger på det.</p>
     <form className="landing__box" id="f" noValidate onSubmit={async (e) => {
       e.preventDefault(); setBusy(true);
       const r = await post(`/api/abuse/${token}`, { reason, details, unsubscribe: alsoUnsub });
@@ -83,7 +83,7 @@ export default function MailLanding({ kind, token }: { kind: Kind; token: string
   else if (kind === 'abuse' && state === 'reported') body = <>{icon('🙏')}<H>Tak – vi har modtaget din rapport</H>
     <p className="lead">Vi gennemgår den hurtigst muligt. Ved gentagne rapporter stopper vi arrangørens mulighed for at sende mails.</p>
     {alsoUnsub && <p className="field__hint">Du er afmeldt mails om denne afstemning.</p>}
-    <div className="landing__actions"><a className="btn btn--ghost" href={`/u/all/${token}`}>Afmeld alle mails fra Mødetid</a></div></>;
+    <div className="landing__actions"><a className="btn btn--ghost" href={`/u/all/${token}`}>Afmeld alle mails fra GrabAday</a></div></>;
 
   return <section className="card landing" aria-live="polite" id="main">{body}</section>;
 }

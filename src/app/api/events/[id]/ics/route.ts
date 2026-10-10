@@ -12,6 +12,9 @@ export const runtime = 'nodejs';
  * 404 until the organizer has picked a time. UID is stable per POLL and SEQUENCE/LAST-MODIFIED change with
  * the chosen time, so re-importing after a change updates the existing calendar entry.
  */
+/** Fixed UID domain (not APP_URL's host) so UIDs stay stable across preview/vercel.app/custom domain. */
+const ICS_UID_DOMAIN = 'grabaday.com';
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const ev = await loadEvent((await params).id);
   if (!ev) return jsonError(404, ['Afstemningen findes ikke.']);
@@ -19,9 +22,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!o) return jsonError(404, ['Arrangøren har ikke valgt et tidspunkt endnu.']);
   const meta = await prisma.event.findUnique({ where: { slug: ev.slug }, select: { icsSequence: true, chosenChangedAt: true, createdAt: true } });
   const app = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-  const host = new URL(app).hostname;
   const body = buildIcs({
-    uid: `${ev.slug}@${host}`, stamp: new Date(), sequence: meta?.icsSequence ?? 0,
+    uid: `${ev.slug}@${ICS_UID_DOMAIN}`, stamp: new Date(), sequence: meta?.icsSequence ?? 0,
     lastModified: meta?.chosenChangedAt ?? meta?.createdAt, start: new Date(o.start_at), end: o.end_at ? new Date(o.end_at) : null,
     summary: stripInvisible(ev.title), description: stripInvisible(ev.description) || undefined, url: `${app}/p/${ev.slug}`,
   });

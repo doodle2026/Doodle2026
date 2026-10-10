@@ -1,5 +1,5 @@
 /**
- * Doodle UI e-mail templates (invitation / reminder) → { subject, html, text }.
+ * the design spec (doodle-ui) e-mail templates (invitation / reminder) → { subject, html, text }.
  * Templates are synced verbatim into ./templates.ts (scripts/sync-email-templates.mjs); Mustache escapes all
  * user values in HTML. Times are formatted server-side in Danish, 24 h, in the poll's time zone.
  */

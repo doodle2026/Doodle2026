@@ -3,7 +3,7 @@ import { createMailer, emailConfig, maskEmail, redact } from '../src/lib/email';
 
 const KEY = 're_SECRETKEY_abcdefghijklmnop';
 const TOKEN = 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcd';
-const msg = { to: 'anna@example.com', subject: `Ny stemme ${TOKEN}`, text: `Se https://moedetid.dk/p/abc/admin#${TOKEN}` };
+const msg = { to: 'anna@example.com', subject: `Ny stemme ${TOKEN}`, text: `Se https://grabaday.com/p/abc/admin#${TOKEN}` };
 const capture = () => { const lines: string[] = []; return { lines, log: (_l: 'info' | 'error', m: string) => { lines.push(m); } }; };
 
 describe('email adapter', () => {
@@ -29,7 +29,7 @@ describe('email adapter', () => {
 
   it('send mode without RESEND_API_KEY: config error logged once at startup, send returns error, never throws', async () => {
     const f = vi.fn(); const { lines, log } = capture();
-    const m = createMailer({ env: { EMAIL_MODE: 'send', EMAIL_FROM: 'noreply@moedetid.dk' }, fetch: f as never, log });
+    const m = createMailer({ env: { EMAIL_MODE: 'send', EMAIL_FROM: 'noreply@grabaday.com' }, fetch: f as never, log });
     expect(lines.filter((l) => l.includes('RESEND_API_KEY is missing'))).toHaveLength(1);
     await expect(m.send(msg)).resolves.toEqual({ ok: false, mode: 'send', error: 'config' });
     await m.send(msg);
@@ -41,20 +41,20 @@ describe('email adapter', () => {
   it('send mode: posts to Resend with bearer key, from, reply_to, idempotency key', async () => {
     const f = vi.fn(async () => new Response(JSON.stringify({ id: 'em_1' }), { status: 200 }));
     const { lines, log } = capture();
-    const m = createMailer({ env: { EMAIL_MODE: 'send', RESEND_API_KEY: KEY, EMAIL_FROM: 'Mødetid <noreply@moedetid.dk>', EMAIL_REPLY_TO: 'hej@moedetid.dk' }, fetch: f as never, log });
+    const m = createMailer({ env: { EMAIL_MODE: 'send', RESEND_API_KEY: KEY, EMAIL_FROM: 'GrabAday <noreply@grabaday.com>', EMAIL_REPLY_TO: 'hej@grabaday.com' }, fetch: f as never, log });
     expect(await m.send({ ...msg, idempotencyKey: 'k1' })).toEqual({ ok: true, mode: 'send', id: 'em_1' });
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://api.resend.com/emails');
     expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${KEY}`);
     expect((init.headers as Record<string, string>)['Idempotency-Key']).toBe('k1');
-    expect(JSON.parse(String(init.body))).toMatchObject({ from: 'Mødetid <noreply@moedetid.dk>', to: ['anna@example.com'], reply_to: 'hej@moedetid.dk', text: msg.text });
+    expect(JSON.parse(String(init.body))).toMatchObject({ from: 'GrabAday <noreply@grabaday.com>', to: ['anna@example.com'], reply_to: 'hej@grabaday.com', text: msg.text });
     expect(lines.join('\n')).not.toContain(KEY);
     expect(lines.join('\n')).not.toContain(TOKEN);
   });
 
   it('provider error / network error / timeout → ok:false, no secrets in logs, no throw', async () => {
     const { lines, log } = capture();
-    const env = { EMAIL_MODE: 'send', RESEND_API_KEY: KEY, EMAIL_FROM: 'noreply@moedetid.dk' };
+    const env = { EMAIL_MODE: 'send', RESEND_API_KEY: KEY, EMAIL_FROM: 'noreply@grabaday.com' };
     const bad = createMailer({ env, log, fetch: (async () => new Response(JSON.stringify({ name: 'validation_error', message: `bad ${KEY}` }), { status: 422 })) as never });
     expect(await bad.send(msg)).toMatchObject({ ok: false, error: 'provider' });
     const down = createMailer({ env, log, fetch: (async () => { throw new TypeError('fetch failed'); }) as never });
@@ -69,7 +69,7 @@ describe('email adapter', () => {
 
   it('rejects invalid messages without calling the provider', async () => {
     const f = vi.fn(); const { log } = capture();
-    const m = createMailer({ env: { EMAIL_MODE: 'send', RESEND_API_KEY: KEY, EMAIL_FROM: 'noreply@moedetid.dk' }, fetch: f as never, log });
+    const m = createMailer({ env: { EMAIL_MODE: 'send', RESEND_API_KEY: KEY, EMAIL_FROM: 'noreply@grabaday.com' }, fetch: f as never, log });
     for (const bad of [{ ...msg, to: 'nope' }, { ...msg, to: [] }, { ...msg, subject: ' ' }, { ...msg, text: '' }]) {
       expect(await m.send(bad)).toMatchObject({ ok: false, error: 'invalid' });
     }

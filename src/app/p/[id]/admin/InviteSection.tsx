@@ -202,7 +202,7 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
             <p className="field__hint" id="track-d">Hver modtager får sit <strong>eget link</strong>. Så kan du se, hvem der har svaret, og påmindelser går kun til dem, der mangler. Fra: alle får det samme offentlige link.
               {st.tracking && ' Slået til for denne afstemning (allerede sendte links forbliver gyldige, indtil du tilbagekalder dem).'}</p></div>
           <div className="mail-preview" id="mailprev"><dl>
-            <dt>Fra</dt><dd><strong>{shownName} via Mødetid</strong> &lt;noreply@…&gt;</dd>
+            <dt>Fra</dt><dd><strong>{shownName} via GrabAday</strong> &lt;noreply@…&gt;</dd>
             <dt>Svar til</dt><dd><strong>Ingen</strong> – svar på mailen når ikke frem. Skriv evt. din kontaktinfo i beskeden.</dd>
             <dt>Til</dt><dd>Hver modtager får sin egen mail (ingen kan se de andre adresser).</dd>
             <dt>Emne</dt><dd>{shownName} inviterer dig: {preview?.subject.split(': ').slice(1).join(': ') || '…'}</dd>

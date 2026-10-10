@@ -4,13 +4,13 @@
  * - one message per recipient (never a shared `to`), idempotency key per recipient; NO per-message replyTo
  *   (organizer e-mail is unverified – only the optional global EMAIL_REPLY_TO applies)
  * - reminders are manual, per poll: at most one per 24 h and 3 in total, none to closed polls; only to invitees
- *   who are not unsubscribed (answered or not – per Doodle Funktionel)
+ *   who are not unsubscribed (answered or not – per the functional spec)
  * - unsubscribed invitees get nothing; List-Unsubscribe (+ One-Click) header when an unsubscribe URL exists
  */
 import { DEFAULT_TZ, formatters, groupDates, renderInvitation, renderReminder, type PollEmailData } from './render';
 import { isEmail, sanitizeDisplayName, type EmailMessage } from './send';
 
-export const APP_NAME = 'Mødetid';
+export const APP_NAME = 'GrabAday';
 
 export interface PollForEmail {
   slug: string; title: string; description?: string; isClosed: boolean;
@@ -51,7 +51,7 @@ export function pollEmailData(p: PollForEmail, inv: Invitee, ctx: EmailCtx): Pol
     description: p.description, pollUrl: `${app}/p/${encodeURIComponent(p.slug)}${inv.inviteToken ? `#inv=${inv.inviteToken}` : ''}`,
     optionCount: p.options.length, timeZoneLabel: tz === DEFAULT_TZ ? 'dansk tid (Europe/Copenhagen)' : tz,
     dates: groupDates(p.options, tz), deadline: p.deadline ? formatters(tz).deadline(p.deadline) : undefined,
-    respondedCount: p.respondedCount, footerText: ctx.footerText ?? 'Mødetid · Planlæg møder uden login',
+    respondedCount: p.respondedCount, footerText: ctx.footerText ?? 'GrabAday · Planlæg møder uden login',
     personalMessage: ctx.personalMessage,
     unsubscribePollUrl: `${app}/u/p/${inv.linkToken}`,
     unsubscribeAllUrl: `${app}/u/all/${inv.linkToken}`,
