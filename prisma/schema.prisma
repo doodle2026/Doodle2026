@@ -20,6 +20,10 @@ model Event {
   closedAt        DateTime?        @map("closed_at") @db.Timestamptz(3)
   /// Final time chosen by the organizer when closing (optional). Reset on reopen.
   chosenOptionId  Int?             @unique @map("chosen_option_id")
+  /// iCalendar SEQUENCE: bumped whenever the chosen time changes (pick/change/clear or the chosen option is moved).
+  icsSequence     Int              @default(0) @map("ics_sequence")
+  /// iCalendar LAST-MODIFIED of the chosen time.
+  chosenChangedAt DateTime?        @map("chosen_changed_at") @db.Timestamptz(3)
   chosenOption    TimeOption?      @relation("ChosenOption", fields: [chosenOptionId], references: [id], onDelete: SetNull)
   timeOptions     TimeOption[]
   idempotencyKeys IdempotencyKey[]

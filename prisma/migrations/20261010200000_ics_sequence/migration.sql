@@ -1,0 +1,2 @@
+ALTER TABLE "events" ADD COLUMN "ics_sequence" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "events" ADD COLUMN "chosen_changed_at" TIMESTAMPTZ(3);
