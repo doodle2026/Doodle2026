@@ -1,3 +1,4 @@
+import { nextDayMarker } from './vote-client';
 // Browser-side formatting helpers (Danish, 24 h, browser time zone).
 const dayShort = new Intl.DateTimeFormat('da-DK', { weekday: 'short', day: 'numeric', month: 'short' });
 const time = new Intl.DateTimeFormat('da-DK', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -10,7 +11,7 @@ export function whenLabel(startIso: string, endIso: string | null): string {
   let out = `${cap(dayShort.format(s))} · ${time.format(s)}`;
   if (endIso) {
     const e = new Date(endIso);
-    out += '–' + (keyFmt.format(e) === keyFmt.format(s) ? time.format(e) : `${cap(dayShort.format(e))} ${time.format(e)}`);
+    out += '–' + time.format(e) + nextDayMarker(keyFmt.format(s), keyFmt.format(e)); // V8: "23.30–00.30 (+1 dag)"
   }
   return out;
 }
