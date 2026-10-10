@@ -272,3 +272,9 @@ export async function editOption(eventId: number, optionId: number, startAt: Dat
     return { changed, reset };
   });
 }
+
+/** Organizer deletes the whole poll (options, participants, votes, idempotency keys cascade). */
+export async function deleteEvent(eventId: number) {
+  const r = await prisma.event.deleteMany({ where: { id: eventId } });
+  if (!r.count) throw new ApiError(404, ['Afstemningen findes ikke.']);
+}

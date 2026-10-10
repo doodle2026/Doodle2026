@@ -20,3 +20,7 @@ export function takeAdminToken(slug: string, loc: { hash: string; pathname: stri
 export function storeAdminToken(slug: string, token: string, store: Pick<Storage, 'setItem'>) {
   try { store.setItem(KEY(slug), token); } catch { /* ignore */ }
 }
+
+export function forgetAdminToken(slug: string, store: Pick<Storage, 'removeItem'>) {
+  try { store.removeItem(KEY(slug)); } catch { /* ignore */ }
+}

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminJson, adminRoute } from '@/lib/admin-api';
-import { ApiError, existingOptions, loadEvent, updateEvent, withDesignShape } from '@/lib/events';
+import { ApiError, deleteEvent, existingOptions, loadEvent, updateEvent, withDesignShape } from '@/lib/events';
 import { jsonError } from '@/lib/http';
 import { validateEvent } from '@/lib/validate';
 
@@ -35,3 +35,9 @@ export const PATCH = adminRoute(async ({ slug, eventId, body }) => {
   await updateEvent(eventId, value, confirm);
   return adminJson(slug);
 });
+
+/** Organizer deletes the whole poll. No body; Bearer admin token; rate limited. 200 { deleted: true }. */
+export const DELETE = adminRoute(async ({ eventId }) => {
+  await deleteEvent(eventId);
+  return NextResponse.json({ deleted: true }, { headers: { 'Cache-Control': 'no-store' } });
+}, { json: false });
