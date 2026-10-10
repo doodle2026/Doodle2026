@@ -28,7 +28,7 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
   test('Endeligt: Vælg → ✓ Valgt + toast, Fortryd restores; Skift hertil; public banner with .ics + Google', async () => {
     const e = await setup();
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+    await p.goto(`${BASE}/da/p/${e.id}/admin#${e.admin_token}`);
     const b0 = '#admin-grid [data-choose]:nth-child(1)';
     await p.waitForSelector('#admin-grid .choose-btn');
     const btns = p.locator('#admin-grid .choose-btn');
@@ -45,7 +45,7 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
     expect(await p.textContent('#result-banner')).toContain('Endelig dato');
     expect(await p.textContent('#result-banner')).toContain(`(hele dagen)`);
     const v = await browser.newPage();
-    await v.goto(`${BASE}/p/${e.id}`);
+    await v.goto(`${BASE}/da/p/${e.id}`);
     await v.waitForSelector('#result-banner #gcal');
     expect(await v.getAttribute('#gcal', 'href')).toContain(`dates=${Y}1104%2F${Y}1105`);
     expect(await v.textContent('#result-banner')).toContain('Den endelige dato er');
@@ -56,7 +56,7 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
   test('delete participant: named dialog, Annullér has focus, delete moves focus to next trash button', async () => {
     const e = await setup();
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+    await p.goto(`${BASE}/da/p/${e.id}/admin#${e.admin_token}`);
     await p.waitForSelector('#admin-grid .del-btn');
     await p.click('#admin-grid .del-btn >> nth=0');
     await p.waitForSelector('dialog[open] #del-h');
@@ -71,7 +71,7 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
   test('§0.6 Skift dato: ✎ opens a single-select calendar, Esc cancels, taken date refused, Gem dato resets votes', async () => {
     const e = await setup();
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+    await p.goto(`${BASE}/da/p/${e.id}/admin#${e.admin_token}`);
     await p.click('[data-oe] >> nth=0');
     await p.waitForSelector('.opt-edit #oe-cal');
     await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute('data-d'))).toBe(`${Y}-11-03`);
@@ -94,7 +94,7 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
   test('§0.6 + Tilføj datoer: popover calendar, taken dates dotted/disabled, adds N dates on save', async () => {
     const e = await setup();
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+    await p.goto(`${BASE}/da/p/${e.id}/admin#${e.admin_token}`);
     await p.click('#addopt');
     expect(await p.getAttribute('#addopt', 'aria-expanded')).toBe('true');
     await p.waitForSelector('#addpop #addcal');
@@ -116,7 +116,7 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
     await fetch(`${BASE}/api/events/${e.id}/choose`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${e.admin_token}`, 'X-Forwarded-For': ip() },
       body: JSON.stringify({ chosen_option_id: e.time_options[1].id }) });
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+    await p.goto(`${BASE}/da/p/${e.id}/admin#${e.admin_token}`);
     await p.waitForSelector('#toggle');
     expect(await p.textContent('#res-h')).toContain('(2 deltagere)');
     await p.click('#toggle');
@@ -129,7 +129,7 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
     const one = await setup();
     const adm = await (await fetch(`${BASE}/api/events/${one.id}/admin`, { headers: { Authorization: `Bearer ${one.admin_token}` } })).json();
     await fetch(`${BASE}/api/events/${one.id}/participants/${adm.participants[1].id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${one.admin_token}`, 'X-Forwarded-For': ip() } });
-    await p.goto(`${BASE}/p/${one.id}/admin#${one.admin_token}`);
+    await p.goto(`${BASE}/da/p/${one.id}/admin#${one.admin_token}`);
     await expect.poll(() => p.textContent('#res-h')).toContain('(1 deltager)');
     await p.click('#addopt');
     expect(await p.textContent('#addpop')).toContain('Esc annullerer');
@@ -146,17 +146,17 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
     await prisma.timeOption.update({ where: { id: e.time_options[0].id }, data: { date: new Date('2020-01-01T00:00:00Z') } });
     await prisma.$disconnect();
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+    await p.goto(`${BASE}/da/p/${e.id}/admin#${e.admin_token}`);
     await expect.poll(() => p.textContent('#admin-grid thead')).toContain('passeret');
     expect(await p.getAttribute('#admin-grid thead th:nth-child(2)', 'class')).toContain('is-past');
-    await p.goto(`${BASE}/p/${e.id}`);
+    await p.goto(`${BASE}/da/p/${e.id}`);
     await expect.poll(() => p.isDisabled('.tri[data-i="0"]')).toBe(true);
     expect(await p.isDisabled('.tri[data-i="1"]')).toBe(false);
     expect(await p.textContent('thead')).toContain('passeret');
     // edit mode counts everyone (incl. the editor): 2 participants before and while editing
     expect(await p.textContent('thead')).toContain('Deltager (2)');
     const m = await browser.newPage({ viewport: { width: 390, height: 800 } });
-    await m.goto(`${BASE}/p/${e.id}`);
+    await m.goto(`${BASE}/da/p/${e.id}`);
     await expect.poll(() => m.isDisabled('.vcard.is-past .seg button >> nth=0')).toBe(true);
     expect(await m.textContent('.vcard.is-past')).toContain('passeret');
     await m.close();
@@ -167,7 +167,7 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
     const e = await setup();
     const today = new Intl.DateTimeFormat('en-CA').format(new Date()); // browser + test share the box clock/zone
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+    await p.goto(`${BASE}/da/p/${e.id}/admin#${e.admin_token}`);
     await p.click('#addopt');
     await p.waitForSelector(`#addcal td[data-d="${today}"]`);
     expect(await p.getAttribute(`#addcal td[data-d="${today}"]`, 'class')).not.toContain('is-past');
@@ -188,9 +188,9 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
       body: JSON.stringify({ title: 'V7', options: [{ date: `${Y}-11-03` }] }) });
     const e = await r.json() as { id: string; admin_url: string };
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await p.goto(`${BASE}/`);
+    await p.goto(`${BASE}/da`);
     await p.evaluate(([id, u]) => sessionStorage.setItem(`mt-admin-${id}`, new URL(u, location.origin).pathname + new URL(u, location.origin).hash), [e.id, e.admin_url]);
-    await p.goto(`${BASE}/p/${e.id}?created=1`);
+    await p.goto(`${BASE}/da/p/${e.id}?created=1`);
     await p.waitForSelector('#adminurl');
     await p.click('#share-close');
     expect(await p.$('dialog[open]')).toBeNull();

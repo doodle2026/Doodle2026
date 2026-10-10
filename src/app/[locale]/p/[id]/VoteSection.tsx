@@ -1,5 +1,6 @@
 'use client';
 import { plural } from '@/lib/plural';
+import { useLp } from '@/i18n/link';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { ApiEvent } from '@/lib/events';
 import { optionLabel } from '@/lib/format';
@@ -24,6 +25,7 @@ function Badge({ v }: { v: Vote }) {
 export default function VoteSection({ initial }: { initial: ApiEvent }) {
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localTodayIso()), []);
+  const lp = useLp();
   const [ev, setEv] = useState(initial);
   const [wide, setWide] = useState(true); // V3: matches the CSS breakpoint (table ≥ 640 px, cards below)
   const [name, setName] = useState('');
@@ -255,7 +257,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
       {invite && (
         <div className="personal-banner" role="note" id="personal-banner"><span aria-hidden="true">✉</span>
           <span style={{ flex: 1, minWidth: 220 }}>Du er inviteret som <strong>{invite.email}</strong>. Dit svar registreres automatisk hos arrangøren.</span>
-          <a className="link-btn" href={`/p/${ev.slug}`} onClick={(e) => {
+          <a className="link-btn" href={lp(`/p/${ev.slug}`)} onClick={(e) => {
             e.preventDefault(); sessionStorage.removeItem(`inv:${ev.slug}`); setInvite(null);
             if (namePrefilled) { setName(''); setNamePrefilled(false); }
           }}>Ikke dig? Brug det offentlige link</a></div>

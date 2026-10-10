@@ -1,4 +1,5 @@
 'use client';
+import { useLp } from '@/i18n/link';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { counterState, counterText, isBlank, mapServerErrors, shouldBlockEnter, textLength, liveTitleError } from '@/lib/form';
 import { formatDateShort, MAX_DATE_OPTIONS } from '@/lib/dates';
@@ -17,6 +18,7 @@ const newKey = () =>
  * Dates are plain 'YYYY-MM-DD' strings – no times, no time zones.
  */
 export default function CreateForm() {
+  const lp = useLp();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [dates, setDates] = useState<string[]>([]);
@@ -71,7 +73,7 @@ export default function CreateForm() {
       }
       // Hand the one-time admin link to the poll page via sessionStorage — never via the URL/history.
       try { if (data.admin_url) sessionStorage.setItem(`mt-admin-${data.id}`, data.admin_url); } catch { /* private mode */ }
-      window.location.assign(`${data.url}?created=1`); // keep button locked while navigating
+      window.location.assign(`${lp(data.url)}?created=1`); // keep button locked while navigating
     } catch {
       setSummary(['Kunne ikke kontakte serveren. Prøv igen.']);
       setSubmitting(false);

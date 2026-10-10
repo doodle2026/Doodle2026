@@ -37,7 +37,7 @@ describe.skipIf(!existsSync(CHROME))('voting UI (headless Chrome)', () => {
       if (first && r.request().method() === 'POST') { first = false; await r.fetch(); return r.abort('connectionreset'); }
       return r.continue();
     });
-    await p.goto(`${BASE}/p/${id}`);
+    await p.goto(`${BASE}/da/p/${id}`);
     await p.fill('#name', 'Mette');
     for (let k = 0; k < 3; k++) await p.click('.tri[data-i="0"]'); // → Nej
     await p.click('#save');
@@ -57,7 +57,7 @@ describe.skipIf(!existsSync(CHROME))('voting UI (headless Chrome)', () => {
   test('V2: rapid clicks cycle from the current value (none → Ja → Måske), saved as maybe', async () => {
     const { id } = await poll();
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await p.goto(`${BASE}/p/${id}`);
+    await p.goto(`${BASE}/da/p/${id}`);
     await p.fill('#name', 'Hurtig');
     await p.dblclick('.tri[data-i="0"]');
     expect(await p.textContent('.tri[data-i="0"]')).toContain('Måske');
@@ -71,7 +71,7 @@ describe.skipIf(!existsSync(CHROME))('voting UI (headless Chrome)', () => {
   test('V3 mobile hint, V4 name error clears on change, V6 totals only saved, date column heads', async () => {
     const { id } = await poll();
     const m = await browser.newPage({ viewport: { width: 390, height: 844 } });
-    await m.goto(`${BASE}/p/${id}`);
+    await m.goto(`${BASE}/da/p/${id}`);
     await m.waitForFunction(() => document.querySelector('#hint')?.textContent?.includes('Ja, Måske eller Nej'));
     expect(await m.textContent('#hint')).not.toMatch(/celle|←/);
     await m.click('#save'); // empty name → error
@@ -81,7 +81,7 @@ describe.skipIf(!existsSync(CHROME))('voting UI (headless Chrome)', () => {
     await m.close();
 
     const d = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await d.goto(`${BASE}/p/${id}`);
+    await d.goto(`${BASE}/da/p/${id}`);
     expect(await d.textContent('#hint')).toMatch(/celle/);
     await d.click('.tri[data-i="0"]'); // unsaved Ja
     expect(await d.textContent('tfoot')).toContain('0 ja');
@@ -97,7 +97,7 @@ describe.skipIf(!existsSync(CHROME))('voting UI (headless Chrome)', () => {
     for (const timezoneId of ['Pacific/Kiritimati', 'America/Adak', 'UTC']) {
       const ctx = await browser.newContext({ timezoneId, viewport: { width: 1100, height: 900 } });
       const pg = await ctx.newPage();
-      await pg.goto(`${BASE}/p/${id}`);
+      await pg.goto(`${BASE}/da/p/${id}`);
       await pg.waitForSelector('#grid thead');
       expect(await pg.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(timezoneId);
       heads.push((await pg.textContent('#grid thead'))!);
@@ -112,7 +112,7 @@ describe.skipIf(!existsSync(CHROME))('voting UI (headless Chrome)', () => {
   test('V5: returning voter sees a different message once the poll is closed', async () => {
     const { id, admin_token } = await poll();
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await p.goto(`${BASE}/p/${id}`);
+    await p.goto(`${BASE}/da/p/${id}`);
     await p.fill('#name', 'Sofie');
     await p.click('.tri[data-i="0"]');
     await p.click('#save');

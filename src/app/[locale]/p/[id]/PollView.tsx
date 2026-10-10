@@ -1,4 +1,5 @@
 'use client';
+import { useLp } from '@/i18n/link';
 import { useEffect, useRef, useState } from 'react';
 import Header from '@/components/Header';
 import VoteSection from './VoteSection';
@@ -24,6 +25,7 @@ export const adminStoreKey = (slug: string) => `mt-admin-${slug}`;
 
 export default function PollView({ event, shareUrl, justCreated }:
   { event: ApiEvent; shareUrl: string; justCreated: boolean }) {
+  const lp = useLp();
   const [open, setOpen] = useState(justCreated); // organizer (?created=1) sees it open; visitors closed
   const [copy, setCopy] = useState<Record<Which, CopyState>>({ url: 'idle', admin: 'idle' });
   const [status, setStatus] = useState('');
@@ -43,11 +45,11 @@ export default function PollView({ event, shareUrl, justCreated }:
         if (sessionStorage.getItem(storeKey) === 'closed') setOpen(false);
         // The admin link is handed over via sessionStorage (never the URL) and removed after first display.
         const a = sessionStorage.getItem(adminStoreKey(event.slug));
-        if (a && a.startsWith(`/p/${event.slug}/admin#`)) { setAdminUrl(location.origin + a); setOpen(true); }
+        if (a && a.startsWith(`/p/${event.slug}/admin#`)) { setAdminUrl(location.origin + lp(a)); setOpen(true); }
         sessionStorage.removeItem(adminStoreKey(event.slug));
       } catch { /* ignore */ }
       // Drop ?created=1 so a reload/shared copy of the address bar doesn't claim "just created".
-      history.replaceState(null, '', `/p/${event.slug}`);
+      history.replaceState(null, '', lp(`/p/${event.slug}`));
     }
   }, [justCreated, storeKey, event.slug]);
 

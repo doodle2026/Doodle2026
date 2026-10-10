@@ -70,7 +70,7 @@ export default async function setup(project: TestProject) {
     // Warm up (compile) the routes used by tests so per-test timeouts are not eaten by compilation.
     await fetch(`${base}/api/events`, { method: 'POST', body: '{}' });
     await fetch(`${base}/p/AAAAAAAAAAAAAAAAAAAAAA`);
-    await fetch(`${base}/e/AAAAAAAAAAAAAAAAAAAAAA`, { redirect: 'manual' });
+    await fetch(`${base}/en`, { redirect: 'manual' });
     await fetch(`${base}/api/nope`);
   }
   project.provide('baseUrl', base);

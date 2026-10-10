@@ -24,4 +24,4 @@ export function ogTitle(raw: string): { text: string; long: boolean } {
 }
 
 export const countLabel = (n: number) => `${n} datoforslag`;
-export const ogImagePath = (slug: string) => `/p/${slug}/opengraph-image`;
+export const ogImagePath = (slug: string, locale = 'en') => `/${locale}/p/${slug}/opengraph-image`;

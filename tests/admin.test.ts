@@ -158,7 +158,7 @@ describe('close / reopen', () => {
     expect(pub.body.is_closed).toBe(true);
     expect(pub.body.closed_at).toMatch(/Z$/);
     expect(pub.body.chosen_option_id).toBe(a.opts[1].id);
-    const page = await call(`/p/${a.id}`);
+    const page = await call(`/da/p/${a.id}`);
     expect(page.text).toContain('id="result-banner"');
     expect(page.text).toContain('Afstemningen er lukket');
     expect(page.text).toContain('Afstemningen er lukket – endelig dato');
@@ -167,7 +167,7 @@ describe('close / reopen', () => {
     expect(r.status).toBe(200);
     expect(r.body.is_closed).toBe(false);
     expect(r.body.chosen_option_id).toBeNull();
-    expect((await call(`/p/${a.id}`)).text).not.toContain('id="result-banner"');
+    expect((await call(`/da/p/${a.id}`)).text).not.toContain('id="result-banner"');
   });
 
   test('close without a chosen time (empty body ok); invalid / foreign chosen id → 400', async () => {
@@ -175,7 +175,7 @@ describe('close / reopen', () => {
     const c = await call(`/api/events/${a.id}/close`, { method: 'POST', token: a.token, headers: { 'Content-Type': 'application/json' } });
     expect(c.status).toBe(200);
     expect(c.body.chosen_option_id).toBeNull();
-    expect((await call(`/p/${a.id}`)).text).toContain('Arrangøren har lukket for svar.');
+    expect((await call(`/da/p/${a.id}`)).text).toContain('Arrangøren har lukket for svar.');
     for (const v of ['1', -1, 1.5, b.opts[0].id]) {
       expect((await call(`/api/events/${a.id}/close`, json('POST', { chosen_option_id: v }, a.token))).status, String(v)).toBe(400);
     }

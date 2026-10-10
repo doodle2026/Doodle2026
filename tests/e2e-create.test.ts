@@ -15,7 +15,7 @@ describe.skipIf(!existsSync(CHROME))('create with calendar (headless Chrome)', (
 
   test('ARIA grid + keyboard, past disabled, chips with focus rules, counter, submit → date poll', async () => {
     const p = await browser.newPage({ viewport: { width: 1200, height: 1000 }, timezoneId: 'Europe/Copenhagen' });
-    await p.goto(`${BASE}/`);
+    await p.goto(`${BASE}/da`);
     await p.waitForSelector('#dp table[role="grid"][aria-multiselectable="true"]');
     const today = await p.evaluate(() => new Intl.DateTimeFormat('en-CA').format(new Date()));
     const yesterday = iso(new Date(Date.parse(`${today}T00:00:00Z`) - 86400_000));
@@ -47,7 +47,7 @@ describe.skipIf(!existsSync(CHROME))('create with calendar (headless Chrome)', (
     expect(await p.textContent('#date-count')).toBe('7/100 datoer');
     await p.click('#submit');
     await p.waitForURL(/\/p\/[A-Za-z0-9_-]{22}\?created=1/);
-    const id = new URL(p.url()).pathname.split('/')[2];
+    const id = new URL(p.url()).pathname.split('/')[3];
     const ev = await (await fetch(`${BASE}/api/events/${id}`)).json();
     expect(ev).not.toHaveProperty('mode');
     expect(ev.time_options.map((o: { date: string }) => o.date)).toEqual(picked.filter((_, i) => i !== 1 && i !== 8));
@@ -57,7 +57,7 @@ describe.skipIf(!existsSync(CHROME))('create with calendar (headless Chrome)', (
 
   test('Ryd alle; Shift+click range; max 100 enforced with message', async () => {
     const p = await browser.newPage({ viewport: { width: 390, height: 900 } });
-    await p.goto(`${BASE}/`);
+    await p.goto(`${BASE}/da`);
     await p.waitForSelector('#dp td[tabindex="0"]');
     await p.click('#dp [aria-label="Næste måned"]');
     const days = await p.$$eval('#dp td:not(.dp__day--out):not([aria-disabled])', (els) => els.map((e) => e.getAttribute('data-d')!));

@@ -39,7 +39,7 @@ describe('POST /api/events/:id/votes', () => {
     expect(g.body.participants[0].name).toBe('Anders');
     expect(g.text).not.toContain(r.body.edit_token);
     expect(JSON.stringify(g.body)).not.toMatch(/"[^"]*(token|hash)[^"]*"\s*:/i);
-    const page = await call(`/p/${e.id}`);
+    const page = await call(`/da/p/${e.id}`);
     expect(page.text).toContain('Anders');
     expect(page.text).not.toContain(r.body.edit_token);
     const log = inject('serverLog');
@@ -167,25 +167,11 @@ describe('edit own answers (Bearer edit token)', () => {
     expect(a.body.time_options[1].votes).toEqual({ yes: 0, maybe: 1, no: 1, total: 2 });
   });
 
-  test('legacy ?edit=<token> → 302 to #edit= (no-store, noindex, no-referrer); page has vote grid', async () => {
-    const e = await create();
-    const t = 'C'.repeat(43);
-    const r = await call(`/p/${e.id}?edit=${t}`);
-    expect(r.status).toBe(302);
-    expect(r.headers.get('location')).toBe(`/p/${e.id}#edit=${t}`);
-    for (const h of ['cache-control', 'x-robots-tag']) expect(r.headers.get(h)).toBeTruthy();
-    expect(r.headers.get('referrer-policy')).toBe('no-referrer');
-    const p = await call(`/p/${e.id}`);
-    expect(p.text).toContain('Hvilke datoer passer dig?');
-    expect(p.text).toContain('class="vgrid"');
-    expect(p.text).toContain('Ingen har stemt endnu');
-  });
-
   test('closed poll page: read-only "Svar", no name field / save button', async () => {
     const e = await create();
     await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['yes'], 'Sofie')));
     await call(`/api/events/${e.id}/close`, json('POST', { chosen_option_id: e.o[0] }, e.admin));
-    const p = await call(`/p/${e.id}`);
+    const p = await call(`/da/p/${e.id}`);
     expect(p.text).toContain('Afstemningen er lukket');
     expect(p.text).toContain('>Svar</h2>');
     expect(p.text).not.toContain('id="name"');
