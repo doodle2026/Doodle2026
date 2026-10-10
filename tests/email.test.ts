@@ -17,7 +17,7 @@ describe('email adapter', () => {
   it('log mode: never calls Resend and logs only a redacted summary (no links, tokens, body)', async () => {
     const f = vi.fn(); const { lines, log } = capture();
     const m = createMailer({ env: { EMAIL_MODE: 'log', RESEND_API_KEY: KEY }, fetch: f as never, log });
-    expect(await m.send(msg)).toEqual({ ok: true, mode: 'log' });
+    expect(await m.send(msg)).toMatchObject({ ok: true, mode: 'log', id: expect.stringMatching(/^log_/) });
     expect(f).not.toHaveBeenCalled();
     const all = lines.join('\n');
     expect(all).toContain('a***@example.com');

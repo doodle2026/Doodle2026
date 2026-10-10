@@ -1,6 +1,8 @@
 import { spawn, execSync, type ChildProcess } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 
+export const TEST_CRON_SECRET = 'test-cron-secret-0123456789abcdef';
+export const TEST_WEBHOOK_SECRET = 'whsec_' + Buffer.from('test-webhook-secret-32-bytes!!!!').toString('base64');
 const PIDFILE = '.next-test.pid'; // outside the dist dir (which is wiped before each build)
 
 /** Kill a test server from a previous (aborted) run: by pidfile, then whatever still listens on the port. */
@@ -38,7 +40,8 @@ export default async function setup(project: TestProject) {
     execSync('npx prisma migrate deploy', { stdio: 'inherit' });
     const port = process.env.TEST_PORT || '3100';
     base = `http://localhost:${port}`;
-    const env = { ...process.env, APP_URL: base, NEXT_TELEMETRY_DISABLED: '1', NEXT_DIST_DIR: '.next-test' };
+    const env = { ...process.env, APP_URL: base, NEXT_TELEMETRY_DISABLED: '1', NEXT_DIST_DIR: '.next-test',
+      EMAIL_MODE: 'log', CRON_SECRET: TEST_CRON_SECRET, RESEND_WEBHOOK_SECRET: TEST_WEBHOOK_SECRET, EMAIL_DAILY_QUOTA: '100000', EMAIL_MONTHLY_QUOTA: '1000000', RATE_LIMIT_MAIL_PER_HOUR: '1000' };
     const dev = process.env.TEST_SERVER === 'dev';
     // V9: a test server left over from an aborted run keeps .next-test open / the port busy, and `next build`
     // then races with it (ENOENT build-manifest.json). Kill it, start from an empty dist dir, verify the build.

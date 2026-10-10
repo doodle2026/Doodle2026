@@ -81,6 +81,9 @@ export function redact(s: string): string {
   return s.replace(/\b(?:https?:\/\/|www\.)\S+/gi, '[link]').replace(/[A-Za-z0-9_-]{20,}/g, '[redacted]');
 }
 
+/** Log mode returns a fake provider id so status/webhook flows work locally. */
+const logId = () => `log_${globalThis.crypto.randomUUID()}`;
+
 const defaultLog: Log = (level, msg) => (level === 'error' ? console.error(msg) : console.info(msg));
 
 export function createMailer(opts: { env?: Env; fetch?: typeof fetch; log?: Log; timeoutMs?: number } = {}) {
@@ -136,7 +139,7 @@ export function createMailer(opts: { env?: Env; fetch?: typeof fetch; log?: Log;
       return { ok: false, mode, error: 'invalid' };
     }
     const summary = summarize(m);
-    if (mode === 'log') { log('info', `[email:log] ${summary}`); return { ok: true, mode }; }
+    if (mode === 'log') { log('info', `[email:log] ${summary}`); return { ok: true, mode, id: logId() }; }
     if (!cfg.apiKey || !cfg.from) { warnConfig(); log('error', `[email] not sent (config error): ${summary}`); return { ok: false, mode, error: 'config' }; }
 
     const r = await post(RESEND_URL, payload(m), m.idempotencyKey, summary);
@@ -158,7 +161,7 @@ export function createMailer(opts: { env?: Env; fetch?: typeof fetch; log?: Log;
     for (let c = 0; c < good.length; c += BATCH_MAX) {
       const chunk = good.slice(c, c + BATCH_MAX);
       const summary = `batch ${chunk.length} msg(s), first ${summarize(chunk[0][0])}`;
-      if (mode === 'log') { log('info', `[email:log] ${summary}`); chunk.forEach(([, i]) => { out[i] = { ok: true, mode }; }); continue; }
+      if (mode === 'log') { log('info', `[email:log] ${summary}`); chunk.forEach(([, i]) => { out[i] = { ok: true, mode, id: logId() }; }); continue; }
       if (!cfg.apiKey || !cfg.from) { warnConfig(); log('error', `[email] not sent (config error): ${summary}`); chunk.forEach(([, i]) => { out[i] = { ok: false, mode, error: 'config' }; }); continue; }
       const r = await post(RESEND_BATCH_URL, chunk.map(([m]) => payload(m)), idempotencyKey ? `${idempotencyKey}:${c / BATCH_MAX}` : undefined, summary);
       if (!r.ok) { chunk.forEach(([, i]) => { out[i] = { ok: false, mode, error: r.error }; }); continue; }

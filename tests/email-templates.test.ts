@@ -24,7 +24,7 @@ describe('email templates (Doodle UI)', () => {
   });
 
   it('invitation: subject, escaped HTML, absolute asset + public poll links, text part, Outlook VML button', () => {
-    const r = renderInvitation(pollEmailData(poll, { email: 'jan@example.com', name: 'Jan' }, ctx));
+    const r = renderInvitation(pollEmailData(poll, { email: 'jan@example.com', name: 'Jan', linkToken: 'T'.repeat(43) }, ctx));
     expect(r.subject).toBe('Mette Hansen inviterer dig: Teammøde <script>alert(1)</script> & kage');
     expect(r.html).not.toContain('<script>alert');
     expect(r.html).toContain('&lt;script&gt;');
@@ -38,19 +38,20 @@ describe('email templates (Doodle UI)', () => {
   });
 
   it('reminder: subject with deadline, responded count', () => {
-    const r = renderReminder(pollEmailData({ ...poll, deadline: new Date('2026-10-16T10:00:00Z'), respondedCount: 4 }, { email: 'a@b.dk' }, ctx));
+    const r = renderReminder(pollEmailData({ ...poll, deadline: new Date('2026-10-16T10:00:00Z'), respondedCount: 4 }, { email: 'a@b.dk', linkToken: 'T'.repeat(43) }, ctx));
     expect(r.subject).toBe('Påmindelse: Teammøde <script>alert(1)</script> & kage – lukker fredag 16. oktober kl. 12:00');
-    expect(r.text).toContain('4 har allerede svaret');
+    expect(r.text).toContain('4 har svaret indtil nu');
+    expect(r.text).toContain('Har du svaret?');
   });
 
   it('long titles are clipped to 60 graphemes in the subject; newlines never reach the subject', () => {
-    const r = renderInvitation(pollEmailData({ ...poll, title: '👨‍👩‍👧'.repeat(70) + '\nBcc: x@y.z' }, { email: 'a@b.dk' }, ctx));
+    const r = renderInvitation(pollEmailData({ ...poll, title: '👨‍👩‍👧'.repeat(70) + '\nBcc: x@y.z' }, { email: 'a@b.dk', linkToken: 'T'.repeat(43) }, ctx));
     expect(r.subject).not.toMatch(/[\r\n]/);
     expect([...new Intl.Segmenter('da', { granularity: 'grapheme' }).segment(r.subject.split(': ')[1])].length).toBe(60);
   });
 
   it('rule: only the public /p/<id> link – admin/edit links are rejected', () => {
-    const d = pollEmailData(poll, { email: 'a@b.dk' }, ctx);
+    const d = pollEmailData(poll, { email: 'a@b.dk', linkToken: 'T'.repeat(43) }, ctx);
     expect(() => renderInvitation({ ...d, pollUrl: `https://moedetid.dk/p/x/admin#${ADMIN_TOKEN}` })).toThrow(/public/);
     expect(() => renderInvitation({ ...d, pollUrl: `https://moedetid.dk/p/x#edit=${ADMIN_TOKEN}` })).toThrow(/public/);
     expect(() => renderInvitation({ ...d, description: `se https://moedetid.dk/p/x/admin#${ADMIN_TOKEN}` })).toThrow(/admin\/edit/);
@@ -60,11 +61,12 @@ describe('email templates (Doodle UI)', () => {
 
 describe('email policy', () => {
   const invitees = [
-    { email: 'Jan@Example.com', name: 'Jan', unsubscribeUrl: 'https://moedetid.dk/u/abc' },
-    { email: 'jan@example.com' }, // duplicate (case-insensitive)
-    { email: 'nope' },
-    { email: 'gone@example.com', unsubscribedAt: new Date() },
-    { email: 'done@example.com', respondedAt: new Date() },
+    { email: 'Jan@Example.com', name: 'Jan', linkToken: 'J'.repeat(43) },
+    { email: 'jan@example.com', linkToken: 'X'.repeat(43) }, // duplicate (case-insensitive)
+    { email: 'nope', linkToken: 'X'.repeat(43) },
+    { email: 'gone@example.com', linkToken: 'X'.repeat(43), unsubscribedAt: new Date() },
+    { email: 'done@example.com', linkToken: 'D'.repeat(43) },
+    { email: 'bounce@example.com', linkToken: 'B'.repeat(43), bounced: true },
   ];
 
   it('invitations: one message per recipient, no replyTo, idempotency invite:<poll>:<email>, List-Unsubscribe', () => {
@@ -73,9 +75,9 @@ describe('email policy', () => {
     const m = p.messages[0];
     expect(m.replyTo).toBeUndefined();
     expect(m.idempotencyKey).toBe(`invite:${poll.slug}:jan@example.com`);
-    expect(m.headers).toEqual({ 'List-Unsubscribe': '<https://moedetid.dk/u/abc>', 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' });
-    expect(p.messages[1].headers).toBeUndefined();
-    expect(p.skipped.map((s) => s.reason)).toEqual(['duplicate', 'invalid_email', 'unsubscribed']);
+    expect(m.headers).toEqual({ 'List-Unsubscribe': `<https://moedetid.dk/api/u/p/${'J'.repeat(43)}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' });
+    for (const u of [`/u/p/${'J'.repeat(43)}`, `/u/all/${'J'.repeat(43)}`, `/abuse/${'J'.repeat(43)}`]) { expect(m.html).toContain(`https://moedetid.dk${u}`); expect(m.text).toContain(`https://moedetid.dk${u}`); }
+    expect(p.skipped.map((s) => s.reason)).toEqual(['duplicate', 'invalid_email', 'unsubscribed', 'bounced']);
   });
 
   it('reminders: all non-unsubscribed invitees; per poll max one per 24 h, max 3 total, none after close', () => {
@@ -84,7 +86,7 @@ describe('email policy', () => {
     expect(p.blocked).toBeNull();
     expect(p.messages.map((m) => m.to)).toEqual(['Jan@Example.com', 'done@example.com']);
     expect(p.messages[0].idempotencyKey).toBe(`reminder:${poll.slug}:jan@example.com`);
-    expect(p.skipped.map((s) => s.reason)).toEqual(['duplicate', 'invalid_email', 'unsubscribed']);
+    expect(p.skipped.map((s) => s.reason)).toEqual(['duplicate', 'invalid_email', 'unsubscribed', 'bounced']);
     const h = (n: number) => new Date(now.getTime() - n * 3600_000);
     expect(planReminders({ ...poll, isClosed: true }, invitees, ctx, now)).toMatchObject({ blocked: 'closed', messages: [] });
     expect(planReminders({ ...poll, remindersSent: 1, lastReminderAt: h(23) }, invitees, ctx, now)).toMatchObject({ blocked: 'too_soon', messages: [] });
@@ -127,7 +129,7 @@ describe('adapter: headers, replyTo override, batch', () => {
   it('batch in log mode never calls the provider', async () => {
     const f = vi.fn();
     const r = await createMailer({ env: { EMAIL_MODE: 'log' }, fetch: f as never, log: () => {} }).sendBatch([{ to: 'a@b.dk', subject: 's', text: 't' }]);
-    expect(r).toEqual([{ ok: true, mode: 'log' }]);
+    expect(r).toMatchObject([{ ok: true, mode: 'log' }]);
     expect(f).not.toHaveBeenCalled();
   });
 });
@@ -142,8 +144,8 @@ describe('From display name (organizer)', () => {
   it('From = "<name> via Mødetid" <EMAIL_FROM address>; app name only without organizer name', async () => {
     const f = vi.fn(async () => new Response('{"id":"1"}'));
     const m = createMailer({ env: { EMAIL_MODE: 'send', RESEND_API_KEY: 'k', EMAIL_FROM: 'Mødetid <noreply@moedetid.dk>' }, fetch: f as never, log: () => {} });
-    const [withName] = planInvitations({ ...poll, organizerFromName: 'Mette <x@y.z>' }, [{ email: 'a@b.dk' }], ctx).messages;
-    const [noName] = planInvitations(poll, [{ email: 'a@b.dk' }], ctx).messages;
+    const [withName] = planInvitations({ ...poll, organizerFromName: 'Mette <x@y.z>' }, [{ email: 'a@b.dk', linkToken: 'T'.repeat(43) }], ctx).messages;
+    const [noName] = planInvitations(poll, [{ email: 'a@b.dk', linkToken: 'T'.repeat(43) }], ctx).messages;
     await m.send(withName); await m.send(noName);
     const froms = (f.mock.calls as unknown as [string, RequestInit][]).map((c) => JSON.parse(String(c[1].body)).from);
     expect(froms).toEqual(['"Mette via Mødetid" <noreply@moedetid.dk>', '"Mødetid" <noreply@moedetid.dk>']);

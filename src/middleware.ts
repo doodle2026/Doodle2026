@@ -57,7 +57,9 @@ const isSecretUrl = (req: NextRequest) =>
   /^\/p\/[^/]+\/admin(\/|$)/.test(req.nextUrl.pathname) ||
   /^\/api\/events\/[^/]+\/(admin|close|reopen|rotate-admin)\/?$/.test(req.nextUrl.pathname) ||
   (req.method === 'PATCH' && req.nextUrl.pathname.startsWith('/api/')) ||
-  req.nextUrl.searchParams.has('edit');
+  req.nextUrl.searchParams.has('edit') ||
+  // Mail footer tokens (unsubscribe / report abuse) in page and API paths.
+  /^\/(api\/)?(u\/(p|all)|abuse)\//.test(req.nextUrl.pathname);
 
 /** Location built on APP_URL (not the Host header); Next emits same-origin redirects as relative paths. */
 const redirect = (req: NextRequest, location: string, status: 301 | 302 | 308) =>

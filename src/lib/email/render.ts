@@ -10,7 +10,10 @@ export interface PollEmailData {
   assetBaseUrl: string; appUrl: string; eventTitle: string; organizerName: string; recipientName?: string;
   description?: string; pollUrl: string; optionCount: number; timeZoneLabel: string;
   dates: { dateLabel: string; slots: { timeLabel: string }[] }[];
-  deadline?: string; respondedCount?: number; footerText?: string; unsubscribeUrl?: string;
+  deadline?: string; respondedCount?: number; footerText?: string;
+  /** Organizer's optional message: plain text, ≤ 1000 graphemes, escaped by the template (pre-line). */
+  personalMessage?: string;
+  unsubscribePollUrl: string; unsubscribeAllUrl: string; reportAbuseUrl: string;
 }
 export interface Rendered { subject: string; html: string; text: string }
 
@@ -64,7 +67,7 @@ const decode = (s: string) => s.replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fr
 
 function render(kind: 'invitation' | 'reminder', d: PollEmailData, subject: string): Rendered {
   assertPublicOnly(d);
-  const data = { ...d, description: d.description?.trim() || undefined, respondedCount: d.respondedCount || undefined };
+  const data = { ...d, description: d.description?.trim() || undefined, personalMessage: d.personalMessage?.trim() || undefined, respondedCount: d.respondedCount || undefined };
   const r = { subject: oneLine(subject), html: Mustache.render(TEMPLATES[kind].html, data, undefined, { escape }), text: Mustache.render(TEMPLATES[kind].text, data, undefined, { escape: String }) }; // plain text: no HTML escaping
   assertPublicOnly(d, r);
   return r;
