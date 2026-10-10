@@ -19,12 +19,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const ev = await loadEvent((await params).id);
   if (!ev) return jsonError(404, ['Afstemningen findes ikke.']);
   const o = ev.time_options.find((x) => x.id === ev.chosen_option_id);
-  if (!o) return jsonError(404, ['Arrangøren har ikke valgt et tidspunkt endnu.']);
+  if (!o) return jsonError(404, ['Arrangøren har ikke valgt en dato endnu.']);
   const meta = await prisma.event.findUnique({ where: { slug: ev.slug }, select: { icsSequence: true, chosenChangedAt: true, createdAt: true } });
   const app = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
   const body = buildIcs({
     uid: `${ev.slug}@${ICS_UID_DOMAIN}`, stamp: new Date(), sequence: meta?.icsSequence ?? 0,
-    lastModified: meta?.chosenChangedAt ?? meta?.createdAt, start: new Date(o.start_at), end: o.end_at ? new Date(o.end_at) : null,
+    lastModified: meta?.chosenChangedAt ?? meta?.createdAt,
+    ...(o.date ? { date: o.date } : { start: new Date(o.start_at!), end: o.end_at ? new Date(o.end_at) : null }),
     summary: stripInvisible(ev.title), description: stripInvisible(ev.description) || undefined, url: `${app}/p/${ev.slug}`,
   });
   return new Response(body, {

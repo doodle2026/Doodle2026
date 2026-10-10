@@ -7,7 +7,7 @@
  *   who are not unsubscribed (answered or not – per the functional spec)
  * - unsubscribed invitees get nothing; List-Unsubscribe (+ One-Click) header when an unsubscribe URL exists
  */
-import { DEFAULT_TZ, formatters, groupDates, renderInvitation, renderReminder, type PollEmailData } from './render';
+import { DEFAULT_TZ, formatters, groupDates, groupPlainDates, renderInvitation, renderReminder, type PollEmailData } from './render';
 import { isEmail, sanitizeDisplayName, type EmailMessage } from './send';
 
 export const APP_NAME = 'GrabAday';
@@ -19,7 +19,8 @@ export interface PollForEmail {
   organizerFromName?: string;
   /** Reminder history for the poll (persisted by the caller). */
   remindersSent?: number; lastReminderAt?: Date | null;
-  options: { startAt: Date; endAt: Date | null }[];
+  /** Date polls: { date }; legacy timed polls: { startAt, endAt }. */
+  options: ({ date: string } | { startAt: Date; endAt: Date | null })[];
   deadline?: Date | null; respondedCount?: number; timeZone?: string;
 }
 export interface Invitee {
@@ -45,12 +46,14 @@ const base = (u: string) => u.replace(/\/+$/, '');
 export function pollEmailData(p: PollForEmail, inv: Invitee, ctx: EmailCtx): PollEmailData {
   const tz = p.timeZone ?? DEFAULT_TZ;
   const app = base(ctx.appUrl);
+  const dateOnly = p.options.length > 0 && p.options.every((o) => 'date' in o);
   return {
     assetBaseUrl: `${app}/email-assets`, appUrl: app,
     eventTitle: p.title, organizerName: p.organizerName, recipientName: inv.name?.trim() || undefined,
     description: p.description, pollUrl: `${app}/p/${encodeURIComponent(p.slug)}${inv.inviteToken ? `#inv=${inv.inviteToken}` : ''}`,
-    optionCount: p.options.length, timeZoneLabel: tz === DEFAULT_TZ ? 'dansk tid (Europe/Copenhagen)' : tz,
-    dates: groupDates(p.options, tz), deadline: p.deadline ? formatters(tz).deadline(p.deadline) : undefined,
+    optionCount: p.options.length, timeZoneLabel: dateOnly ? '' : tz === DEFAULT_TZ ? 'dansk tid (Europe/Copenhagen)' : tz,
+    dates: dateOnly ? groupPlainDates(p.options.map((o) => (o as { date: string }).date)) : groupDates(p.options as { startAt: Date; endAt: Date | null }[], tz),
+    dateOnly, deadline: p.deadline ? formatters(tz).deadline(p.deadline) : undefined,
     respondedCount: p.respondedCount, footerText: ctx.footerText ?? 'GrabAday · Planlæg møder uden login',
     personalMessage: ctx.personalMessage,
     unsubscribePollUrl: `${app}/u/p/${inv.linkToken}`,

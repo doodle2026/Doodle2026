@@ -3,11 +3,13 @@ import { textLength } from './validate';
 const ZONE = 'Europe/Copenhagen'; // link previews are rendered server-side for a Danish audience
 
 /** "14. oktober 2026" / "14.–16. oktober 2026" / "30. oktober – 2. november 2026" / "30. dec. 2026 – 2. jan. 2027" style. */
+/** Accepts plain dates 'YYYY-MM-DD' (date polls, formatted in UTC = no shift) or ISO instants (legacy, Copenhagen). */
 export function dateRangeDa(isoStarts: string[]): string {
   if (!isoStarts.length) return '';
   const p = (iso: string) => {
-    const parts = Object.fromEntries(new Intl.DateTimeFormat('da-DK', { timeZone: ZONE, day: 'numeric', month: 'long', year: 'numeric' })
-      .formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
+    const plain = /^\d{4}-\d{2}-\d{2}$/.test(iso);
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('da-DK', { timeZone: plain ? 'UTC' : ZONE, day: 'numeric', month: 'long', year: 'numeric' })
+      .formatToParts(new Date(plain ? `${iso}T00:00:00Z` : iso)).map((x) => [x.type, x.value]));
     return { d: parts.day, m: parts.month, y: parts.year };
   };
   const sorted = [...isoStarts].sort();
@@ -28,6 +30,7 @@ export function truncateGraphemes(s: string, max: number): string {
   return out.trimEnd() + '…';
 }
 
-export function pollDescription(n: number, starts: string[]): string {
+export function pollDescription(n: number, starts: string[], mode: 'date' | 'datetime' = 'date'): string {
+  if (mode === 'date') return `Vælg de datoer, der passer dig. ${n} ${n === 1 ? 'dato' : 'datoer'}, ${dateRangeDa(starts)}.`;
   return `Stem på det tidspunkt, der passer dig. ${n} tidsforslag, ${dateRangeDa(starts)}.`;
 }

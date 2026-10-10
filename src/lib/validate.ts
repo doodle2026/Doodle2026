@@ -1,3 +1,4 @@
+import { isRealDate, MAX_DATE_OPTIONS, minAllowedDate } from './dates';
 export const LIMITS = { title: 200, description: 2000, timeOptions: 100, bodyBytes: 32 * 1024 } as const;
 // ISO 8601 with mandatory offset: 2026-11-03T09:00[:00[.sss]](Z|±HH:MM)
 const ISO_RE =
@@ -44,8 +45,10 @@ export function normalizeName(s: string): string {
 /** Uniqueness key: normalized, NFKC, Danish lower-case, and with no invisible chars at all. */
 export const nameKey = (s: string) => normalizeName(s).normalize('NFKC').replace(INVISIBLE_RE, (c) => (c === ' ' ? ' ' : '')).toLocaleLowerCase('da');
 
-export interface CleanOption { id?: number; startAt: Date; endAt: Date | null }
-export interface CleanEvent { title: string; description: string; timeOptions: CleanOption[] }
+/** Legacy timed polls: startAt/endAt set, date null. Date polls: date 'YYYY-MM-DD', startAt/endAt null. */
+export interface CleanOption { id?: number; startAt: Date | null; endAt: Date | null; date: string | null }
+export type PollMode = 'date' | 'datetime';
+export interface CleanEvent { title: string; description: string; mode: PollMode; timeOptions: CleanOption[] }
 
 /** Parse ISO datetime with offset → Date, or null if invalid (incl. impossible calendar dates). */
 export function parseIsoWithOffset(s: unknown): Date | null {
@@ -67,6 +70,35 @@ export interface ValidateOptions {
   allowIds?: boolean;
   /** PATCH: unchanged existing options may stay even if they now lie in the past. */
   pastAllowed?: (o: CleanOption) => boolean;
+  /** 'date' (default; reads `options: [{date}]`) or legacy 'datetime' (reads `time_options: [{start,end}]`). */
+  mode?: PollMode;
+}
+
+/** Date options: 1–100 real dates ≥ UTC today − 1 day, duplicates → 400 (not deduped), returned sorted ascending. */
+function validateDates(raw: unknown, now: Date, opts: ValidateOptions, errors: string[]): CleanOption[] {
+  const clean: CleanOption[] = [];
+  if (raw != null && !Array.isArray(raw)) { errors.push('Datoer skal være en liste.'); return clean; }
+  if (!raw || raw.length === 0) { errors.push('Mindst én dato er påkrævet.'); return clean; }
+  if (raw.length > MAX_DATE_OPTIONS) { errors.push(`Højst ${MAX_DATE_OPTIONS} datoer.`); return clean; }
+  const min = minAllowedDate(now);
+  const seen = new Set<string>(), seenIds = new Set<number>();
+  raw.forEach((o: unknown, i: number) => {
+    const n = i + 1;
+    if (!isPlainObject(o)) { errors.push(`Dato ${n}: skal være et objekt.`); return; }
+    let id: number | undefined;
+    if (o.id !== undefined && o.id !== null) {
+      if (!opts.allowIds || typeof o.id !== 'number' || !Number.isSafeInteger(o.id) || o.id <= 0) { errors.push(`Dato ${n}: ugyldigt id.`); return; }
+      if (seenIds.has(o.id)) { errors.push(`Dato ${n}: id findes to gange.`); return; }
+      seenIds.add(o.id); id = o.id;
+    }
+    if (!isRealDate(o.date)) { errors.push(`Dato ${n}: ugyldig dato (format ÅÅÅÅ-MM-DD, fx 2026-10-16).`); return; }
+    const c: CleanOption = { ...(id !== undefined ? { id } : {}), date: o.date, startAt: null, endAt: null };
+    if (o.date < min && !opts.pastAllowed?.(c)) { errors.push(`Dato ${n}: datoen ligger i fortiden.`); return; }
+    if (seen.has(o.date)) { errors.push(`Dato ${n}: ${o.date} er valgt flere gange.`); return; }
+    seen.add(o.date);
+    clean.push(c);
+  });
+  return clean.sort((a, b) => (a.date! < b.date! ? -1 : 1));
 }
 
 export function validateEvent(body: unknown, now: Date = new Date(), opts: ValidateOptions = {}):
@@ -86,6 +118,13 @@ export function validateEvent(body: unknown, now: Date = new Date(), opts: Valid
   else description = stripInvisible((body.description as string | undefined) ?? '').trim();
   if (textLength(description) > LIMITS.description) errors.push(`Beskrivelse må højst være ${LIMITS.description} tegn.`);
 
+  const mode: PollMode = opts.mode ?? 'date';
+  if (mode === 'date') {
+    if (body.options === undefined && body.time_options !== undefined) errors.push('Afstemninger bruger nu datoer: send options: [{ "date": "ÅÅÅÅ-MM-DD" }].');
+    const dates = errors.length && body.options === undefined ? [] : validateDates(body.options, now, opts, errors);
+    return { errors, value: errors.length ? null : { title, description, mode, timeOptions: dates } };
+  }
+  // ---- Legacy timed polls (mode 'datetime') – kept as-is until legacy polls are retired. ----
   const clean: CleanOption[] = [];
   const raw = body.time_options;
   if (raw != null && !Array.isArray(raw)) errors.push('Tidsforslag skal være en liste.');
@@ -117,12 +156,12 @@ export function validateEvent(body: unknown, now: Date = new Date(), opts: Valid
         if (!end) { errors.push(`Tidsforslag ${n}: ugyldigt sluttidspunkt (ISO 8601 med tidszone).`); return; }
         if (end <= start) { errors.push(`Tidsforslag ${n}: sluttidspunkt skal være efter starttidspunkt.`); return; }
       }
-      if (start < now && !opts.pastAllowed?.({ id, startAt: start, endAt: end })) { errors.push(`Tidsforslag ${n}: tidspunktet ligger i fortiden.`); return; }
+      if (start < now && !opts.pastAllowed?.({ id, startAt: start, endAt: end, date: null })) { errors.push(`Tidsforslag ${n}: tidspunktet ligger i fortiden.`); return; }
       const key = `${start.getTime()}|${end?.getTime() ?? ''}`;
       if (seen.has(key)) return; // dedupe identical instants, even if written with different offsets
       seen.add(key);
-      clean.push({ ...(id !== undefined ? { id } : {}), startAt: start, endAt: end });
+      clean.push({ ...(id !== undefined ? { id } : {}), startAt: start, endAt: end, date: null });
     });
   }
-  return { errors, value: errors.length ? null : { title, description, timeOptions: clean } };
+  return { errors, value: errors.length ? null : { title, description, mode, timeOptions: clean } };
 }

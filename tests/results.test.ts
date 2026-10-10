@@ -1,4 +1,8 @@
-import { describe, test, expect, inject } from 'vitest';
+import { describe, test, expect, inject, afterAll } from 'vitest';
+import { PrismaClient } from '@prisma/client';
+import { createLegacyPoll } from './legacy';
+const prisma = new PrismaClient();
+afterAll(() => prisma.$disconnect());
 
 const BASE = inject('baseUrl');
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -17,8 +21,7 @@ const json = (method: string, body: unknown, token?: string) =>
   ({ method, token, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const Y = new Date().getUTCFullYear() + 1;
 async function create(title = 'Teammøde; Q4, "plan"', description = 'Linje 1\nLinje 2') {
-  const r = await call('/api/events', json('POST', { title, description, time_options: [
-    { start: `${Y}-11-03T09:00:00+01:00`, end: `${Y}-11-03T10:30:00+01:00` }, { start: `${Y}-11-04T13:00:00Z` }] }));
+  const r = await call('/api/events', json('POST', { title, description, options: [{ date: `${Y}-11-03` }, { date: `${Y}-11-04` }] }));
   return { id: r.body.id as string, admin: r.body.admin_token as string, o: (r.body.time_options as Json[]).map((x) => x.id as number) };
 }
 
@@ -31,7 +34,7 @@ describe('choose final time (admin)', () => {
     expect(c.status).toBe(200);
     expect(c.body).toMatchObject({ chosen_option_id: e.o[0], is_closed: false });
     let page = await call(`/p/${e.id}`);
-    expect(page.text).toContain('Tidspunktet er valgt');
+    expect(page.text).toContain('Den endelige dato er');
     expect(page.text).toContain(`href="/api/events/${e.id}/ics"`);
     expect(page.text).toContain('is-chosen');
     const ch = await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: e.o[1] }, e.admin));
@@ -39,7 +42,7 @@ describe('choose final time (admin)', () => {
     const cl = await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: null }, e.admin));
     expect(cl.body.chosen_option_id).toBeNull();
     page = await call(`/p/${e.id}`);
-    expect(page.text).not.toContain('Tidspunktet er valgt');
+    expect(page.text).not.toContain('Den endelige dato er');
     expect((await call(`/api/events/${e.id}`)).body.chosen_option_id).toBeNull();
   });
 
@@ -56,7 +59,7 @@ describe('choose final time (admin)', () => {
     await call(`/api/events/${e.id}/close`, json('POST', {}, e.admin));
     const c = await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: e.o[1] }, e.admin));
     expect(c.body).toMatchObject({ is_closed: true, chosen_option_id: e.o[1] });
-    expect((await call(`/p/${e.id}`)).text).toContain('Afstemningen er lukket – endeligt tidspunkt');
+    expect((await call(`/p/${e.id}`)).text).toContain('Afstemningen er lukket – endelig dato');
   });
 });
 
@@ -78,8 +81,9 @@ describe('.ics', () => {
     expect(unfolded).toContain(`UID:${e.id}@grabaday.com\r\n`);
     expect(unfolded).toMatch(/SEQUENCE:\d+\r\nLAST-MODIFIED:\d{8}T\d{6}Z/);
     expect(unfolded).toMatch(/DTSTAMP:\d{8}T\d{6}Z/);
-    expect(unfolded).toContain(`DTSTART:${Y}1103T080000Z`);
-    expect(unfolded).toContain(`DTEND:${Y}1103T093000Z`);
+    // all-day: VALUE=DATE, DTEND = next day (exclusive), no TZID, no times
+    expect(unfolded).toContain(`DTSTART;VALUE=DATE:${Y}1103\r\nDTEND;VALUE=DATE:${Y}1104\r\n`);
+    expect(unfolded).not.toMatch(/TZID|DTSTART:/);
     expect(unfolded).toContain('SUMMARY:Teammøde\\; Q4\\, "plan" ');
     expect(unfolded).toContain('DESCRIPTION:Linje 1\\nLinje 2');
     expect(t).not.toContain(e.admin);
@@ -102,14 +106,19 @@ describe('.ics', () => {
     expect(field(b, 'UID')).toBe(field(a, 'UID'));
     expect(Number(field(b, 'SEQUENCE'))).toBe(Number(field(a, 'SEQUENCE')) + 1);
     expect(field(b, 'LAST-MODIFIED') > field(a, 'LAST-MODIFIED')).toBe(true);
-    expect(field(b, 'DTSTART')).not.toBe(field(a, 'DTSTART'));
+    expect(field(b, 'DTSTART;VALUE=DATE')).not.toBe(field(a, 'DTSTART;VALUE=DATE'));
     // moving the chosen option via PATCH also bumps it
     const adm = await call(`/api/events/${e.id}/admin`, { token: e.admin });
-    const moved = adm.body.time_options.map((o: Json) => ({ id: o.id, start: o.id === e.o[1] ? `${Y}-11-06T13:00:00Z` : o.start_at, end: o.end_at }));
-    expect((await call(`/api/events/${e.id}`, json('PATCH', { title: 'T', time_options: moved }, e.admin))).status).toBe(200);
+    const moved = adm.body.time_options.map((o: Json) => ({ id: o.id, date: o.id === e.o[1] ? `${Y}-11-06` : o.date }));
+    expect((await call(`/api/events/${e.id}`, json('PATCH', { title: 'T', options: moved }, e.admin))).status).toBe(200);
     const c = await ics();
     expect(Number(field(c, 'SEQUENCE'))).toBe(Number(field(b, 'SEQUENCE')) + 1);
-    expect(field(c, 'DTSTART')).toBe(`${Y}1106T130000Z`);
+    expect(c).toContain(`DTSTART;VALUE=DATE:${Y}1106\r\nDTEND;VALUE=DATE:${Y}1107`);
+    // single-option edit endpoint bumps it too
+    expect((await call(`/api/events/${e.id}/options/${e.o[1]}`, json('PATCH', { date: `${Y}-11-07`, reset_votes: false }, e.admin))).status).toBe(200);
+    const d2 = await ics();
+    expect(Number(field(d2, 'SEQUENCE'))).toBe(Number(field(c, 'SEQUENCE')) + 1);
+    expect(d2).toContain(`DTSTART;VALUE=DATE:${Y}1107\r\nDTEND;VALUE=DATE:${Y}1108`);
   });
 
   test('bidi/invisible chars never reach the ICS filename (ASCII or UTF-8) or SUMMARY', async () => {
@@ -122,11 +131,40 @@ describe('.ics', () => {
     expect(r.text).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
   });
 
-  test('no end time → default 1 hour', async () => {
-    const e = await create();
-    await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: e.o[1] }, e.admin));
-    const t = (await call(`/api/events/${e.id}/ics`)).text;
-    expect(t).toContain(`DTSTART:${Y}1104T130000Z\r\nDTEND:${Y}1104T140000Z`);
+  test('year end: DTEND rolls over to next year; Google link uses dates=YYYYMMDD/YYYYMMDD', async () => {
+    const r = await call('/api/events', json('POST', { title: 'Nytår', options: [{ date: `${Y}-12-31` }] }));
+    await call(`/api/events/${r.body.id}/choose`, json('POST', { chosen_option_id: r.body.time_options[0].id }, r.body.admin_token));
+    expect((await call(`/api/events/${r.body.id}/ics`)).text).toContain(`DTSTART;VALUE=DATE:${Y}1231\r\nDTEND;VALUE=DATE:${Y + 1}0101`);
+    const page = (await call(`/p/${r.body.id}`)).text;
+    expect(page).toContain(`dates=${Y}1231%2F${Y + 1}0101`);
+    expect(page).toMatch(/(hele dagen)/);
+  });
+});
+
+describe('LEGACY timed poll (mode datetime) still works end to end', () => {
+  test('GET with ?tz, vote, choose, close, timed .ics (default 1 h), admin PATCH with time_options', async () => {
+    const p = await createLegacyPoll(prisma, { title: 'Gammel', options: [
+      { start: `${Y}-11-03T09:00:00+01:00`, end: `${Y}-11-03T10:30:00+01:00` }, { start: `${Y}-11-04T13:00:00Z` }] });
+    const g = await call(`/api/events/${p.id}?tz=Europe/Copenhagen`);
+    expect(g.body.mode).toBe('datetime');
+    expect(g.body.timezone).toBe('Europe/Copenhagen');
+    expect(g.body.options[0]).toEqual({ date: `${Y}-11-03`, start: '09:00', end: '10:30' });
+    expect(g.body.time_options[0]).toMatchObject({ date: null, start_at: `${Y}-11-03T08:00:00.000Z` });
+    const o = g.body.time_options.map((x: Json) => x.id as number);
+    expect((await call(`/api/events/${p.id}/votes`, json('POST', { name: 'Ole', votes: [{ option_id: o[0], value: 'yes' }, { option_id: o[1], value: 'maybe' }] }))).status).toBe(201);
+    await call(`/api/events/${p.id}/choose`, json('POST', { chosen_option_id: o[1] }, p.admin_token));
+    expect((await call(`/api/events/${p.id}/ics`)).text).toContain(`DTSTART:${Y}1104T130000Z\r\nDTEND:${Y}1104T140000Z`);
+    await call(`/api/events/${p.id}/choose`, json('POST', { chosen_option_id: o[0] }, p.admin_token));
+    expect((await call(`/api/events/${p.id}/ics`)).text).toContain(`DTSTART:${Y}1103T080000Z\r\nDTEND:${Y}1103T093000Z`);
+    expect((await call(`/p/${p.id}`)).text).toContain('Tidspunktet er valgt');
+    // legacy editing keeps time options; date bodies are not accepted for legacy polls
+    const tOpts = g.body.time_options.map((x: Json) => ({ id: x.id, start: x.start_at, end: x.end_at }));
+    expect((await call(`/api/events/${p.id}`, json('PATCH', { title: 'Gammel 2', time_options: [...tOpts, { start: `${Y}-11-05T10:00:00Z` }] }, p.admin_token))).status).toBe(200);
+    expect((await call(`/api/events/${p.id}`, json('PATCH', { title: 'x', options: [{ date: `${Y}-11-05` }] }, p.admin_token))).status).toBe(400);
+    expect((await call(`/api/events/${p.id}/options/${o[1]}`, json('PATCH', { start_at: `${Y}-11-04T15:00:00Z`, end_at: null, reset_votes: false }, p.admin_token))).status).toBe(200);
+    const c = await call(`/api/events/${p.id}/close`, json('POST', {}, p.admin_token));
+    expect(c.body.is_closed).toBe(true);
+    expect((await call(`/api/events/${p.id}/votes`, json('POST', { name: 'Sen', votes: [{ option_id: o[0], value: 'yes' }] }))).status).toBe(423);
   });
 });
 

@@ -1,3 +1,4 @@
+import { addDays, basicDate } from './dates';
 import { INVISIBLE_FORMAT_RE } from './validate';
 // Minimal RFC 5545 VCALENDAR/VEVENT writer (no deps).
 const CRLF = '\r\n';
@@ -26,17 +27,21 @@ export function icsFold(line: string): string {
 /** 20261103T090000Z */
 export const icsDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
-export interface IcsEvent { uid: string; stamp: Date; sequence?: number; lastModified?: Date; start: Date; end: Date | null; summary: string; description?: string; url?: string }
+/** Timed (legacy) event: start/end. All-day (date polls): `date` 'YYYY-MM-DD' → DTSTART;VALUE=DATE + DTEND next day, no TZID. */
+export type IcsEvent = { uid: string; stamp: Date; sequence?: number; lastModified?: Date; summary: string; description?: string; url?: string }
+  & ({ date: string; start?: undefined; end?: undefined } | { date?: undefined; start: Date; end: Date | null });
 export const DEFAULT_DURATION_MS = 60 * 60 * 1000;
 
 export function buildIcs(e: IcsEvent): string {
-  const end = e.end ?? new Date(e.start.getTime() + DEFAULT_DURATION_MS);
+  const when = e.date !== undefined
+    ? [`DTSTART;VALUE=DATE:${basicDate(e.date)}`, `DTEND;VALUE=DATE:${basicDate(addDays(e.date, 1))}`]
+    : [`DTSTART:${icsDate(e.start)}`, `DTEND:${icsDate(e.end ?? new Date(e.start.getTime() + DEFAULT_DURATION_MS))}`];
   const lines = [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//GrabAday//GrabAday//DA', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT',
     `UID:${e.uid}`, `DTSTAMP:${icsDate(e.stamp)}`,
     ...(e.sequence !== undefined ? [`SEQUENCE:${e.sequence}`] : []),
-    ...(e.lastModified ? [`LAST-MODIFIED:${icsDate(e.lastModified)}`] : []), `DTSTART:${icsDate(e.start)}`, `DTEND:${icsDate(end)}`,
+    ...(e.lastModified ? [`LAST-MODIFIED:${icsDate(e.lastModified)}`] : []), ...when,
     `SUMMARY:${icsEscape(e.summary)}`,
     ...(e.description ? [`DESCRIPTION:${icsEscape(e.description)}`] : []),
     ...(e.url ? [`URL:${e.url}`] : []),

@@ -1,6 +1,7 @@
 import { describe, test, expect, inject, afterAll } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
+import { createLegacyPoll } from './legacy';
 
 const BASE = inject('baseUrl');
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -23,13 +24,12 @@ const json = (method: string, body: unknown, token?: string, extra: Record<strin
 
 const Y = new Date().getUTCFullYear() + 1;
 const at = (md: string) => `${Y}-${md}:00Z`;
+/** LEGACY timed poll (mode 'datetime'): this file keeps the legacy admin flow covered end to end. */
 async function create() {
-  const r = await call('/api/events', json('POST', {
-    title: 'Teammøde', description: 'Q4',
-    time_options: [{ start: at('11-03T09:00') }, { start: at('11-04T09:00'), end: at('11-04T10:00') }, { start: at('11-05T09:00') }],
-  }));
-  expect(r.status).toBe(201);
-  return { id: r.body.id as string, token: r.body.admin_token as string, opts: r.body.time_options as Json[] };
+  const p = await createLegacyPoll(prisma, { title: 'Teammøde', description: 'Q4',
+    options: [{ start: at('11-03T09:00') }, { start: at('11-04T09:00'), end: at('11-04T10:00') }, { start: at('11-05T09:00') }] });
+  const r = await call(`/api/events/${p.id}`);
+  return { id: p.id, token: p.admin_token, opts: r.body.time_options as Json[] };
 }
 const patchBody = (opts: Json[], extra: Json = {}): Json => ({
   title: 'Nyt navn', description: 'Ny tekst',
@@ -190,7 +190,7 @@ describe('close / reopen', () => {
 describe('rotate admin link', () => {
   test('returns a new token once; old token stops working; idempotent replay no longer returns the old one', async () => {
     const key = `rotate-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const body = { title: 'R', time_options: [{ start: at('11-03T09:00') }] };
+    const body = { title: 'R', options: [{ date: `${Y}-11-03` }] };
     const c = await call('/api/events', json('POST', body, undefined, { 'Idempotency-Key': key }));
     const old = c.body.admin_token;
     const r = await call(`/api/events/${c.body.id}/rotate-admin`, json('POST', {}, old));

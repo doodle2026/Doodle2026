@@ -18,8 +18,8 @@ const json = (method: string, body: unknown, token?: string, extra: Record<strin
   ({ method, token, headers: { 'Content-Type': 'application/json', ...extra }, body: JSON.stringify(body) });
 const Y = new Date().getUTCFullYear() + 1;
 async function create() {
-  const r = await call('/api/events', json('POST', { title: 'Afstemning', time_options: [
-    { start: `${Y}-11-03T09:00:00Z` }, { start: `${Y}-11-04T09:00:00Z` }, { start: `${Y}-11-05T09:00:00Z` }] }));
+  const r = await call('/api/events', json('POST', { title: 'Afstemning', options: [
+    { date: `${Y}-11-03` }, { date: `${Y}-11-04` }, { date: `${Y}-11-05` }] }));
   return { id: r.body.id as string, admin: r.body.admin_token as string, o: (r.body.time_options as Json[]).map((x) => x.id as number) };
 }
 const vote = (o: number[], vals: (string | null)[], name = `Navn ${Math.random().toString(36).slice(2, 8)}`) =>

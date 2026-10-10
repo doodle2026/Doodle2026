@@ -11,10 +11,10 @@ const BASE = inject('baseUrl');
 const Y = new Date().getUTCFullYear() + 1;
 let browser: Browser;
 
-async function poll(times = [`${Y}-11-03T09:00:00Z`, `${Y}-11-04T21:30:00Z`]) {
+async function poll(dates = [`${Y}-11-03`, `${Y}-11-04`]) {
   const r = await fetch(`${BASE}/api/events`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `10.6.${(Math.random() * 255) | 0}.1` },
-    body: JSON.stringify({ title: 'E2E', time_options: times.map((t, i) => ({ start: t, ...(i === 1 ? { end: `${Y}-11-05T00:30:00Z` } : {}) })) }),
+    body: JSON.stringify({ title: 'E2E', options: dates.map((date) => ({ date })) }),
   });
   return r.json() as Promise<{ id: string; admin_token: string }>;
 }

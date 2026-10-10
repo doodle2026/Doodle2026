@@ -11,7 +11,7 @@ const ip = () => `10.7.${(Math.random() * 255) | 0}.${(Math.random() * 254 + 1) 
 
 async function setup() {
   const r = await fetch(`${BASE}/api/events`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip() },
-    body: JSON.stringify({ title: 'Runde 4', time_options: [{ start: `${Y}-11-03T09:00:00Z` }, { start: `${Y}-11-04T09:00:00Z` }] }) });
+    body: JSON.stringify({ title: 'Runde 4', options: [{ date: `${Y}-11-03` }, { date: `${Y}-11-04` }] }) });
   const e = await r.json() as { id: string; admin_token: string; time_options: { id: number }[] };
   for (const [name, votes] of [['Anna', ['yes', 'no']], ['Bo', ['maybe', 'yes']]] as const) {
     await fetch(`${BASE}/api/events/${e.id}/votes`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip() },
@@ -89,7 +89,7 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
 
   test('V7: Skjul closes without a dialog → yellow reminder; ✓ Jeg har gemt det collapses the admin link', async () => {
     const r = await fetch(`${BASE}/api/events`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip() },
-      body: JSON.stringify({ title: 'V7', time_options: [{ start: `${Y}-11-03T09:00:00Z` }] }) });
+      body: JSON.stringify({ title: 'V7', options: [{ date: `${Y}-11-03` }] }) });
     const e = await r.json() as { id: string; admin_url: string };
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
     await p.goto(`${BASE}/`);

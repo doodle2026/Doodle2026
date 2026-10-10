@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { ApiEvent } from '@/lib/events';
-import { whenLabel } from '@/lib/format';
+import { optionLabel } from '@/lib/format';
+import { formatDateShort } from '@/lib/dates';
 import { copyText } from '@/lib/share';
 import { counterState, counterText, isBlank, textLength } from '@/lib/form';
 import {
@@ -61,10 +62,13 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
   const day = (iso: string) => (mounted ? cap(dayFmt.format(new Date(iso))) : '');
   // DST ambiguity (design Z4): two options with the same local day+time get their UTC offset shown.
   const localKey = (iso: string) => dayFmt.format(new Date(iso)) + tFmt.format(new Date(iso));
-  const dupLocal = (iso: string) => opts.filter((x) => localKey(x.start_at) === localKey(iso)).length > 1;
-  const time = (o: { start_at: string; end_at: string | null }) =>
-    mounted ? `${tFmt.format(new Date(o.start_at))}${dupLocal(o.start_at) ? ` (${offsetOf(new Date(o.start_at))})` : ''}${o.end_at ? '–' + tFmt.format(new Date(o.end_at)) + nextDayMarker(keyFmt.format(new Date(o.start_at)), keyFmt.format(new Date(o.end_at))) : ''}` : '';
-  const optLabel = (i: number) => (mounted ? whenLabel(opts[i].start_at, opts[i].end_at) : '');
+  const dupLocal = (iso: string) => opts.filter((x) => x.start_at && localKey(x.start_at) === localKey(iso)).length > 1;
+  const dateMode = ev.mode !== 'datetime';
+  // Date polls: one label per column, identical in every time zone (no mount wait). Legacy: day + time in the viewer's zone.
+  const colDay = (o: typeof opts[number]) => (o.date ? cap(formatDateShort(o.date)) : day(o.start_at!));
+  const time = (o: { date?: string | null; start_at: string | null; end_at: string | null }) =>
+    o.date || !o.start_at ? '' : mounted ? `${tFmt.format(new Date(o.start_at))}${dupLocal(o.start_at) ? ` (${offsetOf(new Date(o.start_at))})` : ''}${o.end_at ? '–' + tFmt.format(new Date(o.end_at)) + nextDayMarker(keyFmt.format(new Date(o.start_at)), keyFmt.format(new Date(o.end_at))) : ''}` : '';
+  const optLabel = (i: number) => (opts[i].date || mounted ? optionLabel(opts[i]) : '');
 
   // Personal edit link: #edit=<token> → verify via API (Bearer), keep in localStorage, strip the fragment.
   useEffect(() => {
@@ -165,7 +169,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
     e.preventDefault();
     if (saving) return;
     const nErr = nameError(name, ev.participants, editing ? myId : null, { isBlank, textLength });
-    const items = [...(nErr ? [nErr] : []), ...(me.some(Boolean) ? [] : ['Svar på mindst ét tidspunkt (ja, måske eller nej).'])];
+    const items = [...(nErr ? [nErr] : []), ...(me.some(Boolean) ? [] : [`Svar på mindst ${dateMode ? 'én dato' : 'ét tidspunkt'} (ja, måske eller nej).`])];
     setNameErr(nErr);
     if (items.length) { setSummary({ head: 'Ret venligst følgende:', items }); focusSel.current = nErr ? '#name' : '#summary'; return; }
     setSaving(true); setSummary(null);
@@ -174,10 +178,10 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
       const tz = encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone);
       let r: Response;
       if (editing && token) {
-        r = await fetch(`/api/events/${ev.slug}/votes/me?tz=${tz}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body });
+        r = await fetch(`/api/events/${ev.slug}/votes/me${dateMode ? '' : `?tz=${tz}`}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body });
       } else {
         if (idem.current?.body !== body) idem.current = { key: newIdemKey(), body };
-        r = await fetch(`/api/events/${ev.slug}/votes?tz=${tz}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idem.current.key, ...(invite ? { 'X-Invite-Token': invite.token } : {}) }, body });
+        r = await fetch(`/api/events/${ev.slug}/votes${dateMode ? '' : `?tz=${tz}`}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idem.current.key, ...(invite ? { 'X-Invite-Token': invite.token } : {}) }, body });
       }
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -292,19 +296,19 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
         <p className="editing-note" id="editing">✎ Du redigerer dine svar som {ev.participants.find((p) => p.id === myId)?.name}.{' '}
           <button type="button" onClick={cancelEditing} style={{ background: 'none', border: 0, padding: 0, color: 'var(--c-primary)', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>Annullér redigering</button></p>
       )}
-      {showInput && <p className="tz-note" id="hint">{wide ? HINT_GRID : HINT_CARDS}</p>}
+      {showInput && <p className="tz-note" id="hint">{wide ? HINT_GRID : dateMode ? HINT_CARDS : HINT_CARDS.replace('hver dato', 'hvert tidspunkt')}</p>}
       {ev.participants.length === 0 && <div className="vote-empty">Ingen har stemt endnu – vær den første! 🎉</div>}
 
       <div className="vgrid-wrap" tabIndex={0} role="region" aria-labelledby="grid-h">
         <table className="vgrid" id="grid">
-          <caption className="sr-only">Afstemning. Kolonner er tidsforslag, rækker er deltagere. Sidste række er totaler.</caption>
+          <caption className="sr-only">Afstemning. Kolonner er {dateMode ? 'datoer' : 'tidsforslag'}, rækker er deltagere. Sidste række er totaler.</caption>
           <thead>
             <tr>
               <th className="vgrid__name" scope="col">Deltager ({others.length})</th>
               {opts.map((o, i) => (
                 <th scope="col" className={cls(i)} key={o.id}>
-                  <span className="vgrid__day" suppressHydrationWarning>{day(o.start_at)}</span>
-                  <span className="vgrid__time" suppressHydrationWarning>{time(o)}</span>
+                  <span className="vgrid__day" suppressHydrationWarning>{colDay(o)}</span>
+                  {!dateMode && <span className="vgrid__time" suppressHydrationWarning>{time(o)}</span>}
                   {chosen(i) ? <span className="chosen-badge">✓ Valgt</span> : best[i] ? <span className="best-badge">★ Bedst</span> : null}
                 </th>
               ))}

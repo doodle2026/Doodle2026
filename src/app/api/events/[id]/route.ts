@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { adminJson, adminRoute } from '@/lib/admin-api';
-import { ApiError, deleteEvent, existingOptions, loadEvent, updateEvent, withDesignShape } from '@/lib/events';
+import { ApiError, deleteEvent, eventMode, existingOptions, loadEvent, updateEvent, withDesignShape } from '@/lib/events';
 import { jsonError } from '@/lib/http';
 import { validateEvent } from '@/lib/validate';
+import { fromUtcDate } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -23,11 +24,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
  */
 export const PATCH = adminRoute(async ({ slug, eventId, body }) => {
   const existing = new Map((await existingOptions(eventId)).map((o) => [o.id, o]));
+  const mode = await eventMode(eventId); // date polls: options [{id?, date}]; legacy timed polls keep time_options
   const { errors, value } = validateEvent(body, new Date(), {
-    allowIds: true,
+    allowIds: true, mode,
     pastAllowed: (o) => {
       const e = o.id !== undefined ? existing.get(o.id) : undefined;
-      return !!e && e.startAt.getTime() === o.startAt.getTime() && (e.endAt?.getTime() ?? null) === (o.endAt?.getTime() ?? null);
+      if (!e) return false;
+      if (o.date !== null) return !!e.date && fromUtcDate(e.date) === o.date; // already-passed dates may stay
+      return e.startAt?.getTime() === o.startAt?.getTime() && (e.endAt?.getTime() ?? null) === (o.endAt?.getTime() ?? null);
     },
   });
   if (errors.length || !value) throw new ApiError(400, errors);

@@ -1,12 +1,14 @@
 import { adminJson, adminRoute } from '@/lib/admin-api';
-import { ApiError, editOption } from '@/lib/events';
+import { ApiError, editOption, eventMode } from '@/lib/events';
 import { parseIsoWithOffset } from '@/lib/validate';
+import { isRealDate, minAllowedDate } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 /**
- * Edit one time option (admin). Body: { start_at: ISO, end_at: ISO|null, reset_votes: boolean }.
+ * Edit one option (admin). Date polls: { date: 'YYYY-MM-DD', reset_votes }. Legacy timed polls:
+ * { start_at: ISO, end_at: ISO|null, reset_votes: boolean }.
  * 200 → admin event + { reset_votes_count }. 409 duplicate_option, 400 past / invalid.
  */
 export const PATCH = adminRoute(async ({ slug, eventId, body, params }) => {
@@ -14,6 +16,12 @@ export const PATCH = adminRoute(async ({ slug, eventId, body, params }) => {
   if (!/^\d{1,15}$/.test(String(params.oid))) throw new ApiError(404, ['Tidsforslaget findes ikke.']);
   const b = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
   if (!b) throw new ApiError(400, ['Forespørgslen skal være et JSON-objekt.']);
+  if (typeof b.reset_votes !== 'boolean') throw new ApiError(400, ['reset_votes skal være true eller false.']);
+  if ((await eventMode(eventId)) === 'date') {
+    if (!isRealDate(b.date)) throw new ApiError(400, ['Udfyld en gyldig dato.'], { code: 'date_required' });
+    const r = await editOption(eventId, oid, { date: b.date, startAt: null, endAt: null }, b.reset_votes, (n) => n.date! < minAllowedDate());
+    return adminJson(slug, { reset_votes_count: r.reset });
+  }
   const start = typeof b.start_at === 'string' ? parseIsoWithOffset(b.start_at) : null;
   if (!start) throw new ApiError(400, ['Udfyld dato og starttid.'], { code: 'start_required' });
   let end: Date | null = null;
@@ -22,7 +30,6 @@ export const PATCH = adminRoute(async ({ slug, eventId, body, params }) => {
     if (!end) throw new ApiError(400, ['Ugyldig sluttid.']);
     if (end <= start) throw new ApiError(400, ['Sluttid skal være efter starttid.'], { code: 'order' });
   }
-  if (typeof b.reset_votes !== 'boolean') throw new ApiError(400, ['reset_votes skal være true eller false.']);
-  const r = await editOption(eventId, oid, start, end, b.reset_votes);
+  const r = await editOption(eventId, oid, { date: null, startAt: start, endAt: end }, b.reset_votes, (n) => n.startAt!.getTime() < Date.now());
   return adminJson(slug, { reset_votes_count: r.reset });
 });

@@ -68,7 +68,7 @@ export function savedMessage(name: string, fresh: boolean, closed: boolean): str
 
 /** V3: the grid (≥ 640 px) and the mobile cards are operated differently. */
 export const HINT_GRID = 'Tryk på en celle for at skifte: ikke svaret → ja → måske → nej. Tastatur: J / M / N, Delete nulstiller, ← → flytter.';
-export const HINT_CARDS = 'Tryk på Ja, Måske eller Nej ved hvert tidspunkt. Tryk igen på dit valg for at nulstille.';
+export const HINT_CARDS = 'Tryk på Ja, Måske eller Nej ved hver dato. Tryk igen på dit valg for at nulstille.';
 
 /** V8: " (+1 dag)" / " (+2 dage)" when the end falls on a later local day than the start (YYYY-MM-DD keys). */
 export function nextDayMarker(startKey: string, endKey: string): string {

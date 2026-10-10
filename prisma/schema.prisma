@@ -40,6 +40,8 @@ model Event {
   mailBlockedAt   DateTime?        @map("mail_blocked_at") @db.Timestamptz(3)
   /// Step 5: personal invite links were used for this poll ("Spor hvem der har svaret"). Never switched off again.
   inviteTracking  Boolean          @default(false) @map("invite_tracking")
+  /// 'date' (all new polls: whole-day date options) | 'datetime' (legacy timed polls created before date-only).
+  mode            String           @default("date") @db.VarChar(16)
 
   @@map("events")
 }
@@ -47,13 +49,17 @@ model Event {
 model TimeOption {
   id       Int       @id @default(autoincrement())
   eventId  Int       @map("event_id")
-  startAt  DateTime  @map("start_at") @db.Timestamptz(3)
+  /// Legacy ('datetime' polls) only; null for date polls.
+  startAt  DateTime? @map("start_at") @db.Timestamptz(3)
   endAt    DateTime? @map("end_at") @db.Timestamptz(3)
+  /// Date polls: calendar date (no time zone). Null for legacy polls.
+  date     DateTime? @db.Date
   position Int
   event    Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   votes    Vote[]
   chosenBy Event?    @relation("ChosenOption")
 
+  @@unique([eventId, date])
   @@index([eventId])
   @@map("time_options")
 }

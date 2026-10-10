@@ -23,7 +23,7 @@ async function call(path: string, init: RequestInit & { token?: string; json?: u
   return { status: r.status, body, text, headers: r.headers };
 }
 async function poll() {
-  const r = await call('/api/events', { method: 'POST', json: { title: 'Invitér', time_options: [{ start: `${Y}-11-03T09:00:00Z` }] } });
+  const r = await call('/api/events', { method: 'POST', json: { title: 'Invitér', options: [{ date: `${Y}-11-03` }] } });
   return { id: r.body.id as string, token: r.body.admin_token as string };
 }
 const invite = (p: { id: string; token: string }, json: unknown) => call(`/api/events/${p.id}/invitations`, { method: 'POST', token: p.token, json });

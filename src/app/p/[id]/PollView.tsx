@@ -161,7 +161,9 @@ export default function PollView({ event, shareUrl, justCreated }:
           <ResultBanner event={event} appUrl={shareUrl.replace(/\/p\/[^/]+$/, '')} />
           <h1>{event.title}</h1>
           {event.description && <p className="lead">{event.description}</p>}
-          <p className="tz-note">{tz ? `Tider vist i ${tz}.` : ''}</p>
+          {event.mode === 'datetime'
+            ? <p className="tz-note">{tz ? `Tider vist i ${tz}.` : ''}</p>
+            : <p className="tz-note">Vælg de datoer, der passer dig.</p>}
           <VoteSection initial={event} />
         </article>
       </main>

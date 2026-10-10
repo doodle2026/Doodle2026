@@ -25,7 +25,7 @@ async function call(path: string, init: { method?: string; token?: string; json?
   return { status: r.status, body };
 }
 async function setup(track = true) {
-  const e = (await call('/api/events', { method: 'POST', json: { title: 'Spor', time_options: [{ start: `${Y}-11-03T09:00:00Z` }, { start: `${Y}-11-04T09:00:00Z` }] } })).body;
+  const e = (await call('/api/events', { method: 'POST', json: { title: 'Spor', options: [{ date: `${Y}-11-03` }, { date: `${Y}-11-04` }] } })).body;
   const a = `jonas.krogh-${u()}@firma.dk`, b = `b-${u()}@firma.dk`;
   const r = await call(`/api/events/${e.id}/invitations`, { method: 'POST', token: e.admin_token, json: { recipients: [`Jonas Krogh <${a}>`, b], track } });
   expect(r.status).toBe(201);

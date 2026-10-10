@@ -36,7 +36,7 @@ export function mapServerErrors(errors: string[]): { rows: Map<number, string>; 
   const rows = new Map<number, string>();
   const general: string[] = [];
   for (const e of errors) {
-    const m = /^Tidsforslag (\d+): (.*)$/.exec(e);
+    const m = /^(?:Tidsforslag|Dato) (\d+): (.*)$/.exec(e);
     if (m) rows.set(Number(m[1]), m[2].charAt(0).toUpperCase() + m[2].slice(1)); else general.push(e);
   }
   return { rows, general };

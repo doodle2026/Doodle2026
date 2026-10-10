@@ -10,8 +10,8 @@ describe('validate (unit)', () => {
   });
   test('uses injected clock for "past"', () => {
     const now = new Date('2030-01-01T12:00:00Z');
-    expect(validateEvent({ title: 'x', time_options: [{ start: '2030-01-01T11:59:00Z' }] }, now).errors).toHaveLength(1);
-    expect(validateEvent({ title: 'x', time_options: [{ start: '2030-01-01T14:01:00+02:00' }] }, now).errors).toHaveLength(0);
+    expect(validateEvent({ title: 'x', time_options: [{ start: '2030-01-01T11:59:00Z' }] }, now, { mode: 'datetime' }).errors).toHaveLength(1);
+    expect(validateEvent({ title: 'x', time_options: [{ start: '2030-01-01T14:01:00+02:00' }] }, now, { mode: 'datetime' }).errors).toHaveLength(0);
   });
 });
 

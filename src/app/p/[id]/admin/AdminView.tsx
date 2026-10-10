@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { AdminEvent } from '@/lib/events';
 import { forgetAdminToken, storeAdminToken, takeAdminToken } from '@/lib/admin-client';
-import { bestIds, whenLabel } from '@/lib/format';
+import { bestIds, optionLabel } from '@/lib/format';
+import { MAX_DATE_OPTIONS, minAllowedDate } from '@/lib/dates';
 import AdminResults from './AdminResults';
 import InviteSection from './InviteSection';
 import OptionEditRow, { type EditResult } from './OptionEditRow';
@@ -13,7 +14,8 @@ import { counterState, counterText, isBlank, liveTitleError, mapServerErrors, te
 const TITLE_MAX = 200;
 const DESC_MAX = 2000;
 
-type Opt = { key: string; id?: number; start_at: string; end_at: string | null; votes: number };
+type Opt = { key: string; id?: number; date: string | null; start_at: string | null; end_at: string | null; votes: number };
+const sortKey = (o: Opt) => o.date ?? o.start_at ?? '';
 type Dialog = null | 'close' | 'reopen' | 'rotate' | 'delete-poll';
 let seq = 0;
 
@@ -21,6 +23,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   const [token, setToken] = useState<string | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'denied' | 'error'>('loading');
   const [ev, setEv] = useState<AdminEvent | null>(null);
+  const dateMode = ev?.mode !== 'datetime';
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [opts, setOpts] = useState<Opt[]>([]);
@@ -58,7 +61,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   const load = useCallback((data: AdminEvent) => {
     setEv(data);
     setTitle(data.title); setDesc(data.description);
-    setOpts(data.time_options.map((o) => ({ key: `o${o.id}`, id: o.id, start_at: o.start_at, end_at: o.end_at, votes: o.votes.total })));
+    setOpts(data.time_options.map((o) => ({ key: `o${o.id}`, id: o.id, date: o.date, start_at: o.start_at, end_at: o.end_at, votes: o.votes.total })));
     setConfirmedRemovals(0); setPendingRemove(null);
   }, []);
 
@@ -112,7 +115,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   }
 
   function removeOpt(o: Opt, idx: number) {
-    if (opts.length === 1) { setOptErr('Der skal være mindst ét tidsforslag.'); return; }
+    if (opts.length === 1) { setOptErr(dateMode ? 'Der skal være mindst én dato.' : 'Der skal være mindst ét tidsforslag.'); return; }
     if (o.votes > 0 && pendingRemove !== o.key) {
       setPendingRemove(o.key);
       focusAfter.current = '[data-confirm-remove]';
@@ -121,12 +124,22 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     if (o.votes > 0) setConfirmedRemovals((n) => n + 1);
     const next = opts.filter((x) => x.key !== o.key);
     setOpts(next); setPendingRemove(null); setOptErr('');
-    setLive(`${whenLabel(o.start_at, o.end_at)} fjernet`);
+    setLive(`${optionLabel(o)} fjernet`);
     const target = next[idx] ?? next[idx - 1];
     focusAfter.current = target ? `[data-rm="${target.key}"]` : '#nd';
   }
 
   function addOpt() {
+    if (dateMode) {
+      if (!newDate) { setOptErr('Vælg en dato.'); return; }
+      if (newDate < minAllowedDate()) { setOptErr('Datoen ligger i fortiden.'); return; }
+      if (opts.some((o) => o.date === newDate)) { setOptErr('Den dato findes allerede.'); return; }
+      if (opts.length >= MAX_DATE_OPTIONS) { setOptErr(`Du kan højst have ${MAX_DATE_OPTIONS} datoer.`); return; }
+      setOptErr('');
+      setOpts([...opts, { key: `n${++seq}`, date: newDate, start_at: null, end_at: null, votes: 0 }].sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
+      setLive('Dato tilføjet');
+      return;
+    }
     if (!newDate || !newTime) { setOptErr('Vælg dato og starttid.'); return; }
     if (newEnd && newEnd <= newTime) { setOptErr('Sluttid skal være efter starttid.'); return; }
     const start = new Date(`${newDate}T${newTime}`);
@@ -135,7 +148,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     if (opts.some((o) => o.start_at === s && o.end_at === e)) { setOptErr('Det tidsforslag findes allerede.'); return; }
     if (opts.length >= 100) { setOptErr('Du kan højst have 100 tidsforslag.'); return; }
     setOptErr('');
-    setOpts([...opts, { key: `n${++seq}`, start_at: s, end_at: e, votes: 0 }].sort((a, b) => a.start_at.localeCompare(b.start_at)));
+    setOpts([...opts, { key: `n${++seq}`, date: null, start_at: s, end_at: e, votes: 0 }].sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
     setLive('Tidsforslag tilføjet');
   }
 
@@ -156,13 +169,15 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
         method: 'PATCH',
         body: JSON.stringify({
           title, description: desc, confirm_remove_voted: confirmedRemovals > 0,
-          time_options: opts.map((o) => ({ ...(o.id ? { id: o.id } : {}), start: o.start_at, end: o.end_at })),
+          ...(dateMode
+            ? { options: opts.map((o) => ({ ...(o.id ? { id: o.id } : {}), date: o.date })) }
+            : { time_options: opts.map((o) => ({ ...(o.id ? { id: o.id } : {}), start: o.start_at, end: o.end_at })) }),
         }),
       });
       if (res.status === 401 || res.status === 403) { setState('denied'); return; }
       if (!res.ok) {
         const { rows, general } = mapServerErrors(Array.isArray(data.errors) ? data.errors : ['Ukendt fejl.']);
-        setSummary([...general, ...[...rows].map(([n, m]) => `Tidsforslag ${n} (${opts[n - 1] ? whenLabel(opts[n - 1].start_at, opts[n - 1].end_at) : '?'}): ${m}`)]);
+        setSummary([...general, ...[...rows].map(([n, m]) => `${dateMode ? 'Dato' : 'Tidsforslag'} ${n} (${opts[n - 1] ? optionLabel(opts[n - 1]) : '?'}): ${m}`)]);
         document.getElementById('summary')?.focus();
         return;
       }
@@ -179,16 +194,16 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     try {
       const { res, data } = await api(`/options/${id}`, { method: 'PATCH', body: JSON.stringify(v) });
       if (res.status === 401 || res.status === 403) { setState('denied'); return null; }
-      if (res.status === 409 && data.code === 'duplicate_option') return { msg: 'Det tidspunkt findes allerede som et andet forslag.', fields: ['date', 'start'] };
+      if (res.status === 409 && data.code === 'duplicate_option') return { msg: dateMode ? 'Den dato findes allerede som et andet forslag.' : 'Det tidspunkt findes allerede som et andet forslag.', fields: ['date', 'start'] };
       if (!res.ok) return { msg: (Array.isArray(data.errors) && data.errors[0]) || 'Tidspunktet kunne ikke gemmes.', fields: data.code === 'order' ? ['end'] : ['date', 'start'] };
       setEv(data);
       const fresh = data.time_options.find((x: AdminEvent['time_options'][number]) => x.id === id);
-      setOpts((prev) => prev.map((o) => (o.id === id ? { ...o, start_at: fresh.start_at, end_at: fresh.end_at, votes: fresh.votes.total } : o))
-        .sort((a, b) => a.start_at.localeCompare(b.start_at)));
+      setOpts((prev) => prev.map((o) => (o.id === id ? { ...o, date: fresh.date, start_at: fresh.start_at, end_at: fresh.end_at, votes: fresh.votes.total } : o))
+        .sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
       setEditingId(null);
       const n = data.reset_votes_count as number;
       const chosenNote = n > 0 && data.chosen_option_id === id ? ' Tjek om det stadig er det rigtige valg.' : '';
-      setBanner(`✓ Tidspunktet er ændret – ${n > 0 ? `${n} svar er nulstillet.` : 'svarene er bevaret.'}${chosenNote}`);
+      setBanner(`✓ ${dateMode ? 'Datoen' : 'Tidspunktet'} er ændret – ${n > 0 ? `${n} svar er nulstillet.` : 'svarene er bevaret.'}${chosenNote}`);
       focusAfter.current = `[data-oe="${id}"]`;
       return null;
     } catch { return { msg: 'Kunne ikke kontakte serveren. Prøv igen.', fields: [] }; }
@@ -225,7 +240,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
       setEv(data);
       if (dialog === 'close') {
         const c = data.chosen_option_id ? optById.get(data.chosen_option_id) : null;
-        setBanner(`✓ Afstemningen er lukket.${c ? ` Valgt tidspunkt: ${whenLabel(c.start_at, c.end_at)}.` : ''}`);
+        setBanner(`✓ Afstemningen er lukket.${c ? ` Valgt ${dateMode ? 'dato' : 'tidspunkt'}: ${optionLabel(c)}.` : ''}`);
       } else if (dialog === 'reopen') {
         setBanner('✓ Afstemningen er åbnet igen.');
       } else {
@@ -320,15 +335,15 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
           <textarea className="input" id="desc" value={desc} onChange={(e) => setDesc(e.target.value)} aria-describedby="desc-count" />
           <div className="field__meta"><span /><Counter id="desc-count" value={desc} max={DESC_MAX} /></div>
         </div>
-        <h3 style={{ margin: 'var(--s-4) 0 var(--s-2)' }}>Tidsforslag</h3>
+        <h3 style={{ margin: 'var(--s-4) 0 var(--s-2)' }}>{dateMode ? 'Datoer' : 'Tidsforslag'}</h3>
         <ul className="opt-list" id="opts">
           {opts.map((o, i) => {
-            const label = whenLabel(o.start_at, o.end_at);
+            const label = optionLabel(o);
             const removing = pendingRemove === o.key;
             if (o.id !== undefined && editingId === o.id) {
               return (
                 <li key={o.key}>
-                  <OptionEditRow opt={{ id: o.id, start_at: o.start_at, end_at: o.end_at, votes: o.votes }}
+                  <OptionEditRow opt={{ id: o.id, date: o.date, start_at: o.start_at, end_at: o.end_at, votes: o.votes }}
                     others={opts.filter((x) => x.key !== o.key)}
                     onCancel={() => { setEditingId(null); focusAfter.current = `[data-oe="${o.id}"]`; }}
                     onSave={(v) => saveOption(o.id!, v)} />
@@ -347,7 +362,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
                 </div>
                 {removing && (
                   <div className="inline-warn" role="alert">
-                    <strong>{o.votes} {o.votes === 1 ? 'deltager har' : 'deltagere har'} svaret på dette tidspunkt.</strong> Fjerner du det,
+                    <strong>{o.votes} {o.votes === 1 ? 'deltager har' : 'deltagere har'} svaret på {dateMode ? 'denne dato' : 'dette tidspunkt'}.</strong> Fjerner du det,
                     slettes deres svar på det for altid. Deres øvrige svar bevares.
                     <div className="inline-warn__actions">
                       <button type="button" className="btn btn--danger btn--sm" data-confirm-remove onClick={() => removeOpt(o, i)}>Fjern alligevel</button>
@@ -362,11 +377,11 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
         <div className="add-date" style={{ marginTop: 'var(--s-3)' }}>
           <div className="field"><label className="field__label" htmlFor="nd">Ny dato</label>
             <input className="input" type="date" id="nd" lang="da" value={newDate} onChange={(e) => setNewDate(e.target.value)} /></div>
-          <div className="field"><label className="field__label" htmlFor="nt">Starttid</label>
+          {!dateMode && <><div className="field"><label className="field__label" htmlFor="nt">Starttid</label>
             <input className="input" type="time" id="nt" lang="da" step={300} value={newTime} onChange={(e) => setNewTime(e.target.value)} /></div>
           <div className="field"><label className="field__label" htmlFor="ne">Sluttid <span className="field__hint">(valgfri)</span></label>
-            <input className="input" type="time" id="ne" lang="da" step={300} value={newEnd} onChange={(e) => setNewEnd(e.target.value)} /></div>
-          <button type="button" className="btn btn--secondary" id="addopt" onClick={addOpt}>+ Tilføj tidsforslag</button>
+            <input className="input" type="time" id="ne" lang="da" step={300} value={newEnd} onChange={(e) => setNewEnd(e.target.value)} /></div></>}
+          <button type="button" className="btn btn--secondary" id="addopt" onClick={addOpt}>{dateMode ? '+ Tilføj dato' : '+ Tilføj tidsforslag'}</button>
         </div>
         <div className="field__error" id="opt-err" aria-live="polite">{optErr}</div>
         <div className="form-actions">
@@ -410,7 +425,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
                 <select className="input" id="pick" value={chosen} onChange={(e) => setChosen(e.target.value)}>
                   <option value="">Vælg ikke nu</option>
                   {ev.time_options.map((o) => (
-                    <option key={o.id} value={o.id}>{whenLabel(o.start_at, o.end_at)}{best.has(o.id) ? ' – ★ flest ja' : ''}</option>
+                    <option key={o.id} value={o.id}>{optionLabel(o)}{best.has(o.id) ? ' – ★ flest ja' : ''}</option>
                   ))}
                 </select>
               </div>
