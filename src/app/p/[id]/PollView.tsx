@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Header from '@/components/Header';
 import type { ApiEvent } from '@/lib/events';
+import { adminMailto, canNativeShare, copyText, participantMailto, shareLink, shareText } from '@/lib/share';
 
 const dayFmt = new Intl.DateTimeFormat('da-DK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const timeFmt = new Intl.DateTimeFormat('da-DK', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -42,7 +43,7 @@ export default function PollView({ event, shareUrl, justCreated, isAdmin = false
 
   useEffect(() => {
     setTz(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    setCanShare(typeof navigator !== 'undefined' && 'share' in navigator);
+    setCanShare(typeof navigator !== 'undefined' && canNativeShare(navigator)); // after hydration only (not in SSR HTML)
     if (justCreated) {
       try {
         if (sessionStorage.getItem(storeKey) === 'closed') setOpen(false);
@@ -81,20 +82,22 @@ export default function PollView({ event, shareUrl, justCreated, isAdmin = false
   async function doCopy(which: Which, text: string, input: HTMLInputElement | null) {
     const what = which === 'url' ? 'Linket til deltagerne' : 'Admin-linket';
     const set = (st: CopyState) => setCopy((c) => ({ ...c, [which]: st }));
-    try {
-      if (!navigator.clipboard) throw new Error('no clipboard');
-      await navigator.clipboard.writeText(text);
+    const res = await copyText(text, {
+      clipboard: navigator.clipboard,
+      legacyCopy: () => { if (!input) return false; input.focus(); input.select(); return document.execCommand?.('copy') ?? false; },
+    });
+    if (res === 'copied') {
       set('copied'); setStatus(`${what} er kopieret`);
       setTimeout(() => set('idle'), 2000);
-    } catch {
+    } else {
       set('error'); setStatus(`${what} kunne ikke kopieres. Markér og kopiér manuelt.`);
       input?.focus(); input?.select();
       setTimeout(() => set('idle'), 4000);
     }
   }
   async function nativeShare() {
-    try { await navigator.share({ title: event.title, text: `Hvornår kan du? ${event.title}`, url: shareUrl }); }
-    catch (e) { if ((e as DOMException)?.name !== 'AbortError') doCopy('url', shareUrl, urlRef.current); }
+    const res = await shareLink({ title: event.title, text: shareText(event.title), url: shareUrl }, navigator);
+    if (res === 'fallback') doCopy('url', shareUrl, urlRef.current);
   }
   const closeBtnFocus = () => setTimeout(() => shareOpenRef.current?.focus(), 0);
   function close() {
@@ -113,10 +116,8 @@ export default function PollView({ event, shareUrl, justCreated, isAdmin = false
     const n = !open; setOpen(n);
     try { sessionStorage.setItem(storeKey, n ? 'open' : 'closed'); } catch { /* ignore */ }
   }
-  const mailMe = adminUrl ? `mailto:?subject=${encodeURIComponent(`Mit admin-link: ${event.title}`)}&body=${encodeURIComponent(
-    `Admin-link (hemmeligt):\n${adminUrl}\n\nLink til deltagerne:\n${shareUrl}\n\nGem denne mail. Del ikke linket.\n`)}` : '';
-  const mailto = `mailto:?subject=${encodeURIComponent(`Hvornår kan du? ${event.title}`)}&body=${encodeURIComponent(
-    `Hej!\n\nStem på de tidspunkter, der passer dig:\n${shareUrl}\n`)}`;
+  const mailMe = adminUrl ? adminMailto(event.title, adminUrl, shareUrl) : '';
+  const mailto = participantMailto(event.title, shareUrl);
 
   return (
     <>
