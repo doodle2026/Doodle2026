@@ -1,15 +1,11 @@
 'use client';
 import { whenLabel } from '@/lib/format';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Header from '@/components/Header';
+import VoteSection from './VoteSection';
 import type { ApiEvent } from '@/lib/events';
 import { adminMailto, canNativeShare, copyText, participantMailto, shareLink, shareText } from '@/lib/share';
 
-const dayFmt = new Intl.DateTimeFormat('da-DK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-const timeFmt = new Intl.DateTimeFormat('da-DK', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-const keyFmt = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
-const offsetFmt = new Intl.DateTimeFormat('da-DK', { timeZoneName: 'shortOffset' });
-const offsetOf = (d: Date) => (offsetFmt.formatToParts(d).find((p) => p.type === 'timeZoneName')?.value ?? '').replace('GMT', '') || '+00';
 
 type CopyState = 'idle' | 'copied' | 'error';
 type Which = 'url' | 'admin';
@@ -50,7 +46,7 @@ export default function PollView({ event, shareUrl, justCreated }:
         if (sessionStorage.getItem(storeKey) === 'closed') setOpen(false);
         // The admin link is handed over via sessionStorage (never the URL) and removed after first display.
         const a = sessionStorage.getItem(adminStoreKey(event.slug));
-        if (a && a.startsWith(`/p/${event.slug}/admin/`)) { setAdminUrl(location.origin + a); setOpen(true); }
+        if (a && a.startsWith(`/p/${event.slug}/admin#`)) { setAdminUrl(location.origin + a); setOpen(true); }
         sessionStorage.removeItem(adminStoreKey(event.slug));
       } catch { /* ignore */ }
       // Drop ?created=1 so a reload/shared copy of the address bar doesn't claim "just created".
@@ -58,27 +54,6 @@ export default function PollView({ event, shareUrl, justCreated }:
     }
   }, [justCreated, storeKey, event.slug]);
 
-  const groups = useMemo(() => {
-    if (!tz) return [];
-    // DST ambiguity (e.g. two "02:30"): show the offset for clashing local times.
-    const labelCount = new Map<string, number>();
-    const local = event.time_options.map((o) => {
-      const s = new Date(o.start_at);
-      const k = keyFmt.format(s) + timeFmt.format(s);
-      labelCount.set(k, (labelCount.get(k) ?? 0) + 1);
-      return { o, s, k };
-    });
-    const m = new Map<string, { date: Date; items: { label: string; iso: string }[] }>();
-    for (const { o, s, k: lk } of local) {
-      const e = o.end_at ? new Date(o.end_at) : null;
-      const k = keyFmt.format(s);
-      if (!m.has(k)) m.set(k, { date: s, items: [] });
-      let label = timeFmt.format(s) + ((labelCount.get(lk) ?? 0) > 1 ? ` (${offsetOf(s)})` : '');
-      if (e) label += ' – ' + (keyFmt.format(e) === k ? timeFmt.format(e) : `${dayFmt.format(e)} ${timeFmt.format(e)}`);
-      m.get(k)!.items.push({ label, iso: o.start_at });
-    }
-    return [...m.entries()];
-  }, [tz, event.time_options]);
 
   async function doCopy(which: Which, text: string, input: HTMLInputElement | null) {
     const what = which === 'url' ? 'Linket til deltagerne' : 'Admin-linket';
@@ -185,20 +160,8 @@ export default function PollView({ event, shareUrl, justCreated }:
           {event.is_closed && <ClosedBanner event={event} />}
           <h1>{event.title}</h1>
           {event.description && <p className="lead">{event.description}</p>}
-          <h2>Foreslåede tidspunkter <span className="meta">({event.time_options.length})</span></h2>
           <p className="tz-note">{tz ? `Tider vist i ${tz}.` : ''}</p>
-          <div>
-            {groups.map(([k, g]) => (
-              <section className="poll-day" key={k}>
-                <h3 className="poll-day__title">{dayFmt.format(g.date)}</h3>
-                <ul className="chips">
-                  {g.items.map((it) => (
-                    <li className="chip" key={it.iso}><time dateTime={it.iso}>{it.label}</time></li>
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </div>
+          <VoteSection initial={event} />
         </article>
       </main>
     </>
