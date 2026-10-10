@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
   htmlLimitedBots: /.*/,
   // OG image route reads Inter font files at runtime; make sure they ship with the serverless function.
   outputFileTracingIncludes: {
-    '/p/[id]/opengraph-image': ['./node_modules/@fontsource/inter/files/inter-latin*-{400,700,800}-normal.woff'],
+    '/p/[id]/opengraph-image': ['./node_modules/@fontsource/inter/files/inter-latin*-{400,700,800}-normal.woff', './public/brand/og-*.svg'],
   },
 };
 export default nextConfig;
