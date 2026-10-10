@@ -1,3 +1,4 @@
+import type { Tr } from '@/i18n/translator';
 // Pure helpers for the create form (unit-tested in tests/form.test.ts).
 export { textLength, isBlank } from './validate';
 import { textLength, isBlank } from './validate';
@@ -5,7 +6,7 @@ import { textLength, isBlank } from './validate';
 export type CounterState = 'ok' | 'warn' | 'over';
 export const counterState = (n: number, max: number, warnAt = 0.9): CounterState =>
   n > max ? 'over' : n >= max * warnAt ? 'warn' : 'ok';
-export const counterText = (n: number, max: number) => `${n} / ${max}` + (n > max ? ` – ${n - max} for mange` : '');
+export const counterText = (n: number, max: number, t: Tr) => t('common.counter', { n, max }) + (n > max ? ` – ${t('common.overBy', { n: n - max })}` : '');
 
 export interface FormSlot { id: number; date: string; start: string; end: string }
 

@@ -1,4 +1,6 @@
 import { describe, test, expect } from 'vitest';
+import { T } from './helpers/t';
+import { keyVotes } from '../src/lib/vote-client';
 import { bestMask, editTokenFromHash, nameError, nextVote, readStored, totals, totalText, writeStored } from '../src/lib/vote-client';
 import { cleanName, participantNameKey, validateVote } from '../src/lib/votes';
 import { isBlank, textLength } from '../src/lib/validate';
@@ -12,8 +14,8 @@ describe('vote UI helpers', () => {
     expect(t).toEqual([{ yes: 1, maybe: 1, no: 0 }, { yes: 1, maybe: 1, no: 0 }, { yes: 0, maybe: 0, no: 1 }]);
     expect(bestMask(t)).toEqual([true, true, false]);
     expect(bestMask(totals([[null, 'no']], 2))).toEqual([false, false]);
-    expect(totalText({ yes: 4, maybe: 1, no: 0 })).toBe('4 ja, 1 måske');
-    expect(totalText({ yes: 0, maybe: 0, no: 2 })).toBe('0 ja');
+    expect(totalText({ yes: 4, maybe: 1, no: 0 }, T.da)).toBe('4 ja, 1 måske');
+    expect(totalText({ yes: 0, maybe: 0, no: 2 }, T.da)).toBe('0 ja');
   });
   test('#edit= fragment parsing + per-poll storage', () => {
     const T = 'b'.repeat(43);
@@ -33,10 +35,10 @@ describe('vote UI helpers', () => {
   test('client name check mirrors server (blank, length, case-insensitive dup, own row skipped)', () => {
     const h = { isBlank, textLength };
     const ps = [{ id: 1, name: 'Jan' }];
-    expect(nameError(' \u200B', ps, null, h)).toMatch(/Skriv dit navn/);
-    expect(nameError('x'.repeat(102), ps, null, h)).toBe('Navnet er 2 tegn for langt (højst 100).');
-    expect(nameError('JAN', ps, null, h)).toBe('"JAN" har allerede svaret. Tilføj f.eks. et efternavn.');
-    expect(nameError('jan', ps, 1, h)).toBe('');
+    expect(nameError(' \u200B', ps, null, h, T.da)).toMatch(/Skriv dit navn/);
+    expect(nameError('x'.repeat(102), ps, null, h, T.da)).toBe('Navnet er 2 tegn for langt (højst 100).');
+    expect(nameError('JAN', ps, null, h, T.da)).toBe('"JAN" har allerede svaret. Tilføj f.eks. et efternavn.');
+    expect(nameError('jan', ps, 1, h, T.da)).toBe('');
   });
 });
 
@@ -74,14 +76,27 @@ describe('V1: shared name normalizer (no impersonation with invisible chars)', (
 });
 
 describe('V3/V5/V8 helpers', async () => {
-  const { savedMessage, HINT_CARDS, HINT_GRID } = await import('../src/lib/vote-client');
+  const { savedMessage, hintFor } = await import('../src/lib/vote-client');
+  const HINT_GRID = hintFor(true, T.da), HINT_CARDS = hintFor(false, T.da);
   test('V5 saved message: fresh / returning / closed', () => {
-    expect(savedMessage('Jan', true, false)).toBe('✓ Tak, Jan! Dine svar er gemt.');
-    expect(savedMessage('Jan', false, false)).toMatch(/^✓ Du har svaret som Jan\./);
-    expect(savedMessage('Jan', true, true)).toBe('Du har svaret som Jan. Afstemningen er lukket, så svarene kan ikke længere ændres.');
+    expect(savedMessage('Jan', true, false, T.da)).toBe('✓ Tak, Jan! Dine svar er gemt.');
+    expect(savedMessage('Jan', false, false, T.da)).toMatch(/^✓ Du har svaret som Jan\./);
+    expect(savedMessage('Jan', true, true, T.da)).toBe('Du har svaret som Jan. Afstemningen er lukket, så svarene kan ikke længere ændres.');
   });
   test('V3 hints differ for grid and cards; card hint mentions no keyboard/cell cycling', () => {
     expect(HINT_GRID).toMatch(/celle/);
     expect(HINT_CARDS).not.toMatch(/celle|←|Delete/);
+  });
+});
+
+describe('i18n vote helpers', () => {
+  test('per-locale shortcut keys and texts', () => {
+    expect(keyVotes(T.en('vote.keys'))).toEqual({ y: 'yes', m: 'maybe', n: 'no' });
+    expect(keyVotes(T.da('vote.keys'))).toEqual({ j: 'yes', m: 'maybe', n: 'no' });
+    expect(keyVotes(T.fr('vote.keys'))).toEqual({ o: 'yes', p: 'maybe', n: 'no' });
+    expect(keyVotes(T.de('vote.keys'))).toEqual({ j: 'yes', v: 'maybe', n: 'no' });
+    expect(totalText({ yes: 4, maybe: 1, no: 0 }, T.en)).toBe('4 yes, 1 maybe');
+    expect(totalText({ yes: 2, maybe: 0, no: 1 }, T.de)).toMatch(/^2 /);
+    expect(nameError('', [], null, { isBlank: (s) => !s.trim(), textLength: (s) => s.length }, T.en)).toMatch(/Enter your name/);
   });
 });

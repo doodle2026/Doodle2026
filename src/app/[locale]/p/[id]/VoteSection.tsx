@@ -1,23 +1,23 @@
 'use client';
-import { plural } from '@/lib/plural';
 import { useLp } from '@/i18n/link';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { ApiEvent } from '@/lib/events';
-import { optionLabel } from '@/lib/format';
-import { columnHead, localTodayIso } from '@/lib/dates';
+import { localTodayIso } from '@/lib/dates';
+import { useI18n } from '@/i18n/use';
 import { copyText } from '@/lib/share';
 import { counterState, counterText, isBlank, textLength } from '@/lib/form';
 import {
-  bestMask, editTokenFromHash, HINT_CARDS, HINT_GRID, savedMessage, KEY_VOTE, LABEL, nameError, nextVote, readStored, totals, totalText, writeStored, type Vote,
+  bestMask, editTokenFromHash, hintFor, savedMessage, keyVotes, ICON, voteKey, nameError, nextVote, readStored, totals, totalText, writeStored, type Vote,
   inviteTokenFromHash,
 } from '@/lib/vote-client';
 
 const newIdemKey = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
 
 function Badge({ v }: { v: Vote }) {
+  const { tr } = useI18n();
   return (
     <span className={`vote vote--${v ?? 'none'}`}>
-      <span aria-hidden="true">{LABEL[String(v)][0]}</span> {v ? LABEL[v][1] : <span className="sr-only">Ikke svaret</span>}
+      <span aria-hidden="true">{ICON[String(v)]}</span> {v ? tr(voteKey(v)) : <span className="sr-only">{tr('vote.none')}</span>}
     </span>
   );
 }
@@ -26,6 +26,8 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localTodayIso()), []);
   const lp = useLp();
+  const { t, tr, fd, head, rich } = useI18n();
+  const KEY_VOTE = keyVotes(t('vote.keys'));
   const [ev, setEv] = useState(initial);
   const [wide, setWide] = useState(true); // V3: matches the CSS breakpoint (table ≥ 640 px, cards below)
   const [name, setName] = useState('');
@@ -60,7 +62,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
   // K2: dates before today in the viewer's local date are passed (computed after mount; SSR doesn't know the date).
   const past = (i: number) => today !== null && opts[i].date < today;
   const cls = (i: number) => `${chosen(i) ? 'is-chosen' : best[i] ? 'is-best' : ''}${past(i) ? ' is-past' : ''}`.trim();
-  const optLabel = (i: number) => optionLabel(opts[i]);
+  const optLabel = (i: number) => fd(opts[i].date);
 
   // Personal edit link: #edit=<token> → verify via API (Bearer), keep in localStorage, strip the fragment.
   useEffect(() => {
@@ -133,7 +135,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
     if (past(i)) return;
     setMe((m) => {
       const nv = typeof v === 'function' ? v(m[i]) : v;
-      setLive(`${optLabel(i)}: ${LABEL[String(nv)][1]}`);
+      setLive(t('app.stateAria', { date: optLabel(i), state: tr(voteKey(nv)) }));
       return m.map((x, j) => (j === i ? nv : x));
     });
     focusSel.current = sel;
@@ -162,10 +164,10 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (saving) return;
-    const nErr = nameError(name, ev.participants, editing ? myId : null, { isBlank, textLength });
-    const items = [...(nErr ? [nErr] : []), ...(me.some(Boolean) ? [] : ['Svar på mindst én dato (ja, måske eller nej).'])];
+    const nErr = nameError(name, ev.participants, editing ? myId : null, { isBlank, textLength }, tr);
+    const items = [...(nErr ? [nErr] : []), ...(me.some(Boolean) ? [] : [t('err.minAnswer')])];
     setNameErr(nErr);
-    if (items.length) { setSummary({ head: 'Ret venligst følgende:', items }); focusSel.current = nErr ? '#name' : '#summary'; return; }
+    if (items.length) { setSummary({ head: t('common.fixN', { n: items.length }), items }); focusSel.current = nErr ? '#name' : '#summary'; return; }
     setSaving(true); setSummary(null);
     const body = JSON.stringify({ name, votes: opts.map((o, i) => ({ option_id: o.id, value: me[i] })) });
     try {
@@ -178,14 +180,14 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
       }
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
-        const errs: string[] = Array.isArray(d.errors) ? d.errors : ['Ukendt fejl.'];
+        const errs: string[] = Array.isArray(d.errors) ? d.errors : [t('app.unknownError')];
         if (d.code === 'name_taken') setNameErr(errs[0]);
         if (d.code === 'idempotency_mismatch') idem.current = null;
         if (r.status === 423) setEv((x) => ({ ...x, is_closed: true }));
         if (r.status === 410) { setDeletedMine(true); setEditing(false); writeStored(ev.slug, null, localStorage); setToken(null); setMyId(null); setSaved(null); setSaving(false); return; }
         if (r.status === 403) { setTokenErr(true); setEditing(false); writeStored(ev.slug, null, localStorage); setToken(null); setMyId(null); }
         if (r.status >= 500) { serverError(); return; }
-        setSummary({ head: 'Dine svar blev ikke gemt.', items: errs });
+        setSummary({ head: t('app.notSaved'), items: errs });
         focusSel.current = d.code === 'name_taken' ? '#name' : '#summary';
         return;
       }
@@ -196,19 +198,19 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
       if (d.edit_token) {
         writeStored(ev.slug, { token: d.edit_token, pid }, localStorage);
         setToken(d.edit_token);
-        editUrl = location.origin + d.edit_url;
+        editUrl = location.origin + lp(d.edit_url);
       }
       setMyId(pid);
       const shown = d.event.participants.find((p: { id: number }) => p.id === pid)?.name ?? name;
       setSaved({ name: shown, editUrl, fresh: true });
       setEditing(false); setName(''); setMe(opts.map(() => null)); setNameErr('');
-      setLive(editUrl ? 'Dine svar er gemt. Dit redigeringslink vises nu.' : 'Dine ændringer er gemt.');
+      setLive(editUrl ? t('vote.liveSaved') : t('app.changesSaved'));
     } catch {
       serverError();
     } finally { setSaving(false); }
   }
   function serverError() {
-    setSummary({ head: 'Dine svar blev ikke gemt.', items: ['Der opstod en fejl på serveren eller forbindelsen blev afbrudt. Dine valg er bevaret – prøv igen.'] });
+    setSummary({ head: t('app.notSaved'), items: [t('app.serverErrItem')] });
     focusSel.current = '#summary';
   }
 
@@ -216,38 +218,38 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
     const input = document.getElementById('editurl') as HTMLInputElement | null;
     const r = await copyText(url, { clipboard: navigator.clipboard, legacyCopy: () => { input?.select(); return document.execCommand?.('copy') ?? false; } });
     setCopied(r === 'copied' ? 'ok' : 'err');
-    if (r === 'copied') { setLive('Redigeringslinket er kopieret'); setTimeout(() => setCopied(''), 2000); } else input?.select();
+    if (r === 'copied') { setLive(t('vote.copiedEdit')); setTimeout(() => setCopied(''), 2000); } else input?.select();
   }
 
   const nameLen = textLength(name.trim());
   const nameSt = counterState(nameLen, 100);
-  const meName = name.trim() || 'Dig';
+  const meName = name.trim() || t('vote.you');
   const canEditOwn = !closed && myId !== null && token !== null && !editing;
 
   return (
     <form className={`vote-view${others.length >= 20 ? ' vgrid--many' : ''}`} id="vote" noValidate onSubmit={submit} aria-labelledby="grid-h"
       onKeyDown={(e) => { if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') e.preventDefault(); }}>
-      {deletedMine && <div className="alert" role="status" id="deleted-mine">Dit svar er slettet af arrangøren. Du kan svare igen som ny deltager.</div>}
-      {tokenErr && <div className="alert" role="alert">Redigeringslinket er ugyldigt. Du kan stadig se afstemningen, men ikke ændre svarene.</div>}
+      {deletedMine && <div className="alert" role="status" id="deleted-mine">{t('app.answerDeleted')}</div>}
+      {tokenErr && <div className="alert" role="alert">{t('app.editInvalid')}</div>}
       {saved && !editing && (
         <div id="banner">
-          <div className={closed ? 'meta' : 'success'} role="status" id="saved-msg">{savedMessage(saved.name, saved.fresh, closed)}</div>
+          <div className={closed ? 'meta' : 'success'} role="status" id="saved-msg">{savedMessage(saved.name, saved.fresh, closed, tr)}</div>
           {saved.editUrl && (
             <div className="linkbox linkbox--secret" role="group" aria-labelledby="el-l" aria-describedby="el-d" style={{ margin: '0 0 var(--s-4)' }}>
-              <p className="linkbox__label" id="el-l"><span className="icon-lock" aria-hidden="true">!</span> Dit personlige redigeringslink</p>
-              <p className="linkbox__desc" id="el-d">Gem linket, hvis du vil ændre dine svar senere. <strong>Del det ikke</strong> – alle med linket kan ændre dine svar. Vi har ingen konti, så vi kan ikke sende det igen.</p>
+              <p className="linkbox__label" id="el-l"><span className="icon-lock" aria-hidden="true">!</span> {t('vote.editLinkLabel')}</p>
+              <p className="linkbox__desc" id="el-d">{rich('vote.editLinkDesc')}</p>
               <div className="linkbox__row">
-                <input className="input" id="editurl" readOnly value={saved.editUrl} aria-label="Personligt redigeringslink" onFocus={(e) => e.currentTarget.select()} />
+                <input className="input" id="editurl" readOnly value={saved.editUrl} aria-label={t('vote.editLinkAria')} onFocus={(e) => e.currentTarget.select()} />
                 <div className="linkbox__actions">
                   <button type="button" className={`btn ${copied === 'ok' ? 'btn--copied' : copied === 'err' ? 'btn--copy-error' : 'btn--secondary'}`} onClick={() => copyEdit(saved.editUrl!)}>
-                    {copied === 'ok' ? '✓ Kopieret' : copied === 'err' ? 'Markér og kopiér manuelt' : 'Kopiér link'}
+                    {copied === 'ok' ? `✓ ${t('common.copied')}` : copied === 'err' ? t('common.copyManual') : t('common.copyLink')}
                   </button>
-                  <a className="btn btn--secondary" href={`mailto:?subject=${encodeURIComponent(`Mit redigeringslink: ${ev.title}`)}&body=${encodeURIComponent(saved.editUrl)}`}>✉ Send til mig selv</a>
+                  <a className="btn btn--secondary" href={`mailto:?subject=${encodeURIComponent(t('vote.editMailSubject', { title: ev.title }))}&body=${encodeURIComponent(saved.editUrl)}`}>{`✉ ${t('common.sendToSelf')}`}</a>
                 </div>
               </div>
             </div>
           )}
-          {canEditOwn && <p style={{ margin: '0 0 var(--s-4)' }}><button type="button" className="btn btn--ghost" onClick={() => startEditing(myId!)}>✎ Redigér mine svar</button></p>}
+          {canEditOwn && <p style={{ margin: '0 0 var(--s-4)' }}><button type="button" className="btn btn--ghost" onClick={() => startEditing(myId!)}>{t('vote.editMine')}</button></p>}
         </div>
       )}
       <div className="alert" id="summary" role="alert" tabIndex={-1}>
@@ -256,17 +258,17 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
 
       {invite && (
         <div className="personal-banner" role="note" id="personal-banner"><span aria-hidden="true">✉</span>
-          <span style={{ flex: 1, minWidth: 220 }}>Du er inviteret som <strong>{invite.email}</strong>. Dit svar registreres automatisk hos arrangøren.</span>
+          <span style={{ flex: 1, minWidth: 220 }}>{rich('vote.personal', { email: invite.email })}</span>
           <a className="link-btn" href={lp(`/p/${ev.slug}`)} onClick={(e) => {
             e.preventDefault(); sessionStorage.removeItem(`inv:${ev.slug}`); setInvite(null);
             if (namePrefilled) { setName(''); setNamePrefilled(false); }
-          }}>Ikke dig? Brug det offentlige link</a></div>
+          }}>{t('vote.notYou')}</a></div>
       )}
-      {inviteInactive && !invite && <div className="personal-banner" role="status" id="invite-inactive"><span aria-hidden="true">ℹ</span>Dette link er ikke længere aktivt. Du kan stadig svare som alle andre.</div>}
+      {inviteInactive && !invite && <div className="personal-banner" role="status" id="invite-inactive"><span aria-hidden="true">ℹ</span>{t('app.inviteInactive')}</div>}
       {showInput && (
         <div className="field vote-name" id="name-field">
-          <label className="field__label" htmlFor="name">Dit navn *{invite && namePrefilled && <> <span className="field__hint">(udfyldt fra invitationen – du kan rette det)</span></>}</label>
-          <input className="input" id="name" autoComplete="name" placeholder="F.eks. Mette" aria-required="true" value={name}
+          <label className="field__label" htmlFor="name">{t('vote.name')}{invite && namePrefilled && <> <span className="field__hint">{t('vote.prefilled')}</span></>}</label>
+          <input className="input" id="name" autoComplete="name" placeholder={t('vote.namePh')} aria-required="true" value={name}
             aria-describedby="name-err name-count" aria-invalid={nameErr ? true : undefined}
             onChange={(e) => {
               setName(e.target.value);
@@ -275,37 +277,37 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
             }} />
           <div className="field__meta">
             <div className="field__error" id="name-err" aria-live="polite">{nameErr}</div>
-            <span className={`counter${nameSt === 'over' ? ' counter--over' : nameSt === 'warn' ? ' counter--warn' : ''}`} id="name-count">{counterText(nameLen, 100)}</span>
+            <span className={`counter${nameSt === 'over' ? ' counter--over' : nameSt === 'warn' ? ' counter--warn' : ''}`} id="name-count">{counterText(nameLen, 100, tr)}</span>
           </div>
         </div>
       )}
 
-      <h2 id="grid-h">{closed ? 'Svar' : 'Hvilke datoer passer dig?'}</h2>
+      <h2 id="grid-h">{closed ? t('vote.answersH') : t('vote.h')}</h2>
       <div className="legend">
-        <span className="vote vote--yes"><span aria-hidden="true">✓</span> Ja</span>
-        <span className="vote vote--maybe"><span aria-hidden="true">( )</span> Måske</span>
-        <span className="vote vote--no"><span aria-hidden="true">✕</span> Nej</span>
-        <span className="vote vote--none">– Ikke svaret</span>
+        <span className="vote vote--yes"><span aria-hidden="true">✓</span> {t('vote.yes')}</span>
+        <span className="vote vote--maybe"><span aria-hidden="true">( )</span> {t('vote.maybe')}</span>
+        <span className="vote vote--no"><span aria-hidden="true">✕</span> {t('vote.no')}</span>
+        <span className="vote vote--none">{`– ${t('vote.none')}`}</span>
       </div>
       {editing && (
-        <p className="editing-note" id="editing">✎ Du redigerer dine svar som {ev.participants.find((p) => p.id === myId)?.name}.{' '}
-          <button type="button" onClick={cancelEditing} style={{ background: 'none', border: 0, padding: 0, color: 'var(--c-primary)', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>Annullér redigering</button></p>
+        <p className="editing-note" id="editing">{t('app.editingAs', { name: ev.participants.find((p) => p.id === myId)?.name ?? '' })}{' '}
+          <button type="button" onClick={cancelEditing} style={{ background: 'none', border: 0, padding: 0, color: 'var(--c-primary)', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>{t('app.cancelEditing')}</button></p>
       )}
-      {showInput && <p className="tz-note" id="hint">{wide ? HINT_GRID : HINT_CARDS}</p>}
-      {ev.participants.length === 0 && <div className="vote-empty">Ingen har stemt endnu – vær den første! 🎉</div>}
+      {showInput && <p className="tz-note" id="hint">{hintFor(wide, tr)}</p>}
+      {ev.participants.length === 0 && <div className="vote-empty">{t('vote.empty')}</div>}
 
       <div className="vgrid-wrap" tabIndex={0} role="region" aria-labelledby="grid-h">
         <table className="vgrid" id="grid">
-          <caption className="sr-only">Afstemning. Kolonner er datoforslag, rækker er deltagere. Sidste række er totaler.</caption>
+          <caption className="sr-only">{t('vote.caption')}</caption>
           <thead>
             <tr>
-              <th className="vgrid__name" scope="col">Deltager ({ev.participants.length})</th>
+              <th className="vgrid__name" scope="col">{t('vote.participantsCol', { n: ev.participants.length })}</th>
               {opts.map((o, i) => (
                 <th scope="col" className={cls(i)} key={o.id}>
-                  <span className="vgrid__day">{columnHead(o.date)[0]}</span>
-                  <span className="vgrid__time">{columnHead(o.date)[1]}</span>
-                  {chosen(i) ? <span className="chosen-badge">✓ Valgt</span> : best[i] ? <span className="best-badge">★ Bedst</span> : null}
-                  {past(i) && <span className="past-badge">passeret</span>}
+                  <span className="vgrid__day">{head(o.date)[0]}</span>
+                  <span className="vgrid__time">{head(o.date)[1]}</span>
+                  {chosen(i) ? <span className="chosen-badge">{t('vote.chosen')}</span> : best[i] ? <span className="best-badge">{t('vote.best')}</span> : null}
+                  {past(i) && <span className="past-badge">{t('app.past')}</span>}
                 </th>
               ))}
             </tr>
@@ -316,7 +318,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
                 <th scope="row" className="vgrid__name">
                   {p.name}
                   {canEditOwn && p.id === myId && (
-                    <button type="button" className="vgrid__edit vgrid__edit--on" aria-label="Redigér dine svar" onClick={() => startEditing(p.id)}>✎ Redigér</button>
+                    <button type="button" className="vgrid__edit vgrid__edit--on" aria-label={t('vote.editAria')} onClick={() => startEditing(p.id)}>{t('vote.edit')}</button>
                   )}
                 </th>
                 {p.votes.map((v, i) => <td className={cls(i)} key={i}><Badge v={v} /></td>)}
@@ -327,9 +329,9 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
                 <th scope="row" className="vgrid__name" id="me-name">{meName}</th>
                 {me.map((v, i) => (
                   <td className={cls(i)} key={i}>
-                    <button type="button" className="tri" data-i={i} data-state={String(v)} disabled={past(i)} aria-label={`${optLabel(i)}: ${LABEL[String(v)][1]}. Tryk for at skifte.`}
+                    <button type="button" className="tri" data-i={i} data-state={String(v)} disabled={past(i)} aria-label={t('vote.cellAria', { date: optLabel(i), state: tr(voteKey(v)) })}
                       onClick={() => set(i, nextVote, `.tri[data-i="${i}"]`)} onKeyDown={(e) => triKey(e, i)}>
-                      <span aria-hidden="true">{LABEL[String(v)][0]}</span>{v ? LABEL[v][1] : 'Vælg'}
+                      <span aria-hidden="true">{ICON[String(v)]}</span>{v ? tr(voteKey(v)) : t('vote.pick')}
                     </button>
                   </td>
                 ))}
@@ -337,7 +339,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
             )}
           </tbody>
           <tfoot>
-            <tr><th scope="row" className="vgrid__name">I alt</th>{T.map((t, i) => <td className={cls(i)} key={i}>{totalText(t)}</td>)}</tr>
+            <tr><th scope="row" className="vgrid__name">{t('vote.total')}</th>{T.map((x, i) => <td className={cls(i)} key={i}>{totalText(x, tr)}</td>)}</tr>
           </tfoot>
         </table>
       </div>
@@ -347,24 +349,24 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
           <li key={o.id} className={`vcard${chosen(i) ? ' is-best is-chosen' : best[i] ? ' is-best' : ''}${past(i) ? ' is-past' : ''}`}>
             <div className="vcard__head">
               <span className="vcard__when" id={`c${i}`} suppressHydrationWarning>{optLabel(i)}</span>
-              {chosen(i) ? <span className="chosen-badge">✓ Valgt</span> : best[i] ? <span className="best-badge">★ Bedst</span> : null}
-              {past(i) && <span className="past-badge">passeret</span>}
+              {chosen(i) ? <span className="chosen-badge">{t('vote.chosen')}</span> : best[i] ? <span className="best-badge">{t('vote.best')}</span> : null}
+              {past(i) && <span className="past-badge">{t('app.past')}</span>}
             </div>
-            <div className="vcard__totals">{totalText(T[i])}{T[i].no ? `, ${T[i].no} nej` : ''}{showInput && !me[i] ? <> · <em>Du har ikke svaret</em></> : null}</div>
+            <div className="vcard__totals">{totalText(T[i], tr)}{T[i].no ? `, ${t('app.noCount', { n: T[i].no })}` : ''}{showInput && !me[i] ? <> · <em>{t('vote.notAnsweredYou')}</em></> : null}</div>
             {showInput && (
               <div className="seg" role="radiogroup" aria-labelledby={`c${i}`}>
                 {(['yes', 'maybe', 'no'] as const).map((v) => (
                   <button type="button" role="radio" key={v} data-i={i} data-v={v} aria-checked={me[i] === v} disabled={past(i)}
                     tabIndex={me[i] === v || (!me[i] && v === 'yes') ? 0 : -1}
                     onClick={() => set(i, (cur) => (cur === v ? null : v), `.seg button[data-i="${i}"][data-v="${v}"]`)} onKeyDown={(e) => segKey(e, i, v)}>
-                    <span aria-hidden="true">{LABEL[v][0]}</span> {LABEL[v][1]}
+                    <span aria-hidden="true">{ICON[v]}</span> {tr(voteKey(v))}
                   </button>
                 ))}
               </div>
             )}
             {others.length > 0 && (
               <details open={closed}>
-                <summary>Se {closed ? 'alle' : 'de andres'} svar ({others.length})</summary>
+                <summary>{closed ? t('vote.seeAll', { n: others.length }) : t('vote.seeOthers', { n: others.length })}</summary>
                 <ul className="vcard__people">{others.map((p) => <li key={p.id}><span>{p.name}</span><Badge v={p.votes[i]} /></li>)}</ul>
               </details>
             )}
@@ -375,7 +377,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
       {showInput && (
         <div className="vote-bar">
           <button type="submit" className="btn btn--primary btn--block" id="save" style={{ maxWidth: 320 }} disabled={saving} aria-busy={saving}>
-            {saving ? (<><span className="spinner" aria-hidden="true" /> Gemmer…</>) : editing ? 'Gem ændringer' : 'Gem mine svar'}
+            {saving ? (<><span className="spinner" aria-hidden="true" /> {t('vote.saving')}</>) : editing ? t('vote.saveChanges') : t('vote.save')}
           </button>
         </div>
       )}

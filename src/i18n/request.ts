@@ -14,8 +14,15 @@ export async function loadMessages(locale: string): Promise<Msgs> {
   return merge(en, (await import(`../../messages/${locale}.json`)).default);
 }
 
-export default getRequestConfig(async ({ requestLocale }) => {
-  const r = await requestLocale;
+/** Messages for the browser: everything except the mail strings (server-only). */
+export async function clientMessages(locale: string): Promise<Msgs> {
+  const { email: _mail, ...rest } = await loadMessages(locale); // eslint-disable-line @typescript-eslint/no-unused-vars
+  return rest;
+}
+
+export default getRequestConfig(async ({ requestLocale, locale: explicit }) => {
+  // explicit locale (getTranslations({locale})) → [locale] segment → middleware's x-locale (global not-found).
+  const r = explicit ?? (await requestLocale) ?? (await (await import('next/headers')).headers()).get('x-locale');
   const locale = isLocale(r) ? r : DEFAULT_LOCALE;
   return { locale, messages: await loadMessages(locale), timeZone: 'UTC' };
 });

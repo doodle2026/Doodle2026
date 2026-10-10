@@ -94,7 +94,7 @@ describe.skipIf(!existsSync(CHROME))('headless: P1 notice, P2 no hydration misma
   test('P1: deleted participant opening their edit link sees "Dit svar er slettet"', async () => {
     const { p, edit } = await deletedVoter();
     const pg = await browser.newPage();
-    await pg.goto(`${BASE}/p/${p.id}#edit=${edit}`);
+    await pg.goto(`${BASE}/da/p/${p.id}#edit=${edit}`);
     await pg.waitForSelector('#deleted-mine');
     expect(await pg.textContent('#deleted-mine')).toContain('Dit svar er slettet');
     expect(await pg.locator('text=Redigeringslinket er ugyldigt').count()).toBe(0);

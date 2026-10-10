@@ -5,6 +5,10 @@ import { pollDescription, truncateGraphemes } from '@/lib/meta';
 import { OG_SIZE, ogImagePath } from '@/lib/og';
 import PollView from './PollView';
 import { languageAlternates } from '@/i18n/seo';
+import { getTranslations } from 'next-intl/server';
+import { LOCALES, type Locale } from '@/i18n/config';
+
+const OG_LOCALE: Record<Locale, string> = { en: 'en_US', da: 'da_DK', fr: 'fr_FR', de: 'de_DE' };
 
 export const dynamic = 'force-dynamic';
 type Props = { params: Promise<{ id: string; locale: string }>; searchParams: Promise<{ created?: string; edit?: string }> };
@@ -12,14 +16,16 @@ const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\
 
 // Design §14.3. React escapes every value; absolute URLs come from APP_URL, never the Host header.
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
-  const { id, locale } = await params;
+  const { id, locale: l } = await params;
+  const locale = l as Locale;
+  const t = await getTranslations({ locale });
   const ev = await loadEvent(id);
-  if (!ev) return { title: 'Afstemningen findes ikke', robots: { index: false } };
+  if (!ev) return { title: t('nf.pageTitle'), robots: { index: false } };
   // Personal edit links (?edit=<token>, feature 3) get no OG/canonical tags (design §18).
   if ((await searchParams).edit !== undefined) return { title: ev.title, robots: { index: false, follow: false } };
   const url = `${appUrl()}/${locale}/p/${ev.slug}`;
-  const description = pollDescription(ev.time_options.length, ev.time_options.map((o) => o.date));
-  const image = { url: `${appUrl()}${ogImagePath(ev.slug, locale)}`, ...OG_SIZE, alt: `GrabAday-afstemning: ${ev.title}`, type: 'image/png' };
+  const description = pollDescription(ev.time_options.map((o) => o.date), locale, t);
+  const image = { url: `${appUrl()}${ogImagePath(ev.slug, locale)}`, ...OG_SIZE, alt: t('app.ogAlt', { title: ev.title }), type: 'image/png' };
   const ogDescription = ev.description ? truncateGraphemes(ev.description, 160) : description;
   return {
     title: ev.title,
@@ -27,7 +33,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     alternates: { canonical: url, languages: languageAlternates(`/p/${ev.slug}`) },
     robots: { index: false, follow: false }, // polls are private-by-link
     openGraph: {
-      type: 'website', siteName: 'GrabAday', locale: 'da_DK', title: ev.title, description: ogDescription, url,
+      type: 'website', siteName: 'GrabAday', locale: OG_LOCALE[locale], alternateLocale: LOCALES.filter((x) => x !== locale).map((x) => OG_LOCALE[x]), title: ev.title, description: ogDescription, url,
       images: [image],
     },
     twitter: { card: 'summary_large_image', title: ev.title, description: ogDescription, images: [image] },

@@ -1,4 +1,5 @@
 import { describe, test, expect, inject } from 'vitest';
+import { markup } from './helpers/t';
 import { readFileSync } from 'node:fs';
 
 const BASE = inject('baseUrl');
@@ -175,7 +176,7 @@ describe('edit own answers (Bearer edit token)', () => {
     expect(p.text).toContain('Afstemningen er lukket');
     expect(p.text).toContain('>Svar</h2>');
     expect(p.text).not.toContain('id="name"');
-    expect(p.text).not.toContain('Gem mine svar');
+    expect(markup(p.text)).not.toContain('Gem mine svar');
     expect(p.text).toContain('is-chosen');
   });
 });

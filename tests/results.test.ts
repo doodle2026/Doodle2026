@@ -1,4 +1,5 @@
 import { describe, test, expect, inject, afterAll } from 'vitest';
+import { markup } from './helpers/t';
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 afterAll(() => prisma.$disconnect());
@@ -41,7 +42,7 @@ describe('choose final time (admin)', () => {
     const cl = await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: null }, e.admin));
     expect(cl.body.chosen_option_id).toBeNull();
     page = await call(`/da/p/${e.id}`);
-    expect(page.text).not.toContain('Den endelige dato er');
+    expect(markup(page.text)).not.toContain('Den endelige dato er');
     expect((await call(`/api/events/${e.id}`)).body.chosen_option_id).toBeNull();
   });
 

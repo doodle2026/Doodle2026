@@ -2,10 +2,12 @@
 import Link from 'next/link';
 import BackLink from './BackLink';
 import { useLp } from '@/i18n/link';
+import { useTranslations } from 'next-intl';
 
 // Port of doodle-ui/404.html (design §12).
 export default function NotFoundCard({ heading }: { heading: string }) {
   const lp = useLp();
+  const t = useTranslations();
   return (
     <section className="card notfound" aria-labelledby="nf-h">
       <svg className="notfound__art" viewBox="0 0 160 140" aria-hidden="true">
@@ -19,12 +21,9 @@ export default function NotFoundCard({ heading }: { heading: string }) {
         <text x="132" y="40" fontSize="26" fontWeight="700" fill="#4F46E5">?</text>
       </svg>
       <h1 id="nf-h">{heading}</h1>
-      <p className="lead">
-        Linket er måske skrevet forkert, ufuldstændigt, eller afstemningen er blevet slettet. Bemærk at store og små
-        bogstaver i linket har betydning.
-      </p>
+      <p className="lead">{t('nf.lead')}</p>
       <div className="notfound__actions">
-        <Link className="btn btn--primary" href={lp('/')}>Opret en ny afstemning</Link>
+        <Link className="btn btn--primary" href={lp('/')}>{t('nf.create')}</Link>
         <BackLink />
       </div>
     </section>

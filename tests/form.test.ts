@@ -3,7 +3,9 @@ import {
   counterState, counterText, duplicateRowError, findDuplicates, focusAfterDateRemoval, focusAfterRemoval,
   isBlank, mapServerErrors, rowsSummary, shouldBlockEnter, textLength,
 } from '../src/lib/form';
-import { dateRangeDa, truncateGraphemes } from '../src/lib/meta';
+import { truncateGraphemes } from '../src/lib/meta';
+import { formatSpan } from '../src/lib/dates';
+import { T } from './helpers/t';
 
 describe('create form helpers', () => {
   test('H2: Enter in title/time inputs is blocked; textarea and buttons are not', () => {
@@ -23,8 +25,8 @@ describe('create form helpers', () => {
     expect(isBlank('a\u200B')).toBe(false);
   });
   test('M3: counter text and states (warn ≥ 90 %, over shows excess)', () => {
-    expect(counterText(37, 200)).toBe('37 / 200');
-    expect(counterText(212, 200)).toBe('212 / 200 – 12 for mange');
+    expect(counterText(37, 200, T.da)).toBe('37 / 200');
+    expect(counterText(212, 200, T.da)).toBe('212 / 200 – 12 for mange');
     expect(counterState(179, 200)).toBe('ok');
     expect(counterState(180, 200)).toBe('warn');
     expect(counterState(201, 200)).toBe('over');
@@ -67,10 +69,10 @@ describe('create form helpers', () => {
 
 describe('link-preview helpers', () => {
   test('date ranges in Danish', () => {
-    expect(dateRangeDa(['2026-10-14', '2026-10-16'])).toBe('14.–16. oktober 2026');
-    expect(dateRangeDa(['2026-10-30', '2026-11-02'])).toBe('30. oktober – 2. november 2026');
-    expect(dateRangeDa(['2026-12-30', '2027-01-02'])).toBe('30. december 2026 – 2. januar 2027');
-    expect(dateRangeDa(['2026-10-14'])).toBe('14. oktober 2026');
+    expect(formatSpan(['2026-10-14', '2026-10-16'])).toBe('14.–16. oktober 2026');
+    expect(formatSpan(['2026-10-30', '2026-11-02'])).toBe('30. oktober–2. november 2026');
+    expect(formatSpan(['2026-12-30', '2027-01-02'])).toBe('30. december 2026–2. januar 2027');
+    expect(formatSpan(['2026-10-14'])).toBe('14. oktober 2026');
   });
   test('truncation never splits a grapheme', () => {
     const fam = '👨‍👩‍👧‍👦';

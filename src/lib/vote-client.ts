@@ -1,10 +1,17 @@
 import { nameKey, normalizeName } from './validate';
+import type { Tr } from '@/i18n/translator';
 // Pure helpers for the voting UI (unit-tested).
 export type Vote = 'yes' | 'maybe' | 'no' | null;
 export const NEXT: Record<string, Vote> = { null: 'yes', yes: 'maybe', maybe: 'no', no: null };
 export const nextVote = (v: Vote): Vote => NEXT[String(v)];
-export const KEY_VOTE: Record<string, Vote> = { j: 'yes', m: 'maybe', n: 'no' };
-export const LABEL: Record<string, [string, string]> = { yes: ['✓', 'Ja'], maybe: ['( )', 'Måske'], no: ['✕', 'Nej'], null: ['–', 'Ikke svaret'] };
+/** Shortcut keys from the catalog (`vote.keys`: en "y,m,n", da "j,m,n", fr "o,p,n", de "j,v,n"). */
+export const keyVotes = (keys: string): Record<string, Vote> => {
+  const [y, m, n] = keys.toLowerCase().split(',').map((k) => k.trim());
+  return { [y]: 'yes', [m]: 'maybe', [n]: 'no' };
+};
+export const ICON: Record<string, string> = { yes: '✓', maybe: '( )', no: '✕', null: '–' };
+/** Catalog key for a vote state's label. */
+export const voteKey = (v: Vote) => (v ? `vote.${v}` : 'vote.none');
 
 export interface Totals { yes: number; maybe: number; no: number }
 export function totals(rows: Vote[][], nOpts: number): Totals[] {
@@ -19,7 +26,7 @@ export function bestMask(t: Totals[]): boolean[] {
   const sc = t.map((x) => x.yes * 2 + x.maybe), m = Math.max(0, ...sc);
   return sc.map((s) => m > 0 && s === m);
 }
-export const totalText = (t: Totals) => `${t.yes} ja${t.maybe ? `, ${t.maybe} måske` : ''}`;
+export const totalText = (t: Totals, tr: Tr) => tr('vote.totalShort', { yes: t.yes, maybe: t.maybe });
 
 // --- personal edit token (fragment → localStorage, per poll) -----------------------------------
 export const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
@@ -51,22 +58,21 @@ export function writeStored(slug: string, v: Stored | null, s: Store) {
 
 /** Client-side name check (server is authoritative). `exceptId` skips your own row while editing. */
 export function nameError(raw: string, others: { id: number; name: string }[], exceptId: number | null,
-  helpers: { isBlank: (s: string) => boolean; textLength: (s: string) => number }): string {
+  helpers: { isBlank: (s: string) => boolean; textLength: (s: string) => number }, t: Tr): string {
   const v = normalizeName(raw);
-  if (helpers.isBlank(raw)) return 'Skriv dit navn, så de andre kan se, hvem der har svaret.';
+  if (helpers.isBlank(raw)) return t('err.nameRequired');
   const n = helpers.textLength(v);
-  if (n > 100) return `Navnet er ${n - 100} tegn for langt (højst 100).`;
-  if (others.some((p) => p.id !== exceptId && nameKey(p.name) === nameKey(v))) return `"${v}" har allerede svaret. Tilføj f.eks. et efternavn.`;
+  if (n > 100) return t('err.nameTooLong', { n: n - 100 });
+  if (others.some((p) => p.id !== exceptId && nameKey(p.name) === nameKey(v))) return t('err.nameTaken', { name: v });
   return '';
 }
 
 /** V5: confirmation text depends on fresh save vs. returning visit, and on whether the poll is closed. */
-export function savedMessage(name: string, fresh: boolean, closed: boolean): string {
-  if (closed) return `Du har svaret som ${name}. Afstemningen er lukket, så svarene kan ikke længere ændres.`;
-  return fresh ? `✓ Tak, ${name}! Dine svar er gemt.` : `✓ Du har svaret som ${name}. Du kan redigere dine svar herunder.`;
+export function savedMessage(name: string, fresh: boolean, closed: boolean, t: Tr): string {
+  if (closed) return t('app.savedClosed', { name });
+  return fresh ? t('vote.saved', { name }) : t('app.savedReturning', { name });
 }
 
 /** V3: the grid (≥ 640 px) and the mobile cards are operated differently. */
-export const HINT_GRID = 'Tryk på en celle for at skifte: ikke svaret → ja → måske → nej. Tastatur: J / M / N, Delete nulstiller, ← → flytter.';
-export const HINT_CARDS = 'Tryk på Ja, Måske eller Nej ved hver dato. Tryk igen på dit valg for at nulstille.';
+export const hintFor = (wide: boolean, t: Tr) => (wide ? t('vote.hint') : t('app.hintCards'));
 

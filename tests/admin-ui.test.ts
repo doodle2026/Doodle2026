@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { closeDefault, focusAfterDelete, undoMessage } from '../src/lib/admin-ui';
 import { googleCalendarUrlFor } from '../src/lib/format';
+import { T } from './helpers/t';
 
 describe('admin UI helpers (round 4)', () => {
   it('undo toast text for pick / change / clear', () => {
-    expect(undoMessage(null, 3, 'Ons 14. okt 09.00')).toBe('Ons 14. okt 09.00 er valgt.');
-    expect(undoMessage(2, 3, 'X')).toBe('Skiftet til X.');
-    expect(undoMessage(2, null, '')).toBe('Valget er fjernet.');
+    expect(undoMessage(null, 3, 'Ons 14. okt 09.00', T.da)).toBe('Ons 14. okt 09.00 er valgt.');
+    expect(undoMessage(2, 3, 'X', T.da)).toBe('Skiftet til X.');
+    expect(undoMessage(2, null, '', T.da)).toBe('Valget er fjernet.');
   });
   it('focus after delete: next, else previous, else heading', () => {
     expect(focusAfterDelete([1, 2, 3], 2)).toBe(3);

@@ -1,4 +1,5 @@
 import { describe, test, expect, inject } from 'vitest';
+import { markup } from './helpers/t';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -282,7 +283,7 @@ describe('slugs, pages, XSS', () => {
     expect(org.text).toMatch(/id="share-open"[^>]*aria-expanded="true"/);
     const vis = await call(`/da/p/${id}`);
     expect(vis.text).toMatch(/<section class="share" id="share" aria-labelledby="share-h" hidden="">/);
-    expect(vis.text).not.toContain('Din afstemning er oprettet');
+    expect(markup(vis.text)).not.toContain('Din afstemning er oprettet');
     expect(vis.text).toMatch(/id="share-open"[^>]*aria-expanded="false"/);
   });
   test('unknown /api route → 404 JSON', async () => {
