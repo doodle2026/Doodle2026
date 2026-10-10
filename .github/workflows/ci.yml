@@ -1,0 +1,42 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: doodle
+          POSTGRES_PASSWORD: doodle
+          POSTGRES_DB: doodle_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U doodle"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://doodle:doodle@localhost:5432/doodle_test?schema=public
+      DIRECT_URL: postgresql://doodle:doodle@localhost:5432/doodle_test?schema=public
+      NEXTAUTH_URL: http://localhost:3000
+      APP_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ci-only-not-secret
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci            # postinstall runs `prisma generate`
+      - run: npm run lint
+      - run: npm run typecheck # tsc --noEmit
+      - run: npx prisma migrate deploy
+      - run: npm test
+      - run: npm run build

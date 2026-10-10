@@ -1,0 +1,205 @@
+'use client';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Header from '@/components/Header';
+import type { ApiEvent } from '@/lib/events';
+
+const dayFmt = new Intl.DateTimeFormat('da-DK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const timeFmt = new Intl.DateTimeFormat('da-DK', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const keyFmt = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
+const offsetFmt = new Intl.DateTimeFormat('da-DK', { timeZoneName: 'shortOffset' });
+const offsetOf = (d: Date) => (offsetFmt.formatToParts(d).find((p) => p.type === 'timeZoneName')?.value ?? '').replace('GMT', '') || '+00';
+
+type CopyState = 'idle' | 'copied' | 'error';
+type Which = 'url' | 'admin';
+const MANUAL_COPY = 'Markér og kopiér manuelt (Ctrl+C / ⌘C – eller hold fingeren på linket).';
+
+function CopyButton({ state, label, className, onClick }: { state: CopyState; label: string; className: string; onClick: () => void }) {
+  const cls = state === 'copied' ? `${className} btn--copied` : state === 'error' ? 'btn--copy-error' : className;
+  return (
+    <button type="button" className={`btn ${cls}`} onClick={onClick}>
+      {state === 'copied' ? '✓ Kopieret' : state === 'error' ? '! Kunne ikke kopiere' : label}
+    </button>
+  );
+}
+
+export const adminStoreKey = (slug: string) => `mt-admin-${slug}`;
+
+export default function PollView({ event, shareUrl, justCreated, isAdmin = false }:
+  { event: ApiEvent; shareUrl: string; justCreated: boolean; isAdmin?: boolean }) {
+  // Times depend on the browser's timezone → formatted only after mount (no SSR/hydration mismatch).
+  const [tz, setTz] = useState<string | null>(null);
+  const [open, setOpen] = useState(justCreated); // organizer (?created=1) sees it open; visitors closed
+  const [copy, setCopy] = useState<Record<Which, CopyState>>({ url: 'idle', admin: 'idle' });
+  const [status, setStatus] = useState('');
+  const [savedOk, setSavedOk] = useState(false);
+  const adminRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [canShare, setCanShare] = useState(false);
+  const [adminUrl, setAdminUrl] = useState<string | null>(null); // shown once, right after creation
+  const urlRef = useRef<HTMLInputElement>(null);
+  const shareOpenRef = useRef<HTMLButtonElement>(null);
+  const storeKey = `mt-share-${event.slug}`;
+
+  useEffect(() => {
+    setTz(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    setCanShare(typeof navigator !== 'undefined' && 'share' in navigator);
+    if (justCreated) {
+      try {
+        if (sessionStorage.getItem(storeKey) === 'closed') setOpen(false);
+        // The admin link is handed over via sessionStorage (never the URL) and removed after first display.
+        const a = sessionStorage.getItem(adminStoreKey(event.slug));
+        if (a && a.startsWith(`/p/${event.slug}/admin/`)) { setAdminUrl(location.origin + a); setOpen(true); }
+        sessionStorage.removeItem(adminStoreKey(event.slug));
+      } catch { /* ignore */ }
+      // Drop ?created=1 so a reload/shared copy of the address bar doesn't claim "just created".
+      history.replaceState(null, '', `/p/${event.slug}`);
+    }
+  }, [justCreated, storeKey, event.slug]);
+
+  const groups = useMemo(() => {
+    if (!tz) return [];
+    // DST ambiguity (e.g. two "02:30"): show the offset for clashing local times.
+    const labelCount = new Map<string, number>();
+    const local = event.time_options.map((o) => {
+      const s = new Date(o.start_at);
+      const k = keyFmt.format(s) + timeFmt.format(s);
+      labelCount.set(k, (labelCount.get(k) ?? 0) + 1);
+      return { o, s, k };
+    });
+    const m = new Map<string, { date: Date; items: { label: string; iso: string }[] }>();
+    for (const { o, s, k: lk } of local) {
+      const e = o.end_at ? new Date(o.end_at) : null;
+      const k = keyFmt.format(s);
+      if (!m.has(k)) m.set(k, { date: s, items: [] });
+      let label = timeFmt.format(s) + ((labelCount.get(lk) ?? 0) > 1 ? ` (${offsetOf(s)})` : '');
+      if (e) label += ' – ' + (keyFmt.format(e) === k ? timeFmt.format(e) : `${dayFmt.format(e)} ${timeFmt.format(e)}`);
+      m.get(k)!.items.push({ label, iso: o.start_at });
+    }
+    return [...m.entries()];
+  }, [tz, event.time_options]);
+
+  async function doCopy(which: Which, text: string, input: HTMLInputElement | null) {
+    const what = which === 'url' ? 'Linket til deltagerne' : 'Admin-linket';
+    const set = (st: CopyState) => setCopy((c) => ({ ...c, [which]: st }));
+    try {
+      if (!navigator.clipboard) throw new Error('no clipboard');
+      await navigator.clipboard.writeText(text);
+      set('copied'); setStatus(`${what} er kopieret`);
+      setTimeout(() => set('idle'), 2000);
+    } catch {
+      set('error'); setStatus(`${what} kunne ikke kopieres. Markér og kopiér manuelt.`);
+      input?.focus(); input?.select();
+      setTimeout(() => set('idle'), 4000);
+    }
+  }
+  async function nativeShare() {
+    try { await navigator.share({ title: event.title, text: `Hvornår kan du? ${event.title}`, url: shareUrl }); }
+    catch (e) { if ((e as DOMException)?.name !== 'AbortError') doCopy('url', shareUrl, urlRef.current); }
+  }
+  const closeBtnFocus = () => setTimeout(() => shareOpenRef.current?.focus(), 0);
+  function close() {
+    setOpen(false);
+    setAdminUrl(null); // the admin link is shown once; it is gone after closing
+    try { sessionStorage.setItem(storeKey, 'closed'); } catch { /* ignore */ }
+    closeBtnFocus();
+  }
+  /** Closing with an unconfirmed admin link asks first (native modal <dialog>, design §19/§20.3). */
+  function requestClose() {
+    if (adminUrl && !savedOk && dialogRef.current?.showModal) dialogRef.current.showModal();
+    else close();
+  }
+  function toggle() {
+    if (open) { requestClose(); return; }
+    const n = !open; setOpen(n);
+    try { sessionStorage.setItem(storeKey, n ? 'open' : 'closed'); } catch { /* ignore */ }
+  }
+  const mailMe = adminUrl ? `mailto:?subject=${encodeURIComponent(`Mit admin-link: ${event.title}`)}&body=${encodeURIComponent(
+    `Admin-link (hemmeligt):\n${adminUrl}\n\nLink til deltagerne:\n${shareUrl}\n\nGem denne mail. Del ikke linket.\n`)}` : '';
+  const mailto = `mailto:?subject=${encodeURIComponent(`Hvornår kan du? ${event.title}`)}&body=${encodeURIComponent(
+    `Hej!\n\nStem på de tidspunkter, der passer dig:\n${shareUrl}\n`)}`;
+
+  return (
+    <>
+      <Header>
+        <button type="button" className="icon-btn" id="share-open" ref={shareOpenRef} aria-controls="share"
+          aria-expanded={open} aria-label="Del afstemningen" onClick={toggle}>↗ Del</button>
+      </Header>
+      <main className="container">
+        <article className="card poll-view">
+          <section className="share" id="share" aria-labelledby="share-h" hidden={!open}>
+            {justCreated
+              ? <p className="share__confirm" id="share-h"><span aria-hidden="true">✓</span> Din afstemning er oprettet</p>
+              : <p className="share__confirm" id="share-h">Del afstemningen</p>}
+            <button type="button" className="icon-btn share__close" aria-label="Luk delingsboksen" onClick={requestClose}>✕</button>
+            <div className="linkbox" id="pub">
+              <p className="linkbox__label"><span aria-hidden="true">🔗</span> Link til deltagerne</p>
+              <p className="linkbox__desc">Send dette link til alle, der skal stemme. Ingen login.</p>
+              <div className="linkbox__row">
+                <input className="input share__url" id="url" ref={urlRef} readOnly value={shareUrl} aria-label="Offentligt link til afstemningen"
+                  onFocus={(e) => e.currentTarget.select()} onClick={(e) => e.currentTarget.select()} />
+                <div className="share__actions">
+                  <CopyButton state={copy.url} label="Kopiér link" className="btn--primary" onClick={() => doCopy('url', shareUrl, urlRef.current)} />
+                  {canShare && (
+                    <button type="button" className="btn btn--secondary" id="native" onClick={nativeShare}>
+                      <span aria-hidden="true">↗</span> Del
+                    </button>
+                  )}
+                  <a className="btn btn--ghost" id="mail" href={mailto}><span aria-hidden="true">✉</span> E-mail</a>
+                </div>
+              </div>
+              {copy.url === 'error' && <p className="share__hint share__hint--error">{MANUAL_COPY}</p>}
+            </div>
+            {adminUrl && (
+              <div className="linkbox linkbox--secret" id="admin" role="group" aria-labelledby="admin-l" aria-describedby="admin-d">
+                <p className="linkbox__label" id="admin-l"><span className="icon-lock" aria-hidden="true">!</span> Dit hemmelige admin-link – gem det nu</p>
+                <p className="linkbox__desc" id="admin-d"><strong>Del det ikke.</strong> Med dette link kan du redigere og lukke afstemningen.
+                  Vi har ingen konti, så hvis du mister linket, kan vi ikke sende det igen.</p>
+                <div className="linkbox__row">
+                  <input className="input" id="adminurl" ref={adminRef} readOnly value={adminUrl} aria-label="Hemmeligt admin-link"
+                    onFocus={(e) => e.currentTarget.select()} onClick={(e) => e.currentTarget.select()} />
+                  <div className="linkbox__actions">
+                    <CopyButton state={copy.admin} label="Kopiér admin-link" className="btn--secondary" onClick={() => doCopy('admin', adminUrl, adminRef.current)} />
+                    <a className="btn btn--secondary" id="mailme" href={mailMe}><span aria-hidden="true">✉</span> Send til mig selv</a>
+                  </div>
+                </div>
+                {copy.admin === 'error' && <p className="share__hint share__hint--error">{MANUAL_COPY}</p>}
+                <label className="check">
+                  <input type="checkbox" id="saved-ok" checked={savedOk} onChange={(e) => setSavedOk(e.target.checked)} />
+                  {' '}Jeg har gemt admin-linket et sikkert sted
+                </label>
+              </div>
+            )}
+            <span className="sr-only" role="status" aria-live="polite">{status}</span>
+          </section>
+          <dialog className="modal" ref={dialogRef} aria-labelledby="dlg-h" aria-describedby="dlg-p">
+            <h2 id="dlg-h">Har du gemt dit admin-link?</h2>
+            <p id="dlg-p">Det vises ikke igen. Uden linket kan du ikke redigere eller lukke afstemningen.</p>
+            <div className="modal__actions">
+              {/* Cancel ("go back") gets default focus so Enter doesn't discard the link by accident. */}
+              <button type="button" className="btn btn--ghost" autoFocus onClick={() => dialogRef.current?.close()}>Tilbage</button>
+              <button type="button" className="btn btn--danger" onClick={() => { dialogRef.current?.close(); close(); }}>Luk alligevel</button>
+            </div>
+          </dialog>
+          {isAdmin && <p className="meta" role="status">Du ser afstemningen som arrangør.</p>}
+          {event.is_closed && <p className="meta">Afstemningen er lukket.</p>}
+          <h1>{event.title}</h1>
+          {event.description && <p className="lead">{event.description}</p>}
+          <h2>Foreslåede tidspunkter <span className="meta">({event.time_options.length})</span></h2>
+          <p className="tz-note">{tz ? `Tider vist i ${tz}.` : ''}</p>
+          <div>
+            {groups.map(([k, g]) => (
+              <section className="poll-day" key={k}>
+                <h3 className="poll-day__title">{dayFmt.format(g.date)}</h3>
+                <ul className="chips">
+                  {g.items.map((it) => (
+                    <li className="chip" key={it.iso}><time dateTime={it.iso}>{it.label}</time></li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        </article>
+      </main>
+    </>
+  );
+}
