@@ -8,5 +8,9 @@ const nextConfig: NextConfig = {
   // Render metadata blocking (not streamed) for every UA, so notFound() yields a real SSR 404 page
   // and link-preview tags are always in <head>.
   htmlLimitedBots: /.*/,
+  // OG image route reads Inter font files at runtime; make sure they ship with the serverless function.
+  outputFileTracingIncludes: {
+    '/p/[id]/opengraph-image': ['./node_modules/@fontsource/inter/files/inter-latin*-{400,700,800}-normal.woff'],
+  },
 };
 export default nextConfig;

@@ -17,6 +17,7 @@
     "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.3.0",
     "@prisma/client": "^6.19.3",
     "next": "^15.5.27",
     "react": "^19.3.0",
