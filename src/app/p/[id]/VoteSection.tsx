@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { ApiEvent } from '@/lib/events';
 import { optionLabel } from '@/lib/format';
-import { formatDateShort } from '@/lib/dates';
+import { columnHead, formatDateShort } from '@/lib/dates';
 import { copyText } from '@/lib/share';
 import { counterState, counterText, isBlank, textLength } from '@/lib/form';
 import {
@@ -285,7 +285,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
         </div>
       )}
 
-      <h2 id="grid-h">{closed ? 'Svar' : 'Hvornår kan du?'}</h2>
+      <h2 id="grid-h">{closed ? 'Svar' : dateMode ? 'Hvilke datoer passer dig?' : 'Hvornår kan du?'}</h2>
       <div className="legend">
         <span className="vote vote--yes"><span aria-hidden="true">✓</span> Ja</span>
         <span className="vote vote--maybe"><span aria-hidden="true">( )</span> Måske</span>
@@ -301,14 +301,19 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
 
       <div className="vgrid-wrap" tabIndex={0} role="region" aria-labelledby="grid-h">
         <table className="vgrid" id="grid">
-          <caption className="sr-only">Afstemning. Kolonner er {dateMode ? 'datoer' : 'tidsforslag'}, rækker er deltagere. Sidste række er totaler.</caption>
+          <caption className="sr-only">Afstemning. Kolonner er {dateMode ? 'datoforslag' : 'tidsforslag'}, rækker er deltagere. Sidste række er totaler.</caption>
           <thead>
             <tr>
               <th className="vgrid__name" scope="col">Deltager ({others.length})</th>
               {opts.map((o, i) => (
                 <th scope="col" className={cls(i)} key={o.id}>
-                  <span className="vgrid__day" suppressHydrationWarning>{colDay(o)}</span>
-                  {!dateMode && <span className="vgrid__time" suppressHydrationWarning>{time(o)}</span>}
+                  {o.date ? (<>
+                    <span className="vgrid__day">{columnHead(o.date)[0]}</span>
+                    <span className="vgrid__time">{columnHead(o.date)[1]}</span>
+                  </>) : (<>
+                    <span className="vgrid__day" suppressHydrationWarning>{colDay(o)}</span>
+                    <span className="vgrid__time" suppressHydrationWarning>{time(o)}</span>
+                  </>)}
                   {chosen(i) ? <span className="chosen-badge">✓ Valgt</span> : best[i] ? <span className="best-badge">★ Bedst</span> : null}
                 </th>
               ))}

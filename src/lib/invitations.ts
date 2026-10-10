@@ -85,7 +85,7 @@ async function pollForEmail(eventId: number) {
     slug: ev.slug, title: ev.title, description: ev.description, isClosed: ev.closedAt !== null,
     organizerName: ev.organizerName || 'Arrangøren', organizerFromName: ev.organizerName ?? undefined,
     options: ev.timeOptions.map((o) => (o.date ? { date: fromUtcDate(o.date) } : { startAt: o.startAt!, endAt: o.endAt })),
-    remindersSent: ev.remindersSent, lastReminderAt: ev.lastReminderAt,
+    remindersSent: ev.remindersSent, lastReminderAt: ev.lastReminderAt, trackingEnabled: ev.inviteTracking,
   };
   return { ev, p };
 }

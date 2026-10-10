@@ -28,30 +28,39 @@ ethvert `?schema=` virker (PR-previews bruger `pr_<nr>`), ingen rå SQL med `pub
 `dev`, `build`, `start`, `lint` (`next lint`), `typecheck` (`tsc --noEmit`), `test` (`vitest run`), `postinstall` (`prisma generate`), `db:migrate`, `db:deploy`.
 
 ## API
+### Kun datoer (fra okt. 2026)
+GrabAday bruger **kun hele datoer** – ingen klokkeslæt og ingen tidszoner. `events.mode`: `'date'` (alle nye afstemninger) eller `'datetime'` (ældre afstemninger med klokkeslæt, se *Legacy* nederst). Datoer er rene strenge `YYYY-MM-DD` (DB: `time_options.date DATE`), formateres altid med `timeZone:'UTC'` (`fre. 16. okt. 2026`), så de vises ens i alle tidszoner.
+
 ### `POST /api/events`
 Kræver `Content-Type: application/json` (ellers **415**). Valgfri `Idempotency-Key` (16–100 tegn `[A-Za-z0-9_-]`).
 ```json
-{ "title": "Teammøde", "description": "valgfri",
-  "time_options": [ { "start": "2026-11-03T09:00:00+01:00", "end": "2026-11-03T10:00:00+01:00" }, { "start": "2026-11-04T08:00:00Z" } ] }
+{ "title": "Teammøde", "description": "valgfri", "options": [ { "date": "2026-10-16" }, { "date": "2026-10-14" } ] }
 ```
-- `start`/`end`: ISO 8601 **med offset**; gemmes i UTC. `end` valgfri, skal være efter `start`. Ingen tider i fortiden.
+- `options`: **1–100** rigtige kalenderdatoer (skudår tjekkes: 2028-02-29 ok, 2027-02-29 400). Strengt `YYYY-MM-DD`.
+- Fortid: accepterer datoer **≥ UTC i dag − 1 dag** (lempelig regel: ingen gyldig lokal "i dag" fra UTC−12 til UTC+14 afvises).
+- **Dubletter afvises med 400** (`Dato 3: 2026-10-16 er valgt flere gange.`) – de fjernes ikke stille. Gemmes sorteret stigende.
+- Den gamle body med `time_options:[{start,end}]` afvises med 400 – nye afstemninger er altid datoer.
 - `title` trimmes, påkrævet (kun mellemrum/zero-width = tom), ≤ 200 **grafemer**; `description` ≤ 2000 grafemer. Aldrig afkortet – for langt = 400.
-- 1–100 tidsforslag; dubletter (samme UTC-start+slut) fjernes.
 - **201**: poll-objekt (som GET) + `admin_token` (256 bit, base64url, 43 tegn) + `admin_url` (`/p/<id>/admin#<token>` – token i fragmentet, sendes aldrig til serveren), `Location: /p/<id>`, `Cache-Control: no-store`.
 - **200 + `Idempotent-Replayed: true`**: samme nøgle igen → samme poll **og samme admin_token**. Valg: klienten har bevist at den kender nøglen, og tokenet ligger kun AES-GCM-krypteret under en nøgle afledt af den rå Idempotency-Key (DB gemmer kun `sha256(key)`), så en klient der mistede første svar kan få sit admin-link igen, mens en DB-dump hverken afslører nøgler eller tokens.
 - **400** `{ errors: [...] }` (dansk) for alle ugyldige input inkl. forkerte typer/null-body; **413** JSON over 32 kB; **415** forkert content-type.
 
-### `GET /api/events/:id[?tz=<IANA>]`
+### `GET /api/events/:id`
 ```json
 { "id": "…22…", "slug": "…", "title": "…", "description": "", "created_at": "…Z", "closed_at": null, "is_closed": false,
-  "time_options": [ { "id": 1, "start_at": "…Z", "end_at": "…Z", "position": 0 } ],
-  "timezone": "UTC", "options": [ { "date": "2026-11-03", "start": "08:00", "end": "09:00" } ], "url": "/p/<id>" }
+  "mode": "date", "chosen_option_id": null,
+  "time_options": [ { "id": 1, "date": "2026-10-14", "start_at": null, "end_at": null, "position": 0 } ],
+  "options": [ { "id": 1, "date": "2026-10-14" } ], "url": "/p/<id>", "participants": [] }
 ```
-Aldrig tokens/hashes. 404 for ukendt eller forkert formateret id.
+Ingen `timezone`, `?tz` ignoreres for datoafstemninger. Aldrig tokens/hashes. 404 for ukendt eller forkert formateret id.
+
+### Endelig dato og kalender
+`.ics` (`GET /api/events/:id/ics`) er en **heldagsbegivenhed**: `DTSTART;VALUE=DATE:20261016`, `DTEND;VALUE=DATE:20261017` (eksklusiv), ingen TZID; UID (`<id>@grabaday.com`), SEQUENCE og LAST-MODIFIED som før (SEQUENCE stiger når den valgte dato ændres – også via PATCH). Google Kalender: `dates=20261016/20261017`. UI: "Den endelige dato er fre. 16. okt. 2026 (hele dagen)".
 
 ### Admin-API (alle: `Authorization: Bearer <admin_token>`, konstant-tids-tjek, `no-store`/`noindex`/`no-referrer`)
 - `GET /api/events/:id/admin` → poll + `votes {yes,maybe,no,total}` pr. tidsforslag + `participants`. 401 uden token, 403 forkert/udskiftet.
-- `PATCH /api/events/:id` → samme body og validering som opret; eksisterende tidsforslag sendes med `id` (beholdes, må flyttes; uændrede må ligge i fortiden), manglende slettes, nye oprettes. Sletning af tidsforslag med svar kræver `"confirm_remove_voted": true`, ellers **409** `{errors, voted_option_ids}`.
+- `PATCH /api/events/:id` → samme body og validering som opret (`options:[{id?, date}]`); eksisterende datoer sendes med `id` (beholdes, må flyttes; uændrede må ligge i fortiden), manglende slettes, nye oprettes. Dubletter → 400.
+- `PATCH /api/events/:id/options/:oid` `{date, reset_votes}` → skift én dato (409 `duplicate_option`, 400 fortid). Sletning af tidsforslag med svar kræver `"confirm_remove_voted": true`, ellers **409** `{errors, voted_option_ids}`.
 - `POST /api/events/:id/close` `{chosen_option_id?: number|null}` · `POST …/reopen` (nulstiller valgt tidspunkt) · `POST …/rotate-admin` → nyt `admin_token`/`admin_url` (det gamle dør straks; idempotent replay af oprettelsen returnerer derefter intet token).
 - Alle skrivende kald (inkl. `POST /api/events`): kun `application/json` (415), maks. 32 kB (413), rate limit (token bucket pr. IP, burst 20, derefter 20/min; `RATE_LIMIT_CAPACITY`/`RATE_LIMIT_REFILL_PER_SEC`) → **429** JSON + `Retry-After`. Begrænsning: in-memory pr. serverless-instans (best effort); flyt til Postgres/Redis for et globalt loft.
 - Offentlig GET har nu `chosen_option_id`.
@@ -78,3 +87,6 @@ sudo apt-get install -y postgresql
 /usr/lib/postgresql/17/bin/pg_ctl -D /workspace/.pgdata/17 -o "-p 5432 -k /tmp" -l /workspace/.pgdata/pg.log start
 createdb -h localhost -U doodle doodle_dev; createdb -h localhost -U doodle doodle_test
 ```
+
+### Legacy: ældre afstemninger med klokkeslæt (`mode:'datetime'`)
+Migrationen `20261010235500_date_only` er **kun additiv**: `events.mode` (eksisterende rækker = `'datetime'`, default for nye = `'date'`), `time_options.date DATE NULL`, `start_at` bliver nullable, unik `(event_id, date)` (NULL kolliderer aldrig). Ingen data konverteres. Ældre afstemninger virker uændret (stemme, lukke, admin, `.ics` med tider, `GET ?tz=` → `timezone` + `options:[{date,start,end}]`). Efter design §0.7 kan nye forslag i en ældre afstemning **kun være datoer**: `PATCH` accepterer `time_options:[{id,start,end} | {id?,date}]`, og skifter man dato på et tidsforslag (`PATCH …/options/:oid {date}`), bliver det et rent datoforslag. Al tidszone-kode ligger i `src/lib/legacy-time/` (+ `whenLabel`/`whenLong` i `format.ts` og den gamle gren i `validate.ts`), så den kan fjernes når der ikke er flere ældre afstemninger.

@@ -161,7 +161,20 @@ describe('LEGACY timed poll (mode datetime) still works end to end', () => {
     const tOpts = g.body.time_options.map((x: Json) => ({ id: x.id, start: x.start_at, end: x.end_at }));
     expect((await call(`/api/events/${p.id}`, json('PATCH', { title: 'Gammel 2', time_options: [...tOpts, { start: `${Y}-11-05T10:00:00Z` }] }, p.admin_token))).status).toBe(200);
     expect((await call(`/api/events/${p.id}`, json('PATCH', { title: 'x', options: [{ date: `${Y}-11-05` }] }, p.admin_token))).status).toBe(400);
+    // §0.7: new proposals in a legacy poll are plain dates, mixed with the timed ones and sorted chronologically
+    const g2 = await call(`/api/events/${p.id}`);
+    const keep = g2.body.time_options.map((x: Json) => ({ id: x.id, start: x.start_at, end: x.end_at }));
+    const mixed = await call(`/api/events/${p.id}`, json('PATCH', { title: 'Gammel 3', time_options: [...keep, { date: `${Y}-11-04` }] }, p.admin_token));
+    expect(mixed.status).toBe(200);
+    const g3 = (await call(`/api/events/${p.id}`)).body;
+    expect(g3.time_options.map((x: Json) => x.date ?? x.start_at.slice(0, 10))).toEqual([`${Y}-11-03`, `${Y}-11-04`, `${Y}-11-04`, `${Y}-11-05`]);
+    expect(g3.options[1]).toEqual({ date: `${Y}-11-04` });
     expect((await call(`/api/events/${p.id}/options/${o[1]}`, json('PATCH', { start_at: `${Y}-11-04T15:00:00Z`, end_at: null, reset_votes: false }, p.admin_token))).status).toBe(200);
+    // changing the date of a timed option turns it into a whole-day date option; chosen → SEQUENCE bump + all-day ics
+    expect((await call(`/api/events/${p.id}/options/${o[0]}`, json('PATCH', { date: `${Y}-11-08`, reset_votes: false }, p.admin_token))).status).toBe(200);
+    const conv = (await call(`/api/events/${p.id}`)).body.time_options.find((x: Json) => x.id === o[0]);
+    expect(conv).toMatchObject({ date: `${Y}-11-08`, start_at: null, end_at: null });
+    expect((await call(`/api/events/${p.id}/ics`)).text).toContain(`DTSTART;VALUE=DATE:${Y}1108`);
     const c = await call(`/api/events/${p.id}/close`, json('POST', {}, p.admin_token));
     expect(c.body.is_closed).toBe(true);
     expect((await call(`/api/events/${p.id}/votes`, json('POST', { name: 'Sen', votes: [{ option_id: o[0], value: 'yes' }] }))).status).toBe(423);

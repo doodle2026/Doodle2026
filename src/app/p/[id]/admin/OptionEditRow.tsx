@@ -1,96 +1,65 @@
 'use client';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { localDate, localTime, optionLabel } from '@/lib/format';
-import { minAllowedDate } from '@/lib/dates';
-import { defaultVoteAction, validateOptionEdit, type EditErr } from '@/lib/admin-ui';
+import { optionLabel } from '@/lib/format';
+import { formatDateShort, localTodayIso } from '@/lib/dates';
+import type { EditErr } from '@/lib/admin-ui';
+import DatePicker from '@/components/DatePicker';
 
 type O = { date: string | null; start_at: string | null; end_at: string | null };
 export interface EditableOpt extends O { id: number; votes: number }
-/** Date polls send { date }; legacy timed polls { start_at, end_at }. */
-export type EditResult = ({ date: string } | { start_at: string; end_at: string | null }) & { reset_votes: boolean };
+/** Always a plain date (§0.6/§0.7): changing a legacy timed option turns it into a whole-day date option. */
+export interface EditResult { date: string; reset_votes: boolean }
 
-const local = (o: O) => (o.date
-  ? { date: o.date, start: '', end: '' }
-  : { date: localDate(o.start_at!), start: localTime(o.start_at!).replace('.', ':'), end: o.end_at ? localTime(o.end_at).replace('.', ':') : '' });
-
-function validateDateEdit(date: string, others: O[], orig: string): EditErr {
-  if (!date) return { msg: 'Udfyld en dato.', fields: ['date'] };
-  if (others.some((o) => o.date === date)) return { msg: 'Den dato findes allerede som et andet forslag.', fields: ['date'] };
-  if (date !== orig && date < minAllowedDate()) return { msg: 'Datoen ligger i fortiden.', fields: ['date'] };
-  return null;
-}
-
-/** Design §31: inline edit of one time option (.opt-edit). Enter saves, Esc cancels. */
+/** Design §0.6: "Skift dato" inline row with a single-select calendar. Esc cancels, Enter (on a radio-free input) saves. */
 export default function OptionEditRow({ opt, others, onSave, onCancel }: {
   opt: EditableOpt; others: O[];
   onSave: (v: EditResult) => Promise<EditErr>; onCancel: () => void;
 }) {
-  const orig = local(opt);
-  const [v, setV] = useState(orig);
-  const [action, setAction] = useState<'reset' | 'keep'>('keep');
-  const [touchedAction, setTouchedAction] = useState(false);
+  const orig = opt.date ?? '';
+  const [pick, setPick] = useState(orig);
+  const [action, setAction] = useState<'reset' | 'keep'>('reset');
   const [err, setErr] = useState<EditErr>(null);
   const [saving, setSaving] = useState(false);
-  const dateRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { dateRef.current?.focus(); }, []);
-  // Preselect: only end changed → keep; date/start changed → reset (user choice wins once touched).
-  useEffect(() => { if (!touchedAction) setAction(defaultVoteAction(orig, v)); }, [v.date, v.start]); // eslint-disable-line react-hooks/exhaustive-deps
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => { box.current?.querySelector<HTMLElement>('td[tabindex="0"]')?.focus(); }, []);
+  const taken = others.filter((o) => o.date).map((o) => o.date!);
 
-  const dateMode = opt.date !== null;
   async function save() {
     if (saving) return;
-    if (dateMode) {
-      const de = validateDateEdit(v.date, others, orig.date);
-      if (de) { setErr(de); return; }
-      setSaving(true);
-      const r = await onSave({ date: v.date, reset_votes: opt.votes > 0 && action === 'reset' });
-      setSaving(false);
-      if (r) setErr(r);
-      return;
-    }
-    const e = validateOptionEdit(v, others.filter((o) => o.start_at).map(local), new Date());
-    // Unchanged past option may be saved as-is (e.g. only to keep it); only flag the past if it changed.
-    if (e && !(e.msg.includes('fortiden') && v.date === orig.date && v.start === orig.start)) { setErr(e); return; }
+    if (!pick) { setErr({ msg: 'Vælg en dato i kalenderen.', fields: ['date'] }); return; }
+    if (taken.includes(pick)) { setErr({ msg: 'Den dato findes allerede som et andet forslag.', fields: ['date'] }); return; }
+    if (pick !== orig && pick < localTodayIso()) { setErr({ msg: 'Datoen ligger i fortiden.', fields: ['date'] }); return; }
     setSaving(true);
-    const start = new Date(`${v.date}T${v.start}`);
-    let end: Date | null = null;
-    if (v.end) end = new Date(`${v.date}T${v.end}`);
-    const r = await onSave({ start_at: start.toISOString(), end_at: end ? end.toISOString() : null, reset_votes: opt.votes > 0 && action === 'reset' });
+    const r = await onSave({ date: pick, reset_votes: opt.votes > 0 && action === 'reset' });
     setSaving(false);
     if (r) setErr(r);
   }
   function onKey(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
-    else if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT' && (e.target as HTMLInputElement).type !== 'radio') { e.preventDefault(); save(); }
   }
-  const inv = (f: 'date' | 'start' | 'end') => (err?.fields.includes(f) ? { 'aria-invalid': true as const, 'aria-describedby': 'oe-err' } : {});
-  const set = (k: 'date' | 'start' | 'end') => (e: React.ChangeEvent<HTMLInputElement>) => { setV({ ...v, [k]: e.target.value }); setErr(null); };
 
   return (
-    <div className="opt-edit" role="group" aria-labelledby="oe-h" data-editing={opt.id} onKeyDown={onKey}>
-      <p id="oe-h" className="field__label" style={{ margin: '0 0 var(--s-2)' }}>Redigér {dateMode ? 'dato' : 'tidsforslag'} – {optionLabel(opt)}</p>
-      <div className="opt-edit__grid">
-        <div className="field"><label className="field__label" htmlFor="oe-d">Dato</label>
-          <input ref={dateRef} className="input" type="date" id="oe-d" lang="da" value={v.date} onChange={set('date')} {...inv('date')} /></div>
-        {!dateMode && <><div className="field"><label className="field__label" htmlFor="oe-s">Start</label>
-          <input className="input" type="time" id="oe-s" lang="da" step={300} value={v.start} onChange={set('start')} {...inv('start')} /></div>
-        <div className="field"><label className="field__label" htmlFor="oe-e">Slut <span className="field__hint">(valgfri)</span></label>
-          <input className="input" type="time" id="oe-e" lang="da" step={300} value={v.end} onChange={set('end')} {...inv('end')} /></div></>}
-      </div>
+    <div className="opt-edit" role="group" aria-labelledby="oe-h" data-editing={opt.id} onKeyDown={onKey} ref={box}>
+      <p id="oe-h" className="field__label" style={{ margin: '0 0 var(--s-2)' }}>Skift dato – {optionLabel(opt)}</p>
+      {!opt.date && <p className="field__hint">Ældre forslag med klokkeslæt. Skifter du dato, bliver det et rent datoforslag (hele dagen).</p>}
+      <DatePicker id="oe-cal" mode="single" selected={pick ? [pick] : []} initialMonth={pick || undefined} taken={taken}
+        min={orig && orig < localTodayIso() ? orig : undefined} label="Ny dato"
+        onChange={(ds) => { setPick(ds[0]); setErr(null); }} onError={(m) => setErr({ msg: m, fields: ['date'] })} />
+      <p className="field__hint" id="oe-sel" aria-live="polite">Ny dato: <strong>{pick ? formatDateShort(pick) : '–'}</strong></p>
       <div className="field__error" id="oe-err" aria-live="polite">{err?.msg ?? ''}</div>
       {opt.votes > 0 && (
         <fieldset>
-          <legend>{opt.votes} {opt.votes === 1 ? 'deltager har' : 'deltagere har'} svaret på {dateMode ? 'denne dato' : 'dette tidspunkt'}. Hvad skal der ske med svarene?</legend>
-          <label className="radio"><input type="radio" name="oe-v" value="reset" checked={action === 'reset'} onChange={() => { setAction('reset'); setTouchedAction(true); }} />{' '}
-            <span><strong>Nulstil svarene</strong> (anbefalet når {dateMode ? 'datoen' : 'dato eller starttid'} ændres) – deltagerne skal svare igen.</span></label>
-          <label className="radio"><input type="radio" name="oe-v" value="keep" checked={action === 'keep'} onChange={() => { setAction('keep'); setTouchedAction(true); }} />{' '}
-            <span><strong>Behold svarene</strong> – kun ved små rettelser, fx en tastefejl.</span></label>
+          <legend>{opt.votes} {opt.votes === 1 ? 'deltager har' : 'deltagere har'} svaret på denne dato. Hvad skal der ske med svarene?</legend>
+          <label className="radio"><input type="radio" name="oe-v" value="reset" checked={action === 'reset'} onChange={() => setAction('reset')} />{' '}
+            <span><strong>Nulstil svarene</strong> (anbefalet) – deltagerne skal svare igen på den nye dato.</span></label>
+          <label className="radio"><input type="radio" name="oe-v" value="keep" checked={action === 'keep'} onChange={() => setAction('keep')} />{' '}
+            <span><strong>Behold svarene</strong> – kun hvis du rettede en fejl, og svarene stadig gælder.</span></label>
         </fieldset>
       )}
       <div className="opt-edit__actions">
-        <button type="button" className="btn btn--primary btn--sm" data-oe-save onClick={save} disabled={saving} aria-busy={saving || undefined}>{dateMode ? 'Gem dato' : 'Gem tidspunkt'}</button>
+        <button type="button" className="btn btn--primary btn--sm" data-oe-save onClick={save} disabled={saving} aria-busy={saving || undefined}>Gem dato</button>
         <button type="button" className="btn btn--ghost btn--sm" data-oe-cancel onClick={onCancel}>Annullér</button>
-        <span className="field__hint" style={{ alignSelf: 'center' }}>Enter gemmer · Esc annullerer</span>
+        <span className="field__hint" style={{ alignSelf: 'center' }}>Esc annullerer</span>
       </div>
     </div>
   );

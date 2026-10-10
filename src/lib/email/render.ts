@@ -5,18 +5,19 @@
  */
 import Mustache from 'mustache';
 import { TEMPLATES } from './templates';
-import { formatDateLong } from '../dates';
+import { formatDateShort } from '../dates';
 
 export interface PollEmailData {
   assetBaseUrl: string; appUrl: string; eventTitle: string; organizerName: string; recipientName?: string;
-  description?: string; pollUrl: string; optionCount: number; timeZoneLabel: string;
-  dates: { dateLabel: string; slots: { timeLabel: string }[] }[];
+  description?: string; pollUrl: string; optionCount: number;
+  /** One per option, chronological: "fre. 16. okt. 2026"; legacy timed options add " kl. 09:00–10:00" (Europe/Copenhagen). */
+  dates: { dateLabel: string }[];
+  /** Reminder footer: tracking on → "kun til inviterede, der ikke har svaret". */
+  trackingEnabled?: boolean;
   deadline?: string; respondedCount?: number; footerText?: string;
   /** Organizer's optional message: plain text, ≤ 1000 graphemes, escaped by the template (pre-line). */
   personalMessage?: string;
   unsubscribePollUrl: string; unsubscribeAllUrl: string; reportAbuseUrl: string;
-  /** Date-only poll: date list without times or time-zone text (see DATE_TEMPLATES). */
-  dateOnly?: boolean;
 }
 export interface Rendered { subject: string; html: string; text: string }
 
@@ -41,17 +42,13 @@ export function formatters(tz = DEFAULT_TZ) {
   };
 }
 
-/** Options → chronologically sorted date groups with slot labels. */
-export function groupDates(options: { startAt: Date; endAt: Date | null }[], tz = DEFAULT_TZ): PollEmailData['dates'] {
+/** Options → chronological labels. Date options are time-zone free; legacy timed ones get "kl. HH:MM–HH:MM" in `tz`. */
+export function dateLabels(options: ({ date: string } | { startAt: Date; endAt: Date | null })[], tz = DEFAULT_TZ): PollEmailData['dates'] {
   const f = formatters(tz);
-  const out: (PollEmailData['dates'][number] & { k: string })[] = [];
-  for (const o of [...options].sort((a, b) => a.startAt.getTime() - b.startAt.getTime())) {
-    const k = f.dayKey(o.startAt);
-    let g = out[out.length - 1];
-    if (!g || g.k !== k) out.push(g = { k, dateLabel: f.dateLabel(o.startAt), slots: [] });
-    g.slots.push({ timeLabel: f.timeLabel(o.startAt, o.endAt) });
-  }
-  return out.map(({ dateLabel, slots }) => ({ dateLabel, slots }));
+  const short = new Intl.DateTimeFormat('da-DK', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: tz });
+  const key = (o: (typeof options)[number]) => ('date' in o ? `${o.date}T00:00:00.000Z` : o.startAt.toISOString());
+  return [...options].sort((a, b) => key(a).localeCompare(key(b))).map((o) =>
+    'date' in o ? { dateLabel: formatDateShort(o.date) } : { dateLabel: `${short.format(o.startAt)} kl. ${f.timeLabel(o.startAt, o.endAt)}` });
 }
 
 /** Public poll link, optionally with a personal invite fragment (#inv=<43-char token>, step 5) – never admin/edit. */
@@ -69,29 +66,8 @@ const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"
 const escape = (v: unknown) => String(v).replace(/[&<>"']/g, (c) => ESC[c]);
 const decode = (s: string) => s.replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d)).replace(/&amp;/g, '&');
 
-/**
- * Date-only variant of the synced templates. Until the design templates get a date-only mode upstream, the
- * time wording and the time-zone line are rewritten here (only in this derived copy; timed legacy polls use the originals).
- */
-const dateOnlyRules: [RegExp, string][] = [
-  [/<tr><td[^>]*>Tider vist i \{\{timeZoneLabel\}\}[^<]*<\/td><\/tr>\n?/g, ''],
-  [/ – vist i \{\{timeZoneLabel\}\}/g, ''],
-  [/FORESLÅEDE TIDSPUNKTER/g, 'FORESLÅEDE DATOER'], [/Foreslåede tidspunkter/g, 'Foreslåede datoer'],
-  [/Stem på tidspunkter/g, 'Vælg datoer'], [/finde et tidspunkt/g, 'finde en dato'], [/tidspunkter/g, 'datoer'], [/tidspunkt/g, 'dato'],
-];
-const dateOnly = (t: string) => dateOnlyRules.reduce((s, [a, b]) => s.replace(a, b), t);
-export const DATE_TEMPLATES = {
-  invitation: { html: dateOnly(TEMPLATES.invitation.html), text: dateOnly(TEMPLATES.invitation.text) },
-  reminder: { html: dateOnly(TEMPLATES.reminder.html), text: dateOnly(TEMPLATES.reminder.text) },
-};
-
-/** Date options → one entry per date, "Tirsdag 3. november 2026", no slots (same output in every process TZ). */
-export function groupPlainDates(dates: string[]): PollEmailData['dates'] {
-  return [...new Set(dates)].sort().map((d) => ({ dateLabel: cap(formatDateLong(d)), slots: [] }));
-}
-
 function render(kind: 'invitation' | 'reminder', d: PollEmailData, subject: string): Rendered {
-  const T = d.dateOnly ? DATE_TEMPLATES : TEMPLATES;
+  const T = TEMPLATES;
   assertPublicOnly(d);
   const data = { ...d, description: d.description?.trim() || undefined, personalMessage: d.personalMessage?.trim() || undefined, respondedCount: d.respondedCount || undefined };
   const r = { subject: oneLine(subject), html: Mustache.render(T[kind].html, data, undefined, { escape }), text: Mustache.render(T[kind].text, data, undefined, { escape: String }) }; // plain text: no HTML escaping

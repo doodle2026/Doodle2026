@@ -33,3 +33,32 @@ export const formatDateShort = (s: string) => SHORT.format(toUtcDate(s));
 export const formatDateLong = (s: string) => LONG.format(toUtcDate(s)).replace(' den ', ' ');
 /** iCalendar / Google basic form 'YYYYMMDD'. */
 export const basicDate = (s: string) => s.replaceAll('-', '');
+
+// ---- Calendar math on 'YYYY-MM-DD' strings (UTC only; used by the date picker) ----
+const MONTH = new Intl.DateTimeFormat('da-DK', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+const LONG_CAP = (s: string) => { const t = formatDateLong(s); return t.charAt(0).toUpperCase() + t.slice(1); };
+/** "Fredag 16. oktober 2026" – screen-reader label / chip remove label. */
+export const formatDateLongCap = LONG_CAP;
+/** "Oktober 2026" */
+export const monthLabel = (s: string) => { const t = MONTH.format(toUtcDate(s)); return t.charAt(0).toUpperCase() + t.slice(1); };
+/** Monday-based weekday 0..6. */
+export const weekdayMon = (s: string) => (toUtcDate(s).getUTCDay() + 6) % 7;
+export function addMonths(s: string, n: number): string {
+  const [y, m, d] = s.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1 + n, 1));
+  const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  return fromUtcDate(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), Math.min(d, last))));
+}
+export const firstOfMonth = (s: string) => `${s.slice(0, 7)}-01`;
+export function dateRange(a: string, b: string): string[] {
+  const [x, y] = a < b ? [a, b] : [b, a];
+  const out: string[] = [];
+  for (let c = x; c <= y; c = addDays(c, 1)) out.push(c);
+  return out;
+}
+/** Today's date in the browser's own calendar (UI min). The server accepts ≥ UTC today − 1 day. */
+export const localTodayIso = () => new Intl.DateTimeFormat('en-CA').format(new Date());
+/** Column head: ["Fre.", "16. okt."] */
+const WD = new Intl.DateTimeFormat('da-DK', { weekday: 'short', timeZone: 'UTC' });
+const DM = new Intl.DateTimeFormat('da-DK', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+export const columnHead = (s: string): [string, string] => { const w = WD.format(toUtcDate(s)); return [w.charAt(0).toUpperCase() + w.slice(1), DM.format(toUtcDate(s))]; };

@@ -38,14 +38,14 @@ export function validateVote(body: unknown, optionIds: Set<number>): { errors: s
     body.votes.forEach((v, i) => {
       if (!isObj(v)) { errors.push(`Svar ${i + 1}: ugyldigt format.`); return; }
       const id = v.option_id;
-      if (typeof id !== 'number' || !Number.isSafeInteger(id) || !optionIds.has(id)) { errors.push(`Svar ${i + 1}: tidsforslaget findes ikke (længere). Genindlæs siden.`); return; }
-      if (seen.has(id)) { errors.push(`Svar ${i + 1}: tidsforslaget er angivet to gange.`); return; }
+      if (typeof id !== 'number' || !Number.isSafeInteger(id) || !optionIds.has(id)) { errors.push(`Svar ${i + 1}: datoforslaget findes ikke (længere). Genindlæs siden.`); return; }
+      if (seen.has(id)) { errors.push(`Svar ${i + 1}: datoforslaget er angivet to gange.`); return; }
       seen.add(id);
       if (v.value === null || v.value === undefined) return;
       if (v.value !== 'yes' && v.value !== 'maybe' && v.value !== 'no') { errors.push(`Svar ${i + 1}: ugyldig værdi.`); return; }
       votes.set(id, v.value);
     });
-    if (!errors.length && votes.size === 0) errors.push('Svar på mindst ét tidspunkt (ja, måske eller nej).');
+    if (!errors.length && votes.size === 0) errors.push('Svar på mindst én dato (ja, måske eller nej).');
   }
   if (errors.length) return { errors, value: null };
   return { errors: [], value: { name, nameKey: participantNameKey(name), votes } };

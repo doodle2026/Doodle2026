@@ -25,8 +25,8 @@ describe('OG image text rules (design §14.4)', () => {
     expect(ogTitle(' <b>x</b>\n\t\u0000y ').text).toBe('<b>x</b> y');
   });
   test('labels', () => {
-    expect(countLabel(1)).toBe('1 tidsforslag');
-    expect(countLabel(5)).toBe('5 tidsforslag');
+    expect(countLabel(1)).toBe('1 datoforslag');
+    expect(countLabel(5)).toBe('5 datoforslag');
     expect(ogImagePath('abc')).toBe('/p/abc/opengraph-image');
   });
 });

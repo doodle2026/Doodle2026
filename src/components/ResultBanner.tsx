@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { googleCalendarUrlFor, optionLong } from '@/lib/format';
+import { formatDateLongCap, formatDateShort } from '@/lib/dates';
 import { bestMask, totals } from '@/lib/vote-client';
 
 interface Opt { id: number; date: string | null; start_at: string | null; end_at: string | null }
@@ -23,6 +24,8 @@ export default function ResultBanner({ event, isAdmin = false, appUrl, onClear, 
   const T = totals(event.participants.map((p) => p.votes), event.time_options.length);
   // Dates are time-zone free → render immediately; legacy times only after mount (viewer's zone).
   const label = (o: Opt) => (o.date || mounted ? optionLong(o) : '…');
+  // Design §0.5: "fre. 16. okt. 2026 (hele dagen)" with the suffix muted.
+  const when = (o: Opt) => (o.date ? <>{formatDateShort(o.date)} <span className="allday">(hele dagen)</span></> : label(o));
   const what = event.mode === 'datetime' ? 'tidspunkt' : 'dato';
 
   if (!chosen) {
@@ -49,7 +52,8 @@ export default function ResultBanner({ event, isAdmin = false, appUrl, onClear, 
       <span className="result-banner__icon" aria-hidden="true">📅</span>
       <div className="result-banner__body">
         <p className="result-banner__eyebrow"><span className="chosen-badge">✓ Valgt</span> {eyebrow}</p>
-        <span className="result-banner__when" suppressHydrationWarning>{label(chosen)}</span>
+        <span className="result-banner__when" suppressHydrationWarning>{when(chosen)}</span>
+        {isAdmin && chosen.date && <span className="meta" style={{ display: 'block' }}>{formatDateLongCap(chosen.date).replace(/^(\S+) /, '$1 den ')}</span>}
         <p className="result-banner__note">{t.yes} ja, {t.maybe} måske.{isAdmin ? ' Deltagerne ser dette øverst på siden.' : ''}</p>
         <div className="result-banner__actions">
           <a className="btn btn--secondary btn--sm" id="ics" href={`/api/events/${event.slug}/ics`} download>📅 Tilføj til kalender (.ics)</a>

@@ -145,6 +145,14 @@ export function validateEvent(body: unknown, now: Date = new Date(), opts: Valid
         seenIds.add(o.id);
         id = o.id;
       }
+      // §0.7: new proposals in a legacy poll are plain dates ({ date }); existing ones may keep their times.
+      if (o.start === undefined && o.date !== undefined) {
+        if (!isRealDate(o.date)) { errors.push(`Tidsforslag ${n}: ugyldig dato (format ÅÅÅÅ-MM-DD).`); return; }
+        const c: CleanOption = { ...(id !== undefined ? { id } : {}), date: o.date, startAt: null, endAt: null };
+        if (o.date < minAllowedDate(now) && !opts.pastAllowed?.(c)) { errors.push(`Tidsforslag ${n}: datoen ligger i fortiden.`); return; }
+        if (seen.has(`d|${o.date}`)) { errors.push(`Tidsforslag ${n}: ${o.date} er valgt flere gange.`); return; }
+        seen.add(`d|${o.date}`); clean.push(c); return;
+      }
       const start = parseIsoWithOffset(o.start);
       if (!start) {
         errors.push(`Tidsforslag ${n}: ugyldigt starttidspunkt (ISO 8601 med tidszone, fx 2026-11-03T09:00:00+01:00).`);
@@ -163,5 +171,7 @@ export function validateEvent(body: unknown, now: Date = new Date(), opts: Valid
       clean.push({ ...(id !== undefined ? { id } : {}), startAt: start, endAt: end, date: null });
     });
   }
+  const k = (o: CleanOption) => (o.date ? `${o.date}T00:00:00.000Z` : o.startAt!.toISOString());
+  clean.sort((a, b) => k(a).localeCompare(k(b)));
   return { errors, value: errors.length ? null : { title, description, mode, timeOptions: clean } };
 }

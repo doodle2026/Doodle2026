@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import type { AdminEvent } from '@/lib/events';
 import { forgetAdminToken, storeAdminToken, takeAdminToken } from '@/lib/admin-client';
 import { bestIds, optionLabel } from '@/lib/format';
-import { MAX_DATE_OPTIONS, minAllowedDate } from '@/lib/dates';
+import { MAX_DATE_OPTIONS } from '@/lib/dates';
+import DatePicker from '@/components/DatePicker';
 import AdminResults from './AdminResults';
 import InviteSection from './InviteSection';
 import OptionEditRow, { type EditResult } from './OptionEditRow';
@@ -34,9 +35,8 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   const [summary, setSummary] = useState<string[]>([]);
   const [banner, setBanner] = useState('');
   const [saving, setSaving] = useState(false);
-  const [newDate, setNewDate] = useState('');
-  const [newTime, setNewTime] = useState('');
-  const [newEnd, setNewEnd] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
+  const [addSel, setAddSel] = useState<string[]>([]);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [chosen, setChosen] = useState<string>('');
   const [busy, setBusy] = useState(false);
@@ -115,7 +115,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   }
 
   function removeOpt(o: Opt, idx: number) {
-    if (opts.length === 1) { setOptErr(dateMode ? 'Der skal være mindst én dato.' : 'Der skal være mindst ét tidsforslag.'); return; }
+    if (opts.length === 1) { setOptErr('Der skal være mindst én dato.'); return; }
     if (o.votes > 0 && pendingRemove !== o.key) {
       setPendingRemove(o.key);
       focusAfter.current = '[data-confirm-remove]';
@@ -129,27 +129,16 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     focusAfter.current = target ? `[data-rm="${target.key}"]` : '#nd';
   }
 
-  function addOpt() {
-    if (dateMode) {
-      if (!newDate) { setOptErr('Vælg en dato.'); return; }
-      if (newDate < minAllowedDate()) { setOptErr('Datoen ligger i fortiden.'); return; }
-      if (opts.some((o) => o.date === newDate)) { setOptErr('Den dato findes allerede.'); return; }
-      if (opts.length >= MAX_DATE_OPTIONS) { setOptErr(`Du kan højst have ${MAX_DATE_OPTIONS} datoer.`); return; }
-      setOptErr('');
-      setOpts([...opts, { key: `n${++seq}`, date: newDate, start_at: null, end_at: null, votes: 0 }].sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
-      setLive('Dato tilføjet');
-      return;
-    }
-    if (!newDate || !newTime) { setOptErr('Vælg dato og starttid.'); return; }
-    if (newEnd && newEnd <= newTime) { setOptErr('Sluttid skal være efter starttid.'); return; }
-    const start = new Date(`${newDate}T${newTime}`);
-    if (start.getTime() < Date.now()) { setOptErr('Tidspunktet ligger i fortiden.'); return; }
-    const s = start.toISOString(), e = newEnd ? new Date(`${newDate}T${newEnd}`).toISOString() : null;
-    if (opts.some((o) => o.start_at === s && o.end_at === e)) { setOptErr('Det tidsforslag findes allerede.'); return; }
-    if (opts.length >= 100) { setOptErr('Du kan højst have 100 tidsforslag.'); return; }
+  /** §0.6: "+ Tilføj datoer" calendar popover; already proposed dates are taken. Legacy polls also only get dates (§0.7). */
+  function addDates() {
+    const fresh = addSel.filter((d) => !opts.some((o) => o.date === d));
+    if (!fresh.length) return;
+    if (opts.length + fresh.length > MAX_DATE_OPTIONS) { setOptErr(`Du kan højst have ${MAX_DATE_OPTIONS} datoer.`); return; }
     setOptErr('');
-    setOpts([...opts, { key: `n${++seq}`, date: null, start_at: s, end_at: e, votes: 0 }].sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
-    setLive('Tidsforslag tilføjet');
+    setOpts([...opts, ...fresh.map((d) => ({ key: `n${++seq}`, date: d, start_at: null, end_at: null, votes: 0 }))].sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
+    setLive(`${fresh.length} ${fresh.length === 1 ? 'dato' : 'datoer'} tilføjet`);
+    setAddSel([]); setAddOpen(false);
+    focusAfter.current = '#addopt';
   }
 
   async function save(e: FormEvent) {
@@ -171,13 +160,14 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
           title, description: desc, confirm_remove_voted: confirmedRemovals > 0,
           ...(dateMode
             ? { options: opts.map((o) => ({ ...(o.id ? { id: o.id } : {}), date: o.date })) }
-            : { time_options: opts.map((o) => ({ ...(o.id ? { id: o.id } : {}), start: o.start_at, end: o.end_at })) }),
+            // legacy: timed options keep start/end, new/changed ones are plain dates
+            : { time_options: opts.map((o) => ({ ...(o.id ? { id: o.id } : {}), ...(o.date ? { date: o.date } : { start: o.start_at, end: o.end_at }) })) }),
         }),
       });
       if (res.status === 401 || res.status === 403) { setState('denied'); return; }
       if (!res.ok) {
         const { rows, general } = mapServerErrors(Array.isArray(data.errors) ? data.errors : ['Ukendt fejl.']);
-        setSummary([...general, ...[...rows].map(([n, m]) => `${dateMode ? 'Dato' : 'Tidsforslag'} ${n} (${opts[n - 1] ? optionLabel(opts[n - 1]) : '?'}): ${m}`)]);
+        setSummary([...general, ...[...rows].map(([n, m]) => `Dato ${n} (${opts[n - 1] ? optionLabel(opts[n - 1]) : '?'}): ${m}`)]);
         document.getElementById('summary')?.focus();
         return;
       }
@@ -194,8 +184,8 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     try {
       const { res, data } = await api(`/options/${id}`, { method: 'PATCH', body: JSON.stringify(v) });
       if (res.status === 401 || res.status === 403) { setState('denied'); return null; }
-      if (res.status === 409 && data.code === 'duplicate_option') return { msg: dateMode ? 'Den dato findes allerede som et andet forslag.' : 'Det tidspunkt findes allerede som et andet forslag.', fields: ['date', 'start'] };
-      if (!res.ok) return { msg: (Array.isArray(data.errors) && data.errors[0]) || 'Tidspunktet kunne ikke gemmes.', fields: data.code === 'order' ? ['end'] : ['date', 'start'] };
+      if (res.status === 409 && data.code === 'duplicate_option') return { msg: 'Den dato findes allerede som et andet forslag.', fields: ['date'] };
+      if (!res.ok) return { msg: (Array.isArray(data.errors) && data.errors[0]) || 'Datoen kunne ikke gemmes.', fields: ['date'] };
       setEv(data);
       const fresh = data.time_options.find((x: AdminEvent['time_options'][number]) => x.id === id);
       setOpts((prev) => prev.map((o) => (o.id === id ? { ...o, date: fresh.date, start_at: fresh.start_at, end_at: fresh.end_at, votes: fresh.votes.total } : o))
@@ -203,7 +193,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
       setEditingId(null);
       const n = data.reset_votes_count as number;
       const chosenNote = n > 0 && data.chosen_option_id === id ? ' Tjek om det stadig er det rigtige valg.' : '';
-      setBanner(`✓ ${dateMode ? 'Datoen' : 'Tidspunktet'} er ændret – ${n > 0 ? `${n} svar er nulstillet.` : 'svarene er bevaret.'}${chosenNote}`);
+      setBanner(`✓ Datoen er ændret til ${fresh.date ? optionLabel(fresh) : ''} – ${n > 0 ? `${n} svar er nulstillet.` : 'svarene er bevaret.'}${chosenNote}`);
       focusAfter.current = `[data-oe="${id}"]`;
       return null;
     } catch { return { msg: 'Kunne ikke kontakte serveren. Prøv igen.', fields: [] }; }
@@ -264,11 +254,11 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
 
   const closed = ev.is_closed;
   const dlgText = dialog === 'delete-poll'
-    ? { h: `Slet «${ev.title}»?`, p: `Afstemningen, ${ev.time_options.length} tidsforslag og ${ev.participants.length} deltageres svar slettes for altid. Både deltager- og admin-linket holder op med at virke. Det kan ikke fortrydes.`, ok: 'Slet for altid', cls: 'btn--danger' }
+    ? { h: `Slet «${ev.title}»?`, p: `Afstemningen, ${ev.time_options.length} datoforslag og ${ev.participants.length} deltageres svar slettes for altid. Både deltager- og admin-linket holder op med at virke. Det kan ikke fortrydes.`, ok: 'Slet for altid', cls: 'btn--danger' }
     : dialog === 'close'
     ? { h: 'Luk afstemningen?', p: 'Ingen kan længere stemme eller ændre svar. Du kan genåbne senere.', ok: 'Luk afstemning', cls: 'btn--danger' }
     : dialog === 'reopen'
-      ? { h: 'Genåbn afstemningen?', p: 'Deltagerne kan igen stemme og ændre deres svar. Det valgte tidspunkt nulstilles.', ok: 'Genåbn', cls: 'btn--primary' }
+      ? { h: 'Genåbn afstemningen?', p: 'Deltagerne kan igen stemme og ændre deres svar. Den valgte dato nulstilles.', ok: 'Genåbn', cls: 'btn--primary' }
       : { h: 'Lav et nyt admin-link?', p: 'Det nuværende admin-link holder op med at virke med det samme. Gem det nye link et sikkert sted.', ok: 'Lav nyt link', cls: 'btn--danger' };
 
   return (
@@ -335,7 +325,9 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
           <textarea className="input" id="desc" value={desc} onChange={(e) => setDesc(e.target.value)} aria-describedby="desc-count" />
           <div className="field__meta"><span /><Counter id="desc-count" value={desc} max={DESC_MAX} /></div>
         </div>
-        <h3 style={{ margin: 'var(--s-4) 0 var(--s-2)' }}>{dateMode ? 'Datoer' : 'Tidsforslag'}</h3>
+        <h3 style={{ margin: 'var(--s-4) 0 var(--s-2)' }}>Datoforslag{' '}
+          {!dateMode && (<><span className="legacy-badge" id="legacy-badge">🕘 Ældre afstemning med klokkeslæt</span>
+            <span className="field__hint" style={{ display: 'block', fontWeight: 400, marginTop: 4 }}>Eksisterende forslag beholder deres klokkeslæt. Nye forslag kan kun være datoer.</span></>)}</h3>
         <ul className="opt-list" id="opts">
           {opts.map((o, i) => {
             const label = optionLabel(o);
@@ -362,8 +354,8 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
                 </div>
                 {removing && (
                   <div className="inline-warn" role="alert">
-                    <strong>{o.votes} {o.votes === 1 ? 'deltager har' : 'deltagere har'} svaret på {dateMode ? 'denne dato' : 'dette tidspunkt'}.</strong> Fjerner du det,
-                    slettes deres svar på det for altid. Deres øvrige svar bevares.
+                    <strong>{o.votes} {o.votes === 1 ? 'deltager har' : 'deltagere har'} svaret på denne dato.</strong> Fjerner du den,
+                    slettes deres svar på den for altid. Deres øvrige svar bevares.
                     <div className="inline-warn__actions">
                       <button type="button" className="btn btn--danger btn--sm" data-confirm-remove onClick={() => removeOpt(o, i)}>Fjern alligevel</button>
                       <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setPendingRemove(null); focusAfter.current = `[data-rm="${o.key}"]`; }}>Behold</button>
@@ -374,15 +366,21 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
             );
           })}
         </ul>
-        <div className="add-date" style={{ marginTop: 'var(--s-3)' }}>
-          <div className="field"><label className="field__label" htmlFor="nd">Ny dato</label>
-            <input className="input" type="date" id="nd" lang="da" value={newDate} onChange={(e) => setNewDate(e.target.value)} /></div>
-          {!dateMode && <><div className="field"><label className="field__label" htmlFor="nt">Starttid</label>
-            <input className="input" type="time" id="nt" lang="da" step={300} value={newTime} onChange={(e) => setNewTime(e.target.value)} /></div>
-          <div className="field"><label className="field__label" htmlFor="ne">Sluttid <span className="field__hint">(valgfri)</span></label>
-            <input className="input" type="time" id="ne" lang="da" step={300} value={newEnd} onChange={(e) => setNewEnd(e.target.value)} /></div></>}
-          <button type="button" className="btn btn--secondary" id="addopt" onClick={addOpt}>{dateMode ? '+ Tilføj dato' : '+ Tilføj tidsforslag'}</button>
+        <div style={{ marginTop: 'var(--s-3)' }}>
+          <button type="button" className="btn btn--secondary" id="addopt" aria-expanded={addOpen} aria-controls="addpop"
+            onClick={() => { setAddOpen(!addOpen); setAddSel([]); }}>+ Tilføj datoer</button>
         </div>
+        {addOpen && (
+          <div className="dp-pop" id="addpop">
+            <DatePicker id="addcal" selected={addSel} taken={opts.filter((o) => o.date).map((o) => o.date!)} max={Math.max(0, MAX_DATE_OPTIONS - opts.length)}
+              label="Tilføj datoer" onChange={(ds, msg) => { setAddSel(ds); setOptErr(''); if (msg) setLive(msg); }} onError={(m) => setOptErr(m)} />
+            <p className="field__hint">Prikkede datoer er allerede foreslået.</p>
+            <div className="opt-edit__actions">
+              <button type="button" className="btn btn--primary btn--sm" id="addgo" disabled={!addSel.length} onClick={addDates}>
+                {addSel.length ? `Tilføj ${addSel.length} ${addSel.length === 1 ? 'dato' : 'datoer'}` : 'Tilføj datoer'}</button>
+            </div>
+          </div>
+        )}
         <div className="field__error" id="opt-err" aria-live="polite">{optErr}</div>
         <div className="form-actions">
           <button type="submit" className="btn btn--primary" id="save" disabled={saving} aria-busy={saving || undefined}>
@@ -402,13 +400,13 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
           ) : (
             <>
               <h2 id="dz-h">Farezone</h2>
-              <p>Når du lukker afstemningen, kan ingen længere stemme eller ændre svar. Du kan vælge det endelige tidspunkt, og du kan genåbne senere.</p>
+              <p>Når du lukker afstemningen, kan ingen længere stemme eller ændre svar. Du kan vælge den endelige dato, og du kan genåbne senere.</p>
               <button type="button" className="btn btn--danger" id="toggle" onClick={() => openDialog('close')}>Luk afstemning…</button>
             </>
           )}
           <p>Har du delt admin-linket ved en fejl? Lav et nyt – det gamle holder op med at virke.</p>
           <button type="button" className="btn btn--danger-ghost" id="rotate" onClick={() => openDialog('rotate')}>Lav nyt admin-link…</button>
-          <p>Slet hele afstemningen med alle tidsforslag og svar. Linkene holder op med at virke. Det kan ikke fortrydes.</p>
+          <p>Slet hele afstemningen med alle datoforslag og svar. Linkene holder op med at virke. Det kan ikke fortrydes.</p>
           <button type="button" className="btn btn--danger" id="delete-poll" onClick={() => openDialog('delete-poll')}>Slet afstemning…</button>
         </div>
       </section>
@@ -421,7 +419,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
             <p id="dlg-p">{dlgText.p}</p>
             {dialog === 'close' && (
               <div>
-                <label className="field__label" htmlFor="pick">Endeligt tidspunkt (valgfrit)</label>
+                <label className="field__label" htmlFor="pick">Endelig dato (valgfri)</label>
                 <select className="input" id="pick" value={chosen} onChange={(e) => setChosen(e.target.value)}>
                   <option value="">Vælg ikke nu</option>
                   {ev.time_options.map((o) => (

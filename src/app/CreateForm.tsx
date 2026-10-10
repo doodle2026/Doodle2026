@@ -1,12 +1,12 @@
 'use client';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { counterState, counterText, isBlank, mapServerErrors, shouldBlockEnter, textLength, liveTitleError } from '@/lib/form';
-import { formatDateLong, formatDateShort, MAX_DATE_OPTIONS, minAllowedDate } from '@/lib/dates';
+import { formatDateShort, MAX_DATE_OPTIONS } from '@/lib/dates';
+import DatePicker, { DateChips } from '@/components/DatePicker';
 
 const TITLE_MAX = 200;
 const DESC_MAX = 2000;
 
-const localToday = () => new Intl.DateTimeFormat('en-CA').format(new Date()); // YYYY-MM-DD, browser's calendar
 const newKey = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
@@ -19,7 +19,6 @@ const newKey = () =>
 export default function CreateForm() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [newDate, setNewDate] = useState('');
   const [dates, setDates] = useState<string[]>([]);
   const [summary, setSummary] = useState<string[]>([]);
   const [titleErr, setTitleErr] = useState('');
@@ -28,37 +27,13 @@ export default function CreateForm() {
   const [live, setLive] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const requestKey = useRef('');
-  const focusNext = useRef<string | null>(null);
 
   // Content changed → new request key (an identical resubmit keeps the key → same poll).
   useEffect(() => { if (!submitting) requestKey.current = newKey(); }, [title, description, dates]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!focusNext.current) return;
-    document.querySelector<HTMLElement>(focusNext.current)?.focus();
-    focusNext.current = null;
-  }, [dates]);
 
-  function addDate() {
-    if (!newDate) { setPropErr('Vælg en dato først.'); document.getElementById('newdate')?.focus(); return; }
-    if (newDate < minAllowedDate() || newDate < localToday()) { setPropErr('Datoen ligger i fortiden.'); return; }
-    if (dates.includes(newDate)) { setPropErr('Datoen er allerede tilføjet.'); return; }
-    if (dates.length >= MAX_DATE_OPTIONS) { setPropErr(`Du kan højst have ${MAX_DATE_OPTIONS} datoer.`); return; }
-    setPropErr('');
-    setDates((ds) => [...ds, newDate].sort());
-    setLive('Dato tilføjet: ' + formatDateLong(newDate));
-    setNewDate('');
-  }
-  function removeDate(d: string) {
-    const i = dates.indexOf(d);
-    const rest = dates.filter((x) => x !== d);
-    const target = rest[i] ?? rest[i - 1];
-    focusNext.current = target ? `[data-date="${target}"] button` : '#newdate';
-    setDates(rest);
-    setLive('Dato fjernet');
-  }
-
+  const MAX = MAX_DATE_OPTIONS;
   function reset() {
-    setTitle(''); setDescription(''); setNewDate(''); setDates([]); setSummary([]);
+    setTitle(''); setDescription(''); setDates([]); setSummary([]);
     setTitleErr(''); setDescErr(''); setPropErr('');
   }
 
@@ -75,9 +50,9 @@ export default function CreateForm() {
     const descBad = dLen > DESC_MAX;
     if (descBad) { const m = `Beskrivelsen er ${dLen - DESC_MAX} tegn for lang (højst ${DESC_MAX}).`; errs.push(m); setDescErr(m); }
     else setDescErr('');
-    if (!dates.length) errs.push('Tilføj mindst én dato.');
+    if (!dates.length) { errs.push('Vælg mindst én dato.'); setPropErr('Vælg mindst én dato i kalenderen.'); }
     setSummary(errs);
-    if (errs.length) { document.getElementById(titleBad ? 'title' : descBad ? 'desc' : 'newdate')?.focus(); return; }
+    if (errs.length) { if (titleBad || descBad) document.getElementById(titleBad ? 'title' : 'desc')?.focus(); else document.querySelector<HTMLElement>('#dp td[tabindex="0"]')?.focus(); return; }
 
     setSubmitting(true);
     try {
@@ -134,29 +109,17 @@ export default function CreateForm() {
             <Counter id="desc-count" value={description} max={DESC_MAX} />
           </div>
         </div>
-        <h2 id="prop-h">Datoer</h2>
-        <div className="add-date">
-          <div className="field">
-            <label className="field__label" htmlFor="newdate">Vælg dato</label>
-            <input className="input" type="date" id="newdate" lang="da" value={newDate} onChange={(e) => setNewDate(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addDate(); } }} />
-          </div>
-          <button type="button" className="btn btn--secondary" id="adddate" onClick={addDate}>+ Tilføj dato</button>
-        </div>
+        <h2 id="prop-h">Datoforslag</h2>
+        <p className="field__hint" style={{ marginTop: 'calc(-1 * var(--s-2))' }}>Vælg de datoer, deltagerne kan stemme på. Kun hele dage.</p>
         <div className="field__error" id="prop-err" aria-live="polite">{propErr}</div>
-        <div className="empty" id="empty" hidden={dates.length > 0}>
-          <span className="empty__icon" aria-hidden="true">🗓️</span>Ingen datoer endnu.<br />Vælg en dato ovenfor for at komme i gang.
+        <div className="date-picker-layout">
+          <DatePicker selected={dates} max={MAX} label="Vælg datoer"
+            onChange={(ds, msg) => { setDates(ds); setPropErr(''); if (msg) setLive(msg); }}
+            onError={(m) => { setPropErr(m); setLive(m); }} />
+          <DateChips dates={dates} max={MAX}
+            onRemove={(d) => { setDates((ds) => ds.filter((x) => x !== d)); setLive(`${formatDateShort(d)} fjernet`); }}
+            onClear={() => { setDates([]); setLive('Alle datoer fjernet'); setTimeout(() => document.querySelector<HTMLElement>('#dp td[tabindex="0"]')?.focus(), 0); }} />
         </div>
-        <ul className="proposals" id="proposals" aria-labelledby="prop-h">
-          {dates.map((d) => (
-            <li className="date-group anim-in" data-date={d} key={d}>
-              <div className="date-group__head">
-                <span className="date-group__title">{formatDateLong(d)}</span>
-                <button type="button" className="btn btn--icon" aria-label={'Fjern dato ' + formatDateLong(d)} onClick={() => removeDate(d)}>🗑</button>
-              </div>
-            </li>
-          ))}
-        </ul>
         <div className="form-actions">
           <button type="reset" className="btn btn--ghost">Annullér</button>
           <button type="submit" className="btn btn--primary" id="submit" disabled={submitting} aria-busy={submitting || undefined}>

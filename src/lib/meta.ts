@@ -31,6 +31,6 @@ export function truncateGraphemes(s: string, max: number): string {
 }
 
 export function pollDescription(n: number, starts: string[], mode: 'date' | 'datetime' = 'date'): string {
-  if (mode === 'date') return `Vælg de datoer, der passer dig. ${n} ${n === 1 ? 'dato' : 'datoer'}, ${dateRangeDa(starts)}.`;
+  if (mode === 'date') return `Vælg de datoer, der passer dig. ${n} datoforslag, ${dateRangeDa(starts)}.`;
   return `Stem på det tidspunkt, der passer dig. ${n} tidsforslag, ${dateRangeDa(starts)}.`;
 }

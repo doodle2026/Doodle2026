@@ -41,7 +41,7 @@ export const shareText = (title: string) => `Hvornår kan du? ${title}`;
 
 export function participantMailto(title: string, url: string): string {
   return `mailto:?subject=${encodeURIComponent(shareText(title))}&body=${encodeURIComponent(
-    `Hej!\n\nStem på de tidspunkter, der passer dig:\n${url}\n`)}`;
+    `Hej!\n\nVælg de datoer, der passer dig:\n${url}\n`)}`;
 }
 
 /** "Send til mig selv": both links, no recipient (design §19). */

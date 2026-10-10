@@ -48,8 +48,8 @@ export function googleCalendarUrl(o: { title: string; description?: string; star
 }
 
 type AnyOpt = { date?: string | null; start_at: string | null; end_at: string | null };
-/** Date polls: "Fre. 16. okt. 2026" (same in every time zone). Legacy timed polls: whenLabel (browser zone). */
-export const optionLabel = (o: AnyOpt) => (o.date ? cap(formatDateShort(o.date)) : whenLabel(o.start_at!, o.end_at));
+/** Date options: "fre. 16. okt. 2026" (same in every time zone). Legacy timed options: whenLabel (browser zone). */
+export const optionLabel = (o: AnyOpt) => (o.date ? formatDateShort(o.date) : whenLabel(o.start_at!, o.end_at));
 /** Result banner: "fre. 16. okt. 2026 (hele dagen)" / legacy whenLong. */
 export const optionLong = (o: AnyOpt) => (o.date ? `${formatDateShort(o.date)} (hele dagen)` : whenLong(o.start_at!, o.end_at));
 /** Google link for either kind: all-day dates=YYYYMMDD/YYYYMMDD(next day), else timed. */

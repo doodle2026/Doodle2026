@@ -5,6 +5,9 @@
 import { describe, test, expect, inject, beforeAll, afterAll } from 'vitest';
 import { existsSync } from 'node:fs';
 import type { Browser } from 'playwright-core';
+import { PrismaClient } from '@prisma/client';
+import { createLegacyPoll } from './legacy';
+const prisma = new PrismaClient();
 
 const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
 const BASE = inject('baseUrl');
@@ -24,7 +27,7 @@ describe.skipIf(!existsSync(CHROME))('voting UI (headless Chrome)', () => {
     const { chromium } = await import('playwright-core');
     browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
   });
-  afterAll(async () => { await browser?.close(); });
+  afterAll(async () => { await browser?.close(); await prisma.$disconnect(); });
 
   test('V2: "Måske" chosen after a dropped first save is saved as Måske, not the earlier "Nej"', async () => {
     const { id } = await poll();
@@ -66,7 +69,7 @@ describe.skipIf(!existsSync(CHROME))('voting UI (headless Chrome)', () => {
     await p.close();
   }, 30_000);
 
-  test('V3 mobile hint, V4 name error clears on change, V6 totals only saved, V8 next-day marker', async () => {
+  test('V3 mobile hint, V4 name error clears on change, V6 totals only saved, date column heads', async () => {
     const { id } = await poll();
     const m = await browser.newPage({ viewport: { width: 390, height: 844 } });
     await m.goto(`${BASE}/p/${id}`);
@@ -84,7 +87,40 @@ describe.skipIf(!existsSync(CHROME))('voting UI (headless Chrome)', () => {
     await d.click('.tri[data-i="0"]'); // unsaved Ja
     expect(await d.textContent('tfoot')).toContain('0 ja');
     expect(await d.$('thead th.is-best')).toBeNull();
-    expect(await d.textContent('thead')).toMatch(/\(\+1 dag\)/);
+    expect(await d.textContent('thead')).toMatch(/(Man|Tir|Ons|Tor|Fre|Lør|Søn)\.\s*3\. nov\./);
+    expect(await d.textContent('#grid-h')).toBe('Hvilke datoer passer dig?');
+    await d.close();
+  }, 30_000);
+
+  test('date columns render identically in browser time zones UTC+14 and UTC−10 (no shift)', async () => {
+    const { id } = await poll([`${Y}-03-29`, `${Y}-11-01`]);
+    const heads: string[] = [];
+    for (const timezoneId of ['Pacific/Kiritimati', 'America/Adak', 'UTC']) {
+      const ctx = await browser.newContext({ timezoneId, viewport: { width: 1100, height: 900 } });
+      const pg = await ctx.newPage();
+      await pg.goto(`${BASE}/p/${id}`);
+      await pg.waitForSelector('#grid thead');
+      expect(await pg.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(timezoneId);
+      heads.push((await pg.textContent('#grid thead'))!);
+      await ctx.close();
+    }
+    expect(new Set(heads).size).toBe(1);
+    expect(heads[0]).toContain('29. mar.');
+    expect(heads[0]).toContain('1. nov.');
+    expect(heads[0]).not.toMatch(/\d\d[:.]\d\d/);
+  }, 30_000);
+
+  test('LEGACY timed poll page: times + legacy badge, V8 next-day marker still shown', async () => {
+    const lp = await createLegacyPoll(prisma, { title: 'Gammel', options: [{ start: `${Y}-11-03T09:00:00Z` }, { start: `${Y}-11-04T21:30:00Z`, end: `${Y}-11-05T00:30:00Z` }] });
+    const d = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+    await d.goto(`${BASE}/p/${lp.id}`);
+    await d.waitForSelector('#legacy-badge');
+    expect(await d.textContent('#legacy-badge')).toContain('Ældre afstemning med klokkeslæt');
+    await expect.poll(() => d.textContent('thead')).toMatch(/\(\+1 dag\)/);
+    await d.fill('#name', 'Lis');
+    await d.click('.tri[data-i="0"]');
+    await d.click('#save');
+    await expect.poll(async () => (await (await fetch(`${BASE}/api/events/${lp.id}`)).json()).participants.length).toBe(1);
     await d.close();
   }, 30_000);
 

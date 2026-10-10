@@ -276,7 +276,7 @@ describe('slugs, pages, XSS', () => {
     expect(r.text).toContain('<meta property="og:locale" content="da_DK"');
     expect(r.text).toContain('<meta property="og:site_name" content="GrabAday"');
     expect(r.text).toContain('<meta property="og:title" content="Frokost &amp; &quot;kage&quot;"');
-    expect(r.text).toContain(`<meta name="description" content="Vælg de datoer, der passer dig. 2 datoer, 14.–16. oktober ${Y}."`);
+    expect(r.text).toContain(`<meta name="description" content="Vælg de datoer, der passer dig. 2 datoforslag, 14.–16. oktober ${Y}."`);
     expect(r.text).toContain('<meta name="twitter:title" content="Frokost &amp; &quot;kage&quot;"');
     expect(r.text).toContain('<meta name="theme-color" content="#2B6CB0"');
   });

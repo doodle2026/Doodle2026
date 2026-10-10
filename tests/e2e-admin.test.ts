@@ -42,11 +42,13 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
     await expect.poll(async () => (await pub(e.id)).chosen_option_id).toBeNull();
     await btns.nth(1).click();
     await expect.poll(async () => (await pub(e.id)).chosen_option_id).not.toBeNull();
-    expect(await p.textContent('#result-banner')).toContain('Endeligt tidspunkt');
+    expect(await p.textContent('#result-banner')).toContain('Endelig dato');
+    expect(await p.textContent('#result-banner')).toContain(`(hele dagen)`);
     const v = await browser.newPage();
     await v.goto(`${BASE}/p/${e.id}`);
     await v.waitForSelector('#result-banner #gcal');
-    expect(await v.getAttribute('#gcal', 'href')).toContain('calendar.google.com');
+    expect(await v.getAttribute('#gcal', 'href')).toContain(`dates=${Y}1104%2F${Y}1105`);
+    expect(await v.textContent('#result-banner')).toContain('Den endelige dato er');
     expect(await v.getAttribute('#ics', 'href')).toBe(`/api/events/${e.id}/ics`);
     void b0; await v.close(); await p.close();
   }, 30_000);
@@ -66,24 +68,46 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
     await p.close();
   }, 30_000);
 
-  test('V10: ✎ opens inline edit, Esc cancels, changed start preselects Nulstil, Gem resets votes', async () => {
+  test('§0.6 Skift dato: ✎ opens a single-select calendar, Esc cancels, taken date refused, Gem dato resets votes', async () => {
     const e = await setup();
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
     await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
     await p.click('[data-oe] >> nth=0');
-    await p.waitForSelector('.opt-edit');
+    await p.waitForSelector('.opt-edit #oe-cal');
+    await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute('data-d'))).toBe(`${Y}-11-03`);
     await p.keyboard.press('Escape');
     expect(await p.$('.opt-edit')).toBeNull();
     await p.click('[data-oe] >> nth=0');
-    await p.fill('#oe-s', '07:15');
-    await expect.poll(() => p.isChecked('input[name="oe-v"][value="reset"]')).toBe(true);
-    await p.fill('#oe-e', '06:00');
+    await p.click(`#oe-cal td[data-d="${Y}-11-04"]`, { force: true }); // already proposed (aria-disabled)
+    expect(await p.textContent('#oe-err')).toContain('allerede foreslået');
+    expect(await p.getAttribute(`#oe-cal td[data-d="${Y}-11-04"]`, 'aria-disabled')).toBe('true');
+    await p.keyboard.press('ArrowRight'); await p.keyboard.press('ArrowRight'); await p.keyboard.press('Enter'); // keyboard: 11-04 → 11-06
+    expect(await p.textContent('#oe-sel')).toContain('6. nov.');
+    expect(await p.isChecked('input[name="oe-v"][value="reset"]')).toBe(true);
     await p.click('[data-oe-save]');
-    expect(await p.textContent('#oe-err')).toContain('Sluttid');
-    await p.fill('#oe-e', '');
-    await p.press('#oe-s', 'Enter');
     await p.waitForSelector('.opt-edit', { state: 'detached' });
-    await expect.poll(async () => (await pub(e.id)).participants.map((x: { votes: unknown[] }) => x.votes[0])).toEqual([null, null]);
+    await expect.poll(async () => (await pub(e.id)).time_options.map((o: { date: string }) => o.date)).toEqual([`${Y}-11-04`, `${Y}-11-06`]);
+    await expect.poll(async () => (await pub(e.id)).participants.map((x: { votes: unknown[] }) => x.votes[1])).toEqual([null, null]);
+    await p.close();
+  }, 30_000);
+
+  test('§0.6 + Tilføj datoer: popover calendar, taken dates dotted/disabled, adds N dates on save', async () => {
+    const e = await setup();
+    const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+    await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+    await p.click('#addopt');
+    expect(await p.getAttribute('#addopt', 'aria-expanded')).toBe('true');
+    await p.waitForSelector('#addpop #addcal');
+    // navigate to November of next year
+    for (let k = 0; k < 24 && !(await p.$(`#addcal td[data-d="${Y}-11-10"]`)); k++) await p.click('#addcal [aria-label="Næste måned"]');
+    expect(await p.getAttribute(`#addcal td[data-d="${Y}-11-03"]`, 'class')).toContain('is-taken');
+    await p.click(`#addcal td[data-d="${Y}-11-10"]`);
+    await p.click(`#addcal td[data-d="${Y}-11-12"]`, { modifiers: ['Shift'] }); // range 10–12
+    expect(await p.textContent('#addgo')).toBe('Tilføj 3 datoer');
+    await p.click('#addgo');
+    await p.click('#save');
+    await expect.poll(async () => (await pub(e.id)).time_options.map((o: { date: string }) => o.date))
+      .toEqual([`${Y}-11-03`, `${Y}-11-04`, `${Y}-11-10`, `${Y}-11-11`, `${Y}-11-12`]);
     await p.close();
   }, 30_000);
 

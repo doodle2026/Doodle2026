@@ -176,7 +176,7 @@ describe('edit own answers (Bearer edit token)', () => {
     for (const h of ['cache-control', 'x-robots-tag']) expect(r.headers.get(h)).toBeTruthy();
     expect(r.headers.get('referrer-policy')).toBe('no-referrer');
     const p = await call(`/p/${e.id}`);
-    expect(p.text).toContain('Hvornår kan du?');
+    expect(p.text).toContain('Hvilke datoer passer dig?');
     expect(p.text).toContain('class="vgrid"');
     expect(p.text).toContain('Ingen har stemt endnu');
   });

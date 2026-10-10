@@ -162,7 +162,7 @@ export default function PollView({ event, shareUrl, justCreated }:
           <h1>{event.title}</h1>
           {event.description && <p className="lead">{event.description}</p>}
           {event.mode === 'datetime'
-            ? <p className="tz-note">{tz ? `Tider vist i ${tz}.` : ''}</p>
+            ? <p className="tz-note"><span className="legacy-badge" id="legacy-badge">🕘 Ældre afstemning med klokkeslæt</span> {tz ? `Tider vist i ${tz}.` : ''}</p>
             : <p className="tz-note">Vælg de datoer, der passer dig.</p>}
           <VoteSection initial={event} />
         </article>

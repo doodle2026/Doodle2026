@@ -20,7 +20,7 @@ export interface ApiEvent {
 }
 export interface ApiParticipant { id: number; name: string; votes: ('yes' | 'maybe' | 'no' | null)[] }
 /** Date polls: options = [{ id, date }], no timezone. Legacy: [{ date, start, end }] wall-clock in ?tz (see legacy-time). */
-export interface ApiEventResponse extends ApiEvent { timezone?: string; options: ({ id: number; date: string } | DesignOption)[]; url: string }
+export interface ApiEventResponse extends ApiEvent { timezone?: string; options: ({ id?: number; date: string } | DesignOption)[]; url: string }
 
 /** DB columns for a clean option (date polls: date only; legacy: start/end). */
 export const optData = (o: CleanEvent['timeOptions'][number]) =>
@@ -46,6 +46,9 @@ export async function loadEvent(slug: unknown): Promise<ApiEvent | null> {
   if (typeof slug !== 'string' || !SLUG_RE.test(slug)) return null;
   const ev = await prisma.event.findUnique({ where: { slug }, select: publicSelect });
   if (!ev) return null;
+  // Chronological across kinds (legacy polls may mix timed options with new plain-date ones, §0.7).
+  const at = (o: { date: Date | null; startAt: Date | null }) => (o.date ?? o.startAt)!.getTime();
+  ev.timeOptions.sort((a, b) => at(a) - at(b) || a.position - b.position);
   return {
     id: ev.slug, slug: ev.slug, title: ev.title, description: ev.description, created_at: ev.createdAt.toISOString(),
     closed_at: ev.closedAt ? ev.closedAt.toISOString() : null, is_closed: ev.closedAt !== null,
@@ -164,12 +167,12 @@ export async function updateEvent(eventId: number, v: CleanEvent, confirmRemoveV
     const existing = await tx.timeOption.findMany({ where: { eventId }, select: { id: true, _count: { select: { votes: true } } } });
     const existingIds = new Set(existing.map((o) => o.id));
     const unknown = v.timeOptions.filter((o) => o.id !== undefined && !existingIds.has(o.id));
-    if (unknown.length) throw new ApiError(400, ['Et eller flere tidsforslag findes ikke (længere). Genindlæs siden.']);
+    if (unknown.length) throw new ApiError(400, ['Et eller flere datoforslag findes ikke (længere). Genindlæs siden.']);
     const keep = new Set(v.timeOptions.map((o) => o.id).filter((x): x is number => x !== undefined));
     const removing = existing.filter((o) => !keep.has(o.id));
     const voted = removing.filter((o) => o._count.votes > 0);
     if (voted.length && !confirmRemoveVoted) {
-      throw new ApiError(409, ['Nogle af de fjernede tidsforslag har svar. Bekræft for at slette dem.'],
+      throw new ApiError(409, ['Nogle af de fjernede datoforslag har svar. Bekræft for at slette dem.'],
         { voted_option_ids: voted.map((o) => o.id) });
     }
     if (removing.length) {
@@ -214,7 +217,7 @@ async function chosenChange(eventId: number, next: number | null) {
 export async function closeEvent(eventId: number, chosenOptionId: number | null) {
   if (chosenOptionId !== null) {
     const ok = await prisma.timeOption.count({ where: { id: chosenOptionId, eventId } });
-    if (!ok) throw new ApiError(400, ['Det valgte tidspunkt findes ikke i afstemningen.']);
+    if (!ok) throw new ApiError(400, ['Den valgte dato findes ikke i afstemningen.']);
   }
   await prisma.event.update({ where: { id: eventId }, data: { closedAt: new Date(), chosenOptionId, ...(await chosenChange(eventId, chosenOptionId)) } });
 }
@@ -238,7 +241,7 @@ export async function rotateAdminToken(eventId: number): Promise<string> {
 export async function chooseOption(eventId: number, chosenOptionId: number | null) {
   if (chosenOptionId !== null) {
     const ok = await prisma.timeOption.count({ where: { id: chosenOptionId, eventId } });
-    if (!ok) throw new ApiError(400, ['Det valgte tidspunkt findes ikke i afstemningen.']);
+    if (!ok) throw new ApiError(400, ['Den valgte dato findes ikke i afstemningen.']);
   }
   await prisma.event.update({ where: { id: eventId }, data: { chosenOptionId, ...(await chosenChange(eventId, chosenOptionId)) } });
 }

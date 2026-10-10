@@ -10,7 +10,7 @@ export const POST = adminRoute(async ({ slug, eventId, body }) => {
   if (!b) throw new ApiError(400, ['Forespørgslen skal være et JSON-objekt.']);
   const c = b.chosen_option_id;
   if (c !== undefined && c !== null && !(typeof c === 'number' && Number.isSafeInteger(c) && c > 0)) {
-    throw new ApiError(400, ['Ugyldigt valgt tidspunkt.']);
+    throw new ApiError(400, ['Ugyldig valgt dato.']);
   }
   await closeEvent(eventId, (c as number | null | undefined) ?? null);
   return adminJson(slug);
