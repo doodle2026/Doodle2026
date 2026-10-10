@@ -164,15 +164,15 @@ describe('close / reopen', () => {
     expect(pub.body.closed_at).toMatch(/Z$/);
     expect(pub.body.chosen_option_id).toBe(a.opts[1].id);
     const page = await call(`/p/${a.id}`);
-    expect(page.text).toContain('class="closed-banner"');
+    expect(page.text).toContain('id="result-banner"');
     expect(page.text).toContain('Afstemningen er lukket');
-    expect(page.text).toContain('Det valgte tidspunkt er');
+    expect(page.text).toContain('Afstemningen er lukket – endeligt tidspunkt');
 
     const r = await call(`/api/events/${a.id}/reopen`, json('POST', {}, a.token));
     expect(r.status).toBe(200);
     expect(r.body.is_closed).toBe(false);
     expect(r.body.chosen_option_id).toBeNull();
-    expect((await call(`/p/${a.id}`)).text).not.toContain('class="closed-banner"');
+    expect((await call(`/p/${a.id}`)).text).not.toContain('id="result-banner"');
   });
 
   test('close without a chosen time (empty body ok); invalid / foreign chosen id → 400', async () => {

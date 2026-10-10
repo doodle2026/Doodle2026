@@ -56,7 +56,7 @@ describe('choose final time (admin)', () => {
     await call(`/api/events/${e.id}/close`, json('POST', {}, e.admin));
     const c = await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: e.o[1] }, e.admin));
     expect(c.body).toMatchObject({ is_closed: true, chosen_option_id: e.o[1] });
-    expect((await call(`/p/${e.id}`)).text).toContain('Det valgte tidspunkt er');
+    expect((await call(`/p/${e.id}`)).text).toContain('Tidspunktet er valgt');
   });
 });
 
