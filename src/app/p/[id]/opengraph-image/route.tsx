@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ImageResponse } from 'next/og';
+import { BRAND } from '@/lib/brand';
 import { loadEvent } from '@/lib/events';
 import { dateRangeDa } from '@/lib/meta';
 import { countLabel, OG_SIZE, ogTitle } from '@/lib/og';
@@ -40,11 +41,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         boxShadow: '0 20px 60px rgba(14,40,70,.25)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 34, fontWeight: 700, color: '#2B6CB0' }}>
           {/* Temporary logo (favicon mark) */}
-          <svg width="56" height="56" viewBox="0 0 64 64">
-            <rect x="4" y="8" width="56" height="52" rx="12" fill="#2B6CB0" />
-            <rect x="18" y="2" width="6" height="14" rx="3" fill="#163E66" />
-            <rect x="40" y="2" width="6" height="14" rx="3" fill="#163E66" />
-            <path d="M20 40l8 8 16-17" fill="none" stroke="#fff" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+          <svg width="64" height="64" viewBox="0 0 512 512">
+            <rect {...BRAND.ogMark.rect} />
+            <path d={BRAND.ogMark.bubble} fill="#fff" stroke="#163E66" strokeWidth="28" strokeLinejoin="round" />
+            <path d={BRAND.ogMark.check} fill="none" stroke="#48BB78" strokeWidth="56" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={BRAND.ogMark.check} fill="none" stroke="#22734A" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round" opacity="0.35" />
           </svg>
           Mødetid
         </div>

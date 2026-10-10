@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 112"><g transform="translate(8,8) scale(.1875)"><rect x="16" y="16" width="480" height="480" rx="112" fill="#2B6CB0"/>
+<path d="M120 112h272a48 48 0 0 1 48 48v152a48 48 0 0 1-48 48H232l-84 72v-72h-28a48 48 0 0 1-48-48V160a48 48 0 0 1 48-48z" fill="#fff" stroke="#163E66" stroke-width="28" stroke-linejoin="round"/>
+<path d="M168 236l60 60 120-124" fill="none" stroke="#48BB78" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M168 236l60 60 120-124" fill="none" stroke="#22734A" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity=".35"/></g>
+<text x="120" y="78" font-family="Inter,'Segoe UI',Arial,sans-serif" font-size="58" font-weight="800" fill="#1A2B3C" letter-spacing="-1">Møde<tspan fill="#2B6CB0">tid</tspan></text></svg>

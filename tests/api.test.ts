@@ -260,13 +260,17 @@ describe('slugs, pages, XSS', () => {
     const g = await call('/findes-ikke');
     expect(g.status).toBe(404);
     expect(g.text).toContain('Hov, den side kan vi ikke finde');
-    expect(g.text).toMatch(/<link rel="icon" href="\/icon\.svg/);
+    expect(g.text).toContain('<link rel="icon" href="/brand/favicon.svg" type="image/svg+xml"/>');
+    expect(g.text).toContain('<link rel="icon" href="/brand/favicon-32.png" type="image/png" sizes="32x32"/>');
+    expect(g.text).toContain('<link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" sizes="180x180"/>');
     const trav = await call('/p/..%2F..%2Fetc%2Fpasswd');
     expect(trav.status).toBe(404);
     expect(trav.text).toContain('Hov, den afstemning kan vi ikke finde');
-    const icon = await call('/icon.svg');
-    expect(icon.status).toBe(200);
-    expect(icon.headers.get('content-type')).toMatch(/svg/);
+    for (const [path, type] of [['/brand/favicon.svg', /svg/], ['/brand/favicon-32.png', /png/], ['/brand/apple-touch-icon.png', /png/], ['/brand/icon-512.png', /png/]] as const) {
+      const icon = await fetch(BASE + path);
+      expect(icon.status, path).toBe(200);
+      expect(icon.headers.get('content-type'), path).toMatch(type);
+    }
   });
   test('M3: create page has counters and no maxlength truncation', async () => {
     const r = await call('/');
