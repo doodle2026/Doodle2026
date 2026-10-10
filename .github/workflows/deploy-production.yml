@@ -13,14 +13,13 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - run: npm ci
       - name: Prisma migrate deploy (production, session pooler :5432)
-        run: npx prisma migrate deploy
+        run: npm run db:deploy
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
           DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}

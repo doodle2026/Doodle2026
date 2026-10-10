@@ -6,13 +6,15 @@ on:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+permissions:
+  contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_USER: doodle
           POSTGRES_PASSWORD: doodle
@@ -24,9 +26,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://doodle:doodle@localhost:5432/doodle_test?schema=public
       DIRECT_URL: postgresql://doodle:doodle@localhost:5432/doodle_test?schema=public
-      NEXTAUTH_URL: http://localhost:3000
       APP_URL: http://localhost:3000
-      NEXTAUTH_SECRET: ci-only-not-secret
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
@@ -34,9 +34,18 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci            # postinstall runs `prisma generate`
+      - run: npm ci              # postinstall: prisma generate
       - run: npm run lint
-      - run: npm run typecheck # tsc --noEmit
-      - run: npx prisma migrate deploy
+      - run: npm run typecheck   # tsc --noEmit
+      - run: npm run db:deploy   # prisma migrate deploy against the service container
+      # Tests run `next build` (into .next-test, NODE_ENV=production) + `next start` themselves,
+      # so this doubles as the production build check – no separate `npm run build` step.
       - run: npm test
-      - run: npm run build
+      - name: Upload test server log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-server-log
+          path: .next-test/server.log
+          retention-days: 3
+          if-no-files-found: ignore

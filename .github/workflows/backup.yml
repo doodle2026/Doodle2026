@@ -1,0 +1,45 @@
+name: Backup production DB
+# Supabase Free has no backups. Nightly pg_dump -> (optional gpg) -> Actions artifact, 14 days.
+on:
+  schedule:
+    - cron: "17 3 * * *"     # 03:17 UTC nightly
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  PG_IMAGE: postgres:17-alpine   # client >= server version; Supabase runs PG 15 or 17 (check: select version())
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: pg_dump (custom format) via postgres docker image
+        env:
+          DB_URL: ${{ secrets.PROD_DIRECT_URL }}   # session pooler :5432
+        run: |
+          set -euo pipefail
+          sep='?'; [[ "$DB_URL" == *\?* ]] && sep='&'
+          stamp=$(date -u +%Y%m%dT%H%M%SZ)
+          echo "STAMP=$stamp" >> "$GITHUB_ENV"
+          docker run --rm -e PGURL="${DB_URL}${sep}sslmode=require" -v "$PWD:/out" "$PG_IMAGE" \
+            sh -c 'pg_dump "$PGURL" --format=custom --compress=0 --no-owner --no-privileges \
+                   --schema=public --file=/out/doodle.dump'
+          gzip -9 doodle.dump
+          ls -lh doodle.dump.gz
+      - name: Encrypt (if BACKUP_PASSPHRASE is set)
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -n "${BACKUP_PASSPHRASE:-}" ]; then
+            gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+                --symmetric --cipher-algo AES256 -o doodle.dump.gz.gpg doodle.dump.gz <<< "$BACKUP_PASSPHRASE"
+            rm doodle.dump.gz
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: doodle-prod-${{ env.STAMP }}
+          path: doodle.dump.gz*
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error

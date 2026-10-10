@@ -20,7 +20,6 @@ jobs:
   deploy:
     if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    environment: preview
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,7 +41,7 @@ jobs:
             echo "DIRECT_URL=$direct_url"
           } >> "$GITHUB_ENV"
       - name: Prisma migrate deploy (creates schema pr_<n> if missing)
-        run: npx prisma migrate deploy
+        run: npm run db:deploy
       - run: npm i -g vercel@latest
       - run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
       - run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
@@ -62,7 +61,6 @@ jobs:
   cleanup:
     if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    environment: preview
     steps:
       - name: Drop PR schema
         env:
