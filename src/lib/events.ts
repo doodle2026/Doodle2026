@@ -215,3 +215,18 @@ export async function rotateAdminToken(eventId: number): Promise<string> {
   ]);
   return token;
 }
+
+/** Pick / change / clear the final time independently of closing. */
+export async function chooseOption(eventId: number, chosenOptionId: number | null) {
+  if (chosenOptionId !== null) {
+    const ok = await prisma.timeOption.count({ where: { id: chosenOptionId, eventId } });
+    if (!ok) throw new ApiError(400, ['Det valgte tidspunkt findes ikke i afstemningen.']);
+  }
+  await prisma.event.update({ where: { id: eventId }, data: { chosenOptionId } });
+}
+
+/** Organizer removes a participant; votes cascade. */
+export async function deleteParticipant(eventId: number, participantId: number) {
+  const r = await prisma.participant.deleteMany({ where: { id: participantId, eventId } });
+  if (!r.count) throw new ApiError(404, ['Deltageren findes ikke.']);
+}

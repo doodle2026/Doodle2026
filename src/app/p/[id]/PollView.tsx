@@ -3,6 +3,7 @@ import { whenLabel } from '@/lib/format';
 import { useEffect, useRef, useState } from 'react';
 import Header from '@/components/Header';
 import VoteSection from './VoteSection';
+import { bestMask, totals } from '@/lib/vote-client';
 import type { ApiEvent } from '@/lib/events';
 import { adminMailto, canNativeShare, copyText, participantMailto, shareLink, shareText } from '@/lib/share';
 
@@ -157,7 +158,7 @@ export default function PollView({ event, shareUrl, justCreated }:
               <button type="button" className="btn btn--danger" onClick={() => { dialogRef.current?.close(); close(); }}>Luk alligevel</button>
             </div>
           </dialog>
-          {event.is_closed && <ClosedBanner event={event} />}
+          <ResultBanner event={event} />
           <h1>{event.title}</h1>
           {event.description && <p className="lead">{event.description}</p>}
           <p className="tz-note">{tz ? `Tider vist i ${tz}.` : ''}</p>
@@ -168,20 +169,39 @@ export default function PollView({ event, shareUrl, justCreated }:
   );
 }
 
-/** Design §21: closed polls are flagged for everyone; voting (next step) will be rejected server-side. */
-function ClosedBanner({ event }: { event: ApiEvent }) {
+/**
+ * Design §21 + results: shown when the poll is closed and/or the organizer picked a final time.
+ * Open + chosen ("Tidspunktet er valgt") has no own mockup – it reuses .closed-banner with a calendar icon.
+ * Times are formatted after mount only, so they're always in the viewer's time zone.
+ */
+function ResultBanner({ event }: { event: ApiEvent }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const chosen = event.time_options.find((o) => o.id === event.chosen_option_id);
+  if (!event.is_closed && !chosen) return null;
+  const T = totals(event.participants.map((p) => p.votes), event.time_options.length);
+  const best = bestMask(T);
+  const bestOpts = event.time_options.filter((_, i) => best[i]);
+  const label = (o: { start_at: string; end_at: string | null }) => (mounted ? whenLabel(o.start_at, o.end_at) : '…');
   return (
-    <div className="closed-banner" role="status">
-      <span className="closed-banner__icon" aria-hidden="true">🔒</span>
+    <div className="closed-banner" role="status" id="result-banner">
+      <span className="closed-banner__icon" aria-hidden="true">{event.is_closed ? '🔒' : '📅'}</span>
       <div>
-        <h2>Afstemningen er lukket</h2>
+        <h2>{event.is_closed ? 'Afstemningen er lukket' : 'Tidspunktet er valgt'}</h2>
         {chosen ? (
           <>
-            <p>Arrangøren har lukket for svar. Det valgte tidspunkt er:</p>
-            <span className="chosen" suppressHydrationWarning>✓ {whenLabel(chosen.start_at, chosen.end_at)}</span>
+            <p>{event.is_closed ? 'Arrangøren har lukket for svar. Det valgte tidspunkt er:' : 'Arrangøren har valgt tidspunktet. Du kan stadig ændre dine svar.'}</p>
+            <span className="chosen">✓ {label(chosen)}</span>
+            <p style={{ marginTop: 'var(--s-3)' }}>
+              <a className="btn btn--secondary btn--sm" id="ics" href={`/api/events/${event.slug}/ics`} download>📅 Tilføj til kalender (.ics)</a>
+            </p>
           </>
-        ) : <p>Arrangøren har lukket for svar.</p>}
+        ) : (
+          <>
+            <p>Arrangøren har lukket for svar.</p>
+            {bestOpts.length > 0 && <p>Bedste tidspunkt: <strong>★ {bestOpts.map(label).join(' / ')}</strong></p>}
+          </>
+        )}
       </div>
     </div>
   );

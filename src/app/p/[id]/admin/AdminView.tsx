@@ -10,7 +10,7 @@ const TITLE_MAX = 200;
 const DESC_MAX = 2000;
 
 type Opt = { key: string; id?: number; start_at: string; end_at: string | null; votes: number };
-type Dialog = null | 'close' | 'reopen' | 'rotate';
+type Dialog = null | 'close' | 'reopen' | 'rotate' | 'delete';
 let seq = 0;
 
 export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: string }) {
@@ -33,6 +33,8 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   const [dialog, setDialog] = useState<Dialog>(null);
   const [chosen, setChosen] = useState<string>('');
   const [busy, setBusy] = useState(false);
+  const [delTarget, setDelTarget] = useState<{ id: number; name: string } | null>(null);
+  const [choosing, setChoosing] = useState(false);
   const [newAdminUrl, setNewAdminUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState<'' | 'url' | 'admin'>('');
   const [live, setLive] = useState('');
@@ -166,6 +168,20 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     } finally { setSaving(false); }
   }
 
+  async function choose(optionId: number | null) {
+    if (choosing) return;
+    setChoosing(true);
+    try {
+      const { res, data } = await api('/choose', { method: 'POST', body: JSON.stringify({ chosen_option_id: optionId }) });
+      if (res.status === 401 || res.status === 403) { setState('denied'); return; }
+      if (!res.ok) { setSummary(Array.isArray(data.errors) ? data.errors : ['Ukendt fejl.']); return; }
+      setEv(data);
+      const o = optionId ? data.time_options.find((x: { id: number }) => x.id === optionId) : null;
+      setBanner(o ? `✓ Endeligt tidspunkt valgt: ${whenLabel(o.start_at, o.end_at)}. Deltagerne ser det med det samme.` : '✓ Valget af tidspunkt er fjernet.');
+      focusAfter.current = optionId ? `[data-choose=""]` : `[data-choose="${ev!.chosen_option_id}"]`;
+    } catch { setSummary(['Kunne ikke kontakte serveren. Prøv igen.']); } finally { setChoosing(false); }
+  }
+
   function openDialog(kind: Exclude<Dialog, null>) {
     lastFocus.current = document.activeElement as HTMLElement;
     if (kind === 'close') {
@@ -181,9 +197,11 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     if (busy) return;
     setBusy(true);
     try {
-      const path = dialog === 'close' ? '/close' : dialog === 'reopen' ? '/reopen' : '/rotate-admin';
+      const path = dialog === 'close' ? '/close' : dialog === 'reopen' ? '/reopen' : dialog === 'delete' ? `/participants/${delTarget?.id}` : '/rotate-admin';
       const body = dialog === 'close' ? { chosen_option_id: chosen ? Number(chosen) : null } : {};
-      const { res, data } = await api(path, { method: 'POST', body: JSON.stringify(body) });
+      const { res, data } = dialog === 'delete'
+        ? await api(path, { method: 'DELETE' })
+        : await api(path, { method: 'POST', body: JSON.stringify(body) });
       if (res.status === 401 || res.status === 403) { closeDialog(); setState('denied'); return; }
       if (!res.ok) { setSummary(Array.isArray(data.errors) ? data.errors : ['Ukendt fejl.']); closeDialog(); return; }
       setEv(data);
@@ -192,6 +210,11 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
         setBanner(`✓ Afstemningen er lukket.${c ? ` Valgt tidspunkt: ${whenLabel(c.start_at, c.end_at)}.` : ''}`);
       } else if (dialog === 'reopen') {
         setBanner('✓ Afstemningen er åbnet igen.');
+      } else if (dialog === 'delete') {
+        // Keep unsaved edits in the form; only refresh vote counts.
+        setOpts((prev) => prev.map((o) => ({ ...o, votes: data.time_options.find((x: AdminEvent['time_options'][number]) => x.id === o.id)?.votes.total ?? o.votes })));
+        setBanner(`✓ ${delTarget?.name} er slettet. Resultatet er opdateret.`);
+        lastFocus.current = document.getElementById('res-h');
       } else {
         storeAdminToken(slug, data.admin_token, sessionStorage);
         setToken(data.admin_token);
@@ -212,7 +235,9 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   }
 
   const closed = ev.is_closed;
-  const dlgText = dialog === 'close'
+  const dlgText = dialog === 'delete'
+    ? { h: `Slet ${delTarget?.name ?? ''}?`, p: 'Deltageren og alle deres svar slettes for altid. Det kan ikke fortrydes.', ok: 'Slet deltager', cls: 'btn--danger' }
+    : dialog === 'close'
     ? { h: 'Luk afstemningen?', p: 'Ingen kan længere stemme eller ændre svar. Du kan genåbne senere.', ok: 'Luk afstemning', cls: 'btn--danger' }
     : dialog === 'reopen'
       ? { h: 'Genåbn afstemningen?', p: 'Deltagerne kan igen stemme og ændre deres svar. Det valgte tidspunkt nulstilles.', ok: 'Genåbn', cls: 'btn--primary' }
@@ -272,13 +297,23 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
                 {ev.chosen_option_id === o.id && <span className="chosen-badge">✓ Valgt</span>}
               </span>
               <span className="opt__votes">✓ {o.votes.yes} · ( ) {o.votes.maybe} · ✕ {o.votes.no}</span>
+              {ev.chosen_option_id === o.id
+                ? <button type="button" className="btn btn--ghost btn--sm" data-choose="" disabled={choosing} onClick={() => choose(null)} aria-label={`Fjern valget af ${whenLabel(o.start_at, o.end_at)}`}>Fjern valg</button>
+                : <button type="button" className="btn btn--secondary btn--sm" data-choose={o.id} disabled={choosing} onClick={() => choose(o.id)} aria-label={`Vælg ${whenLabel(o.start_at, o.end_at)} som endeligt tidspunkt`}>Vælg</button>}
             </li>
           ))}
         </ul>
+        {ev.chosen_option_id !== null && (
+          <p style={{ marginTop: 'var(--s-3)' }}>
+            <a className="btn btn--secondary btn--sm" id="ics" href={`/api/events/${slug}/ics`} download>📅 Hent kalenderfil (.ics)</a>
+          </p>
+        )}
         <details style={{ marginTop: 'var(--s-3)' }}>
           <summary style={{ cursor: 'pointer', color: 'var(--c-primary)', fontWeight: 600 }}>Se alle deltagere</summary>
           {ev.participants.length
-            ? <ul className="vcard__people">{ev.participants.map((p, i) => <li key={i}><span>{p.name}</span><span className="meta">svaret</span></li>)}</ul>
+            ? <ul className="vcard__people">{ev.participants.map((p) => <li key={p.id}><span>{p.name}</span>
+              <button type="button" className="btn btn--danger-ghost btn--sm" data-del={p.id} aria-label={`Slet ${p.name}`}
+                onClick={() => { setDelTarget({ id: p.id, name: p.name }); openDialog('delete'); }}>Slet</button></li>)}</ul>
             : <p className="meta">Ingen har svaret endnu.</p>}
         </details>
       </section>
