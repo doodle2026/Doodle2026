@@ -1,8 +1,9 @@
 'use client';
+import { plural } from '@/lib/plural';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { ApiEvent } from '@/lib/events';
 import { optionLabel } from '@/lib/format';
-import { columnHead } from '@/lib/dates';
+import { columnHead, localTodayIso } from '@/lib/dates';
 import { copyText } from '@/lib/share';
 import { counterState, counterText, isBlank, textLength } from '@/lib/form';
 import {
@@ -21,6 +22,8 @@ function Badge({ v }: { v: Vote }) {
 }
 
 export default function VoteSection({ initial }: { initial: ApiEvent }) {
+  const [today, setToday] = useState<string | null>(null);
+  useEffect(() => setToday(localTodayIso()), []);
   const [ev, setEv] = useState(initial);
   const [wide, setWide] = useState(true); // V3: matches the CSS breakpoint (table ≥ 640 px, cards below)
   const [name, setName] = useState('');
@@ -51,7 +54,9 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
   const T = totals(rows, opts.length);
   const best = bestMask(T);
   const chosen = (i: number) => ev.chosen_option_id === opts[i].id;
-  const cls = (i: number) => (chosen(i) ? 'is-chosen' : best[i] ? 'is-best' : '');
+  // K2: dates before today in the viewer's local date are passed (computed after mount; SSR doesn't know the date).
+  const past = (i: number) => today !== null && opts[i].date < today;
+  const cls = (i: number) => `${chosen(i) ? 'is-chosen' : best[i] ? 'is-best' : ''}${past(i) ? ' is-past' : ''}`.trim();
   const optLabel = (i: number) => optionLabel(opts[i]);
 
   // Personal edit link: #edit=<token> → verify via API (Bearer), keep in localStorage, strip the fragment.
@@ -120,6 +125,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
 
   /** `v` may be a function of the CURRENT value, so rapid clicks never cycle from a stale render (V2). */
   function set(i: number, v: Vote | ((cur: Vote) => Vote), sel: string) {
+    if (past(i)) return;
     setMe((m) => {
       const nv = typeof v === 'function' ? v(m[i]) : v;
       setLive(`${optLabel(i)}: ${LABEL[String(nv)][1]}`);
@@ -286,12 +292,13 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
           <caption className="sr-only">Afstemning. Kolonner er datoforslag, rækker er deltagere. Sidste række er totaler.</caption>
           <thead>
             <tr>
-              <th className="vgrid__name" scope="col">Deltager ({others.length})</th>
+              <th className="vgrid__name" scope="col">Deltager ({ev.participants.length})</th>
               {opts.map((o, i) => (
                 <th scope="col" className={cls(i)} key={o.id}>
                   <span className="vgrid__day">{columnHead(o.date)[0]}</span>
                   <span className="vgrid__time">{columnHead(o.date)[1]}</span>
                   {chosen(i) ? <span className="chosen-badge">✓ Valgt</span> : best[i] ? <span className="best-badge">★ Bedst</span> : null}
+                  {past(i) && <span className="past-badge">passeret</span>}
                 </th>
               ))}
             </tr>
@@ -313,7 +320,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
                 <th scope="row" className="vgrid__name" id="me-name">{meName}</th>
                 {me.map((v, i) => (
                   <td className={cls(i)} key={i}>
-                    <button type="button" className="tri" data-i={i} data-state={String(v)} aria-label={`${optLabel(i)}: ${LABEL[String(v)][1]}. Tryk for at skifte.`}
+                    <button type="button" className="tri" data-i={i} data-state={String(v)} disabled={past(i)} aria-label={`${optLabel(i)}: ${LABEL[String(v)][1]}. Tryk for at skifte.`}
                       onClick={() => set(i, nextVote, `.tri[data-i="${i}"]`)} onKeyDown={(e) => triKey(e, i)}>
                       <span aria-hidden="true">{LABEL[String(v)][0]}</span>{v ? LABEL[v][1] : 'Vælg'}
                     </button>
@@ -330,16 +337,17 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
 
       <ul className="vcards" id="cards" aria-labelledby="grid-h">
         {opts.map((o, i) => (
-          <li key={o.id} className={`vcard${chosen(i) ? ' is-best is-chosen' : best[i] ? ' is-best' : ''}`}>
+          <li key={o.id} className={`vcard${chosen(i) ? ' is-best is-chosen' : best[i] ? ' is-best' : ''}${past(i) ? ' is-past' : ''}`}>
             <div className="vcard__head">
               <span className="vcard__when" id={`c${i}`} suppressHydrationWarning>{optLabel(i)}</span>
               {chosen(i) ? <span className="chosen-badge">✓ Valgt</span> : best[i] ? <span className="best-badge">★ Bedst</span> : null}
+              {past(i) && <span className="past-badge">passeret</span>}
             </div>
             <div className="vcard__totals">{totalText(T[i])}{T[i].no ? `, ${T[i].no} nej` : ''}{showInput && !me[i] ? <> · <em>Du har ikke svaret</em></> : null}</div>
             {showInput && (
               <div className="seg" role="radiogroup" aria-labelledby={`c${i}`}>
                 {(['yes', 'maybe', 'no'] as const).map((v) => (
-                  <button type="button" role="radio" key={v} data-i={i} data-v={v} aria-checked={me[i] === v}
+                  <button type="button" role="radio" key={v} data-i={i} data-v={v} aria-checked={me[i] === v} disabled={past(i)}
                     tabIndex={me[i] === v || (!me[i] && v === 'yes') ? 0 : -1}
                     onClick={() => set(i, (cur) => (cur === v ? null : v), `.seg button[data-i="${i}"][data-v="${v}"]`)} onKeyDown={(e) => segKey(e, i, v)}>
                     <span aria-hidden="true">{LABEL[v][0]}</span> {LABEL[v][1]}

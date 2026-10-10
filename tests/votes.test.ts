@@ -193,3 +193,28 @@ describe('edit own answers (Bearer edit token)', () => {
     expect(p.text).toContain('is-chosen');
   });
 });
+
+describe('K2: passed dates', () => {
+  test('new yes/maybe on a date before UTC today − 1 → 400; no is fine; existing answers are kept on edit', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+    try {
+      const e = await create();
+      const first = await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['yes', 'maybe', 'no'])));
+      expect(first.status).toBe(201);
+      // the first date now lies in the past (e.g. the poll ran for weeks)
+      await prisma.timeOption.update({ where: { id: e.o[0] }, data: { date: new Date('2020-01-01T00:00:00Z') } });
+      const bad = await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['yes', 'yes'])));
+      expect(bad.status).toBe(400);
+      expect(bad.body.errors[0]).toMatch(/passeret/);
+      expect((await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['maybe'])))).status).toBe(400);
+      expect((await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['no', 'yes'])))).status).toBe(201);
+      expect((await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, [null, 'yes'])))).status).toBe(201);
+      // edit: unchanged 'yes' on the passed date is kept; changing it to 'maybe' is refused
+      const keep = await call(`/api/events/${e.id}/votes/me`, json('PUT', vote(e.o, ['yes', 'yes', 'yes'], 'Ole'), first.body.edit_token));
+      expect(keep.status).toBe(200);
+      expect(keep.body.event.participants[0].votes).toEqual(['yes', 'yes', 'yes']);
+      expect((await call(`/api/events/${e.id}/votes/me`, json('PUT', vote(e.o, ['maybe', 'yes', 'yes'], 'Ole'), first.body.edit_token))).status).toBe(400);
+    } finally { await prisma.$disconnect(); }
+  });
+});

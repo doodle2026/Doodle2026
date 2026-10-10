@@ -3,7 +3,7 @@ import { jsonError, readJson } from '@/lib/http';
 import { rateLimit } from '@/lib/ratelimit';
 import { IDEMPOTENCY_RE, LIMITS } from '@/lib/validate';
 import { claimInvite } from '@/lib/invitations';
-import { createParticipant, eventForVoting, findVoteReplay, sameVote, validateVote } from '@/lib/votes';
+import { createParticipant, eventForVoting, findVoteReplay, pastVoteErrors, sameVote, validateVote } from '@/lib/votes';
 import { editPath, guarded, publicEvent } from '@/lib/votes-api';
 import { ApiError } from '@/lib/events';
 
@@ -44,6 +44,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     if (ev.closedAt) throw new ApiError(423, ['Afstemningen er lukket. Svar kan ikke længere gives eller ændres.'], { code: 'closed' });
     if (errors.length || !value) return jsonError(400, errors);
+    const past = pastVoteErrors(value, ev.timeOptions);
+    if (past.length) return jsonError(400, past);
     const r = await createParticipant(ev.id, value, idemKey);
     // Step 5: answer via a personal link → mark that invitee as answered (best effort; never blocks the vote).
     if (!r.replayed) await claimInvite(ev.id, req.headers.get('x-invite-token'), r.participantId).catch(() => false);

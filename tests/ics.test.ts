@@ -34,5 +34,10 @@ describe('ics', () => {
     const bidi = icsDisposition('a\u202Egnp\u2066\u2069\u202A.exe');
     expect(bidi).toBe(`attachment; filename="agnp-exe.ics"; filename*=UTF-8''${encodeURIComponent('agnp.exe.ics')}`);
     expect(icsDisposition('🎉🎉')).toMatch(/^attachment; filename="moede\.ics"/);
+    // K5: plain filename= is pure ASCII (æøå → ae/oe/aa, emoji dropped); filename*= keeps the UTF-8 title.
+    const k5 = icsDisposition('Sommerfest på Ærø 🎉 Café');
+    expect(k5).toBe(`attachment; filename="sommerfest-paa-aeroe-cafe.ics"; filename*=UTF-8''${encodeURIComponent('Sommerfest på Ærø 🎉 Café.ics')}`);
+    expect(/^[\x20-\x7E]*$/.test(k5)).toBe(true);
+    expect(icsDisposition('Gåtur 🥾').split(';')[1]).toBe(' filename="gaatur.ics"');
   });
 });

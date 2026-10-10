@@ -1,4 +1,5 @@
 'use client';
+import { plural } from '@/lib/plural';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { optionLabel } from '@/lib/format';
 import { formatDateShort, localTodayIso } from '@/lib/dates';
@@ -42,13 +43,13 @@ export default function OptionEditRow({ opt, others, onSave, onCancel }: {
       <p id="oe-h" className="field__label" style={{ margin: '0 0 var(--s-2)' }}>Skift dato – {optionLabel(opt)}</p>
       {!opt.date && <p className="field__hint">Ældre forslag med klokkeslæt. Skifter du dato, bliver det et rent datoforslag (hele dagen).</p>}
       <DatePicker id="oe-cal" mode="single" selected={pick ? [pick] : []} initialMonth={pick || undefined} taken={taken}
-        min={orig && orig < localTodayIso() ? orig : undefined} label="Ny dato"
+        label="Ny dato"
         onChange={(ds) => { setPick(ds[0]); setErr(null); }} onError={(m) => setErr({ msg: m, fields: ['date'] })} />
       <p className="field__hint" id="oe-sel" aria-live="polite">Ny dato: <strong>{pick ? formatDateShort(pick) : '–'}</strong></p>
       <div className="field__error" id="oe-err" aria-live="polite">{err?.msg ?? ''}</div>
       {opt.votes > 0 && (
         <fieldset>
-          <legend>{opt.votes} {opt.votes === 1 ? 'deltager har' : 'deltagere har'} svaret på denne dato. Hvad skal der ske med svarene?</legend>
+          <legend>{plural(opt.votes, 'deltager har', 'deltagere har')} svaret på denne dato. Hvad skal der ske med svarene?</legend>
           <label className="radio"><input type="radio" name="oe-v" value="reset" checked={action === 'reset'} onChange={() => setAction('reset')} />{' '}
             <span><strong>Nulstil svarene</strong> (anbefalet) – deltagerne skal svare igen på den nye dato.</span></label>
           <label className="radio"><input type="radio" name="oe-v" value="keep" checked={action === 'keep'} onChange={() => setAction('keep')} />{' '}

@@ -50,7 +50,8 @@ export function buildIcs(e: IcsEvent): string {
 export function icsDisposition(rawTitle: string): string {
   // Bidi controls / invisible chars could spoof the displayed name ("…\u202Egnp.exe") → removed from BOTH variants.
   const title = rawTitle.replace(INVISIBLE_FORMAT_RE, '');
-  const base = title.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/æ/gi, 'ae').replace(/ø/gi, 'oe').replace(/å/gi, 'aa')
+  // K5: transliterate æ/ø/å BEFORE NFKD (which would turn å into plain a), strip accents, drop everything else non-ASCII.
+  const base = title.replace(/æ/gi, 'ae').replace(/ø/gi, 'oe').replace(/å/gi, 'aa').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).toLowerCase() || 'moede';
   const utf8 = encodeURIComponent((title.replace(/[\\/:*?"<>|\u0000-\u001F]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'moede') + '.ics');
   return `attachment; filename="${base}.ics"; filename*=UTF-8''${utf8}`;

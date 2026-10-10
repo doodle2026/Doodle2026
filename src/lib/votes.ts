@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { fromUtcDate, minAllowedDate } from './dates';
 import { prisma } from './db';
 import { ApiError } from './events';
 import { newToken, openForKey, sealForKey, sha256Hex, TOKEN_RE } from './tokens';
@@ -52,7 +53,18 @@ export function validateVote(body: unknown, optionIds: Set<number>): { errors: s
 }
 
 export async function eventForVoting(slug: string) {
-  return prisma.event.findUnique({ where: { slug }, select: { id: true, closedAt: true, timeOptions: { select: { id: true } } } });
+  return prisma.event.findUnique({ where: { slug }, select: { id: true, closedAt: true, timeOptions: { select: { id: true, date: true } } } });
+}
+
+/**
+ * K2: dates before (UTC today − 1 day) are passed: new yes/maybe answers on them → 400. 'no', clearing and an
+ * unchanged existing answer (`existing`, when editing) are allowed, so earlier votes are kept.
+ */
+export function pastVoteErrors(v: CleanVote, options: { id: number; date: Date }[], existing?: Map<number, VoteValue>, now = new Date()): string[] {
+  const min = minAllowedDate(now);
+  const passed = new Map(options.filter((o) => fromUtcDate(o.date) < min).map((o) => [o.id, fromUtcDate(o.date)]));
+  const bad = [...v.votes].filter(([id, val]) => passed.has(id) && val !== 'no' && existing?.get(id) !== val).map(([id]) => passed.get(id)!);
+  return bad.length ? [`Datoen er passeret, så du kan ikke længere svare ja eller måske: ${bad.join(', ')}.`] : [];
 }
 
 const closedError = () => new ApiError(423, ['Afstemningen er lukket. Svar kan ikke længere gives eller ændres.'], { code: 'closed' });

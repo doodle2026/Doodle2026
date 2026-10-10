@@ -14,3 +14,10 @@ export function focusAfterDelete(ids: number[], id: number): number | null {
 }
 
 export type EditErr = { msg: string; fields: 'date'[] } | null;
+
+/** Close dialog preselection (K1): current chosen option, else first best, else none (''). */
+export function closeDefault(chosenId: number | null, opts: { id: number }[], best: Set<number>): string {
+  if (chosenId !== null && opts.some((o) => o.id === chosenId)) return String(chosenId);
+  const b = opts.find((o) => best.has(o.id));
+  return b ? String(b.id) : '';
+}

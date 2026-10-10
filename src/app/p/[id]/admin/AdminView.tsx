@@ -1,4 +1,5 @@
 'use client';
+import { plural } from '@/lib/plural';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { AdminEvent } from '@/lib/events';
 import { forgetAdminToken, storeAdminToken, takeAdminToken } from '@/lib/admin-client';
@@ -8,7 +9,7 @@ import DatePicker from '@/components/DatePicker';
 import AdminResults from './AdminResults';
 import InviteSection from './InviteSection';
 import OptionEditRow, { type EditResult } from './OptionEditRow';
-import type { EditErr } from '@/lib/admin-ui';
+import { closeDefault, type EditErr } from '@/lib/admin-ui';
 import { copyText } from '@/lib/share';
 import { counterState, counterText, isBlank, liveTitleError, mapServerErrors, textLength } from '@/lib/form';
 
@@ -198,8 +199,8 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   function openDialog(kind: Exclude<Dialog, null>) {
     lastFocus.current = document.activeElement as HTMLElement;
     if (kind === 'close') {
-      const firstBest = ev!.time_options.find((o) => best.has(o.id));
-      setChosen(firstBest ? String(firstBest.id) : '');
+      // K1: preselect the CURRENT final date; only without one fall back to the most votes.
+      setChosen(closeDefault(ev!.chosen_option_id, ev!.time_options, best));
     }
     setDialog(kind);
     setTimeout(() => { dlgRef.current?.showModal(); document.getElementById('dlg-cancel')?.focus(); }, 0);
@@ -250,7 +251,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
 
   const closed = ev.is_closed;
   const dlgText = dialog === 'delete-poll'
-    ? { h: `Slet «${ev.title}»?`, p: `Afstemningen, ${ev.time_options.length} datoforslag og ${ev.participants.length} deltageres svar slettes for altid. Både deltager- og admin-linket holder op med at virke. Det kan ikke fortrydes.`, ok: 'Slet for altid', cls: 'btn--danger' }
+    ? { h: `Slet «${ev.title}»?`, p: `Afstemningen, ${ev.time_options.length} datoforslag og ${plural(ev.participants.length, 'deltagers', 'deltageres')} svar slettes for altid. Både deltager- og admin-linket holder op med at virke. Det kan ikke fortrydes.`, ok: 'Slet for altid', cls: 'btn--danger' }
     : dialog === 'close'
     ? { h: 'Luk afstemningen?', p: 'Ingen kan længere stemme eller ændre svar. Du kan genåbne senere.', ok: 'Luk afstemning', cls: 'btn--danger' }
     : dialog === 'reopen'
@@ -348,7 +349,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
                 </div>
                 {removing && (
                   <div className="inline-warn" role="alert">
-                    <strong>{o.votes} {o.votes === 1 ? 'deltager har' : 'deltagere har'} svaret på denne dato.</strong> Fjerner du den,
+                    <strong>{plural(o.votes, 'deltager har', 'deltagere har')} svaret på denne dato.</strong> Fjerner du den,
                     slettes deres svar på den for altid. Deres øvrige svar bevares.
                     <div className="inline-warn__actions">
                       <button type="button" className="btn btn--danger btn--sm" data-confirm-remove onClick={() => removeOpt(o, i)}>Fjern alligevel</button>
@@ -365,10 +366,11 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
             onClick={() => { setAddOpen(!addOpen); setAddSel([]); }}>+ Tilføj datoer</button>
         </div>
         {addOpen && (
-          <div className="dp-pop" id="addpop">
+          <div className="dp-pop" id="addpop"
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setAddOpen(false); setAddSel([]); document.getElementById('addopt')?.focus(); } }}>
             <DatePicker id="addcal" selected={addSel} taken={opts.filter((o) => o.date).map((o) => o.date!)} max={Math.max(0, MAX_DATE_OPTIONS - opts.length)}
               label="Tilføj datoer" onChange={(ds, msg) => { setAddSel(ds); setOptErr(''); if (msg) setLive(msg); }} onError={(m) => setOptErr(m)} />
-            <p className="field__hint">Prikkede datoer er allerede foreslået.</p>
+            <p className="field__hint">Prikkede datoer er allerede foreslået. Esc annullerer.</p>
             <div className="opt-edit__actions">
               <button type="button" className="btn btn--primary btn--sm" id="addgo" disabled={!addSel.length} onClick={addDates}>
                 {addSel.length ? `Tilføj ${addSel.length} ${addSel.length === 1 ? 'dato' : 'datoer'}` : 'Tilføj datoer'}</button>

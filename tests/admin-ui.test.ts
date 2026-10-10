@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { focusAfterDelete, undoMessage } from '../src/lib/admin-ui';
+import { closeDefault, focusAfterDelete, undoMessage } from '../src/lib/admin-ui';
 import { googleCalendarUrlFor } from '../src/lib/format';
 
 describe('admin UI helpers (round 4)', () => {
@@ -12,6 +12,13 @@ describe('admin UI helpers (round 4)', () => {
     expect(focusAfterDelete([1, 2, 3], 2)).toBe(3);
     expect(focusAfterDelete([1, 2, 3], 3)).toBe(2);
     expect(focusAfterDelete([1], 1)).toBeNull();
+  });
+  it('K1 close dialog preselects the current chosen date, else the best, else none', () => {
+    const opts = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    expect(closeDefault(3, opts, new Set([1]))).toBe('3');
+    expect(closeDefault(null, opts, new Set([2, 1]))).toBe('1');
+    expect(closeDefault(null, opts, new Set())).toBe('');
+    expect(closeDefault(99, opts, new Set([2]))).toBe('2');
   });
   it('Google Calendar link: all-day dates, includes poll url', () => {
     const u = new URL(googleCalendarUrlFor({ date: '2026-11-01' }, { title: 'Møde & kage', url: 'https://x/p/abc' }));

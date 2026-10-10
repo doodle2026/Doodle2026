@@ -22,6 +22,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         {/* eslint-disable-next-line @next/next/no-css-tags -- design's plain global CSS file, kept restylable as-is */}
         <link rel="stylesheet" href="/styles.css" />
+        {/* eslint-disable-next-line @next/next/no-css-tags -- small app-only additions (see file header) */}
+        <link rel="stylesheet" href="/app.css" />
       </head>
       <body>{children}</body>
     </html>
