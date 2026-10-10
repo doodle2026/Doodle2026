@@ -88,6 +88,23 @@ describe('POST /api/events/:id/votes', () => {
     expect((await call(`/api/events/${e.id}`)).body.participants.length).toBe(1);
   });
 
+  test('V2: same Idempotency-Key with DIFFERENT answers → 422, never a silent replay of the old answers', async () => {
+    const e = await create();
+    const key = `v2-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const first = await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['no'], 'Mette'), undefined, { 'Idempotency-Key': key }));
+    expect(first.status).toBe(201);
+    const changed = await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['maybe'], 'Mette'), undefined, { 'Idempotency-Key': key }));
+    expect(changed.status).toBe(422);
+    expect(changed.body.code).toBe('idempotency_mismatch');
+    expect(changed.text).not.toContain(first.body.edit_token);
+    const same = await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['no'], 'Mette'), undefined, { 'Idempotency-Key': key }));
+    expect(same.status).toBe(200);
+    expect(same.body.event.participants[0].votes[0]).toBe('no');
+    // all three values round-trip exactly
+    const r = await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['maybe', 'no', 'yes'], 'Rundtur')));
+    expect(r.body.event.participants.find((p: Json) => p.name === 'Rundtur').votes).toEqual(['maybe', 'no', 'yes']);
+  });
+
   test('closed poll rejects new votes and edits with 423; reopen allows again', async () => {
     const e = await create();
     const v = await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['yes'])));

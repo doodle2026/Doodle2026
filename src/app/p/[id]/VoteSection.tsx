@@ -38,7 +38,8 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState<'' | 'ok' | 'err'>('');
   const [live, setLive] = useState('');
-  const idemKey = useRef<string | null>(null);
+  // Idempotency key is bound to the exact payload: a retry of the SAME answers reuses it, any change gets a new key (V2).
+  const idem = useRef<{ key: string; body: string } | null>(null);
   const focusSel = useRef<string | null>(null);
 
   const closed = ev.is_closed;
@@ -102,9 +103,13 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
     setSaved(myId !== null ? { name: ev.participants.find((p) => p.id === myId)?.name ?? '', editUrl: null } : null);
   }
 
-  function set(i: number, v: Vote, sel: string) {
-    setMe((m) => m.map((x, j) => (j === i ? v : x)));
-    setLive(`${optLabel(i)}: ${LABEL[String(v)][1]}`);
+  /** `v` may be a function of the CURRENT value, so rapid clicks never cycle from a stale render (V2). */
+  function set(i: number, v: Vote | ((cur: Vote) => Vote), sel: string) {
+    setMe((m) => {
+      const nv = typeof v === 'function' ? v(m[i]) : v;
+      setLive(`${optLabel(i)}: ${LABEL[String(nv)][1]}`);
+      return m.map((x, j) => (j === i ? nv : x));
+    });
     focusSel.current = sel;
   }
   function triKey(e: KeyboardEvent<HTMLButtonElement>, i: number) {
@@ -143,22 +148,22 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
       if (editing && token) {
         r = await fetch(`/api/events/${ev.slug}/votes/me?tz=${tz}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body });
       } else {
-        idemKey.current ??= newIdemKey(); // same key on retry → same participant (no duplicates)
-        r = await fetch(`/api/events/${ev.slug}/votes?tz=${tz}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idemKey.current }, body });
+        if (idem.current?.body !== body) idem.current = { key: newIdemKey(), body };
+        r = await fetch(`/api/events/${ev.slug}/votes?tz=${tz}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idem.current.key }, body });
       }
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
         const errs: string[] = Array.isArray(d.errors) ? d.errors : ['Ukendt fejl.'];
         if (d.code === 'name_taken') setNameErr(errs[0]);
+        if (d.code === 'idempotency_mismatch') idem.current = null;
         if (r.status === 423) setEv((x) => ({ ...x, is_closed: true }));
         if (r.status === 403) { setTokenErr(true); setEditing(false); writeStored(ev.slug, null, localStorage); setToken(null); setMyId(null); }
         if (r.status >= 500) { serverError(); return; }
-        if (r.status === 409 || r.status === 400) idemKey.current = null; // changed input → new attempt
         setSummary({ head: 'Dine svar blev ikke gemt.', items: errs });
         focusSel.current = d.code === 'name_taken' ? '#name' : '#summary';
         return;
       }
-      idemKey.current = null;
+      idem.current = null;
       setEv(d.event);
       const pid = d.participant_id as number;
       let editUrl: string | null = null;
@@ -282,7 +287,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
                 {me.map((v, i) => (
                   <td className={cls(i)} key={i}>
                     <button type="button" className="tri" data-i={i} data-state={String(v)} aria-label={`${optLabel(i)}: ${LABEL[String(v)][1]}. Tryk for at skifte.`}
-                      onClick={() => set(i, nextVote(v), `.tri[data-i="${i}"]`)} onKeyDown={(e) => triKey(e, i)}>
+                      onClick={() => set(i, nextVote, `.tri[data-i="${i}"]`)} onKeyDown={(e) => triKey(e, i)}>
                       <span aria-hidden="true">{LABEL[String(v)][0]}</span>{v ? LABEL[v][1] : 'Vælg'}
                     </button>
                   </td>
@@ -309,7 +314,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
                 {(['yes', 'maybe', 'no'] as const).map((v) => (
                   <button type="button" role="radio" key={v} data-i={i} data-v={v} aria-checked={me[i] === v}
                     tabIndex={me[i] === v || (!me[i] && v === 'yes') ? 0 : -1}
-                    onClick={() => set(i, me[i] === v ? null : v, `.seg button[data-i="${i}"][data-v="${v}"]`)} onKeyDown={(e) => segKey(e, i, v)}>
+                    onClick={() => set(i, (cur) => (cur === v ? null : v), `.seg button[data-i="${i}"][data-v="${v}"]`)} onKeyDown={(e) => segKey(e, i, v)}>
                     <span aria-hidden="true">{LABEL[v][0]}</span> {LABEL[v][1]}
                   </button>
                 ))}

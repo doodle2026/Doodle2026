@@ -61,8 +61,21 @@ const dupName = (name: string) => new ApiError(409, [`"${name}" har allerede sva
 const isUnique = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
 
 export async function findVoteReplay(idemKey: string) {
-  const hit = await prisma.voteIdempotencyKey.findUnique({ where: { keyHash: sha256Hex(idemKey) }, select: { participantId: true, editTokenEnc: true } });
-  return hit ? { participantId: hit.participantId, editToken: openForKey(idemKey, hit.editTokenEnc) } : null;
+  const hit = await prisma.voteIdempotencyKey.findUnique({
+    where: { keyHash: sha256Hex(idemKey) },
+    select: { participantId: true, editTokenEnc: true, participant: { select: { nameKey: true, votes: { select: { timeOptionId: true, value: true } } } } },
+  });
+  return hit ? {
+    participantId: hit.participantId, editToken: openForKey(idemKey, hit.editTokenEnc),
+    stored: { nameKey: hit.participant.nameKey, votes: new Map(hit.participant.votes.map((v) => [v.timeOptionId, v.value as VoteValue])) },
+  } : null;
+}
+
+/** A replay must carry the same answers as the original; otherwise the key was reused for a different request (V2). */
+export function sameVote(a: { nameKey: string; votes: Map<number, VoteValue> }, b: CleanVote): boolean {
+  if (a.nameKey !== b.nameKey || a.votes.size !== b.votes.size) return false;
+  for (const [k, v] of b.votes) if (a.votes.get(k) !== v) return false;
+  return true;
 }
 
 /** Create participant + votes atomically. Closed check inside the transaction (row lock on the event). */
@@ -80,7 +93,8 @@ export async function createParticipant(eventId: number, v: CleanVote, idemKey?:
   } catch (e) {
     if (isUnique(e) && idemKey) {
       const r = await findVoteReplay(idemKey);
-      if (r) return { ...r, replayed: true };
+      if (r && sameVote(r.stored, v)) return { participantId: r.participantId, editToken: r.editToken, replayed: true };
+      if (r) throw new ApiError(422, ['Idempotency-Key er allerede brugt til andre svar. Prøv at gemme igen.'], { code: 'idempotency_mismatch' });
     }
     if (isUnique(e)) throw dupName(v.name);
     throw e;
