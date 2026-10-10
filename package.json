@@ -14,7 +14,8 @@
     "test": "vitest run",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy"
+    "db:deploy": "prisma migrate deploy",
+    "start:capture": "NODE_ENV=test node scripts/capture-server.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",

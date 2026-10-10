@@ -84,3 +84,19 @@ without tracking we cannot know who answered, so step 4 sends to **all non-unsub
 ## Kun datoer (okt. 2026)
 - Skabelonerne er synket fra doodle-ui (`dates:[{dateLabel}]`; `slots`/`timeZoneLabel` er fjernet). `dateLabel` = `fre. 16. okt. 2026` (UTC-formattering, ens i alle tidszoner). Ældre tidsforslag får `… kl. 09:00–10:00` (Europe/Copenhagen) i samme label.
 - `trackingEnabled` sendes med i data. **Kendt skabelonfejl upstream:** reminder-footeren siger altid "Påmindelser sendes til alle inviterede, der ikke har afmeldt sig." – også når sporing er slået til (så går de kun til dem, der ikke har svaret). `scripts/sync-email-templates.mjs` retter det i vores kopi med en `{{#trackingEnabled}}…{{/trackingEnabled}}{{^trackingEnabled}}…{{/trackingEnabled}}`-sektion. **Doodle UI bør** indføre samme sektion i `email/src/build.js`, så omskrivningen kan fjernes.
+
+## EMAIL_MODE=capture (tester only)
+
+Shows the FULL rendered mails (incl. personal invite tokens and unsubscribe links) without sending anything.
+
+- Run `npm run start:capture` → http://localhost:3001 (custom server = `next dev` with `NODE_ENV=test`, test DB from `.env.test`
+  unless `DATABASE_URL` is set, separate dist dir `.next-capture`; :3000 is untouched). Local defaults for EMAIL_FROM,
+  EMAIL_LINK_SECRET and high quotas are set by the script.
+- Every mail is kept in memory (last 1000) and appended as one JSON line to `EMAIL_CAPTURE_FILE`
+  (default `./.email-capture/mails.jsonl`, gitignored): `{id, at, from, to[], subject, text, html, replyTo, headers, tags, idempotencyKey}`.
+- `GET /api/test/mails[?to=address]` → `{count, mails}`; `DELETE /api/test/mails` clears memory (file kept).
+  Both return 404 unless capture is active.
+- Hard gate (runtime): capture only when `NODE_ENV=test` AND `VERCEL` unset AND `VERCEL_ENV` not preview/production AND the
+  code is not a production build (`next build` output is always refused, even if started with `NODE_ENV=test`).
+  Otherwise: config error logged, mailer falls back to `log` mode (redacted), nothing is sent or captured.
+  The test suite runs its production test server with `EMAIL_MODE=capture` to prove this.
