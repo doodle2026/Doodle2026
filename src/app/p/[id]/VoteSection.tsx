@@ -6,6 +6,7 @@ import { copyText } from '@/lib/share';
 import { counterState, counterText, isBlank, textLength } from '@/lib/form';
 import {
   bestMask, editTokenFromHash, HINT_CARDS, HINT_GRID, nextDayMarker, savedMessage, KEY_VOTE, LABEL, nameError, nextVote, readStored, totals, totalText, writeStored, type Vote,
+  inviteTokenFromHash,
 } from '@/lib/vote-client';
 
 const dayFmt = new Intl.DateTimeFormat('da-DK', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -35,6 +36,9 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState<{ name: string; editUrl: string | null; fresh: boolean } | null>(null);
   const [nameErr, setNameErr] = useState('');
+  const [invite, setInvite] = useState<{ token: string; email: string } | null>(null);
+  const [inviteInactive, setInviteInactive] = useState(false);
+  const [namePrefilled, setNamePrefilled] = useState(false);
   const [summary, setSummary] = useState<{ head: string; items: string[] } | null>(null);
   const [tokenErr, setTokenErr] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -68,6 +72,24 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
     const mq = window.matchMedia('(min-width: 640px)');
     setWide(mq.matches);
     mq.addEventListener('change', (e) => setWide(e.matches));
+    // Step 5: personal invite link → who is it for, prefill the name (editable). Kept for this tab only.
+    const invKey = `inv:${initial.slug}`;
+    const invHash = inviteTokenFromHash(location.hash);
+    if (invHash !== null) history.replaceState(null, '', location.pathname + location.search);
+    const invTok = invHash === 'invalid' ? null : invHash ?? sessionStorage.getItem(invKey);
+    if (invHash === 'invalid') setInviteInactive(true);
+    if (invTok) {
+      (async () => {
+        try {
+          const r = await fetch(`/api/events/${initial.slug}/invite`, { headers: { Authorization: `Bearer ${invTok}` }, cache: 'no-store' });
+          if (!r.ok) { sessionStorage.removeItem(invKey); if (r.status === 404) setInviteInactive(true); return; }
+          const d = await r.json();
+          sessionStorage.setItem(invKey, invTok);
+          setInvite({ token: invTok, email: d.email });
+          setName((n) => { if (n) return n; setNamePrefilled(true); return d.name_hint ?? ''; });
+        } catch { /* offline */ }
+      })();
+    }
     const fromHash = editTokenFromHash(location.hash);
     if (fromHash !== null) history.replaceState(null, '', location.pathname + location.search);
     const stored = readStored(initial.slug, localStorage);
@@ -155,7 +177,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
         r = await fetch(`/api/events/${ev.slug}/votes/me?tz=${tz}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body });
       } else {
         if (idem.current?.body !== body) idem.current = { key: newIdemKey(), body };
-        r = await fetch(`/api/events/${ev.slug}/votes?tz=${tz}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idem.current.key }, body });
+        r = await fetch(`/api/events/${ev.slug}/votes?tz=${tz}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idem.current.key, ...(invite ? { 'X-Invite-Token': invite.token } : {}) }, body });
       }
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -233,9 +255,18 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
         {summary && (<><strong>{summary.head}</strong><ul>{summary.items.map((x) => <li key={x}>{x}</li>)}</ul></>)}
       </div>
 
+      {invite && (
+        <div className="personal-banner" role="note" id="personal-banner"><span aria-hidden="true">✉</span>
+          <span style={{ flex: 1, minWidth: 220 }}>Du er inviteret som <strong>{invite.email}</strong>. Dit svar registreres automatisk hos arrangøren.</span>
+          <a className="link-btn" href={`/p/${ev.slug}`} onClick={(e) => {
+            e.preventDefault(); sessionStorage.removeItem(`inv:${ev.slug}`); setInvite(null);
+            if (namePrefilled) { setName(''); setNamePrefilled(false); }
+          }}>Ikke dig? Brug det offentlige link</a></div>
+      )}
+      {inviteInactive && !invite && <div className="personal-banner" role="status" id="invite-inactive"><span aria-hidden="true">ℹ</span>Dette link er ikke længere aktivt. Du kan stadig svare som alle andre.</div>}
       {showInput && (
         <div className="field vote-name" id="name-field">
-          <label className="field__label" htmlFor="name">Dit navn *</label>
+          <label className="field__label" htmlFor="name">Dit navn *{invite && namePrefilled && <> <span className="field__hint">(udfyldt fra invitationen – du kan rette det)</span></>}</label>
           <input className="input" id="name" autoComplete="name" placeholder="F.eks. Mette" aria-required="true" value={name}
             aria-describedby="name-err name-count" aria-invalid={nameErr ? true : undefined}
             onChange={(e) => {

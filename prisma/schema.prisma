@@ -38,6 +38,8 @@ model Event {
   lastReminderAt  DateTime?        @map("last_reminder_at") @db.Timestamptz(3)
   /// Set after repeated abuse reports: no more invitation/reminder mails for this poll.
   mailBlockedAt   DateTime?        @map("mail_blocked_at") @db.Timestamptz(3)
+  /// Step 5: personal invite links were used for this poll ("Spor hvem der har svaret"). Never switched off again.
+  inviteTracking  Boolean          @default(false) @map("invite_tracking")
 
   @@map("events")
 }
@@ -84,6 +86,7 @@ model Participant {
   event           Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
   votes           Vote[]
   idempotencyKeys VoteIdempotencyKey[]
+  invitation      Invitation?
 
   @@unique([eventId, nameKey])
   @@index([eventId])
@@ -124,21 +127,30 @@ model Vote {
 
 /// Invitation mail recipient (step 4). Addresses are deleted with the poll (cascade) or 90 days after close (cron).
 model Invitation {
-  id            Int      @id @default(autoincrement())
-  eventId       Int      @map("event_id")
+  id              Int          @id @default(autoincrement())
+  eventId         Int          @map("event_id")
   /// Normalized (trimmed, lower-case) address.
-  email         String   @db.VarChar(320)
-  name          String?  @db.VarChar(100)
+  email           String       @db.VarChar(320)
+  name            String?      @db.VarChar(100)
   /// queued | sent | delivered | failed | bounced | unsub
-  delivery      String   @default("queued") @db.VarChar(16)
-  reason        String?  @db.VarChar(200)
+  delivery        String       @default("queued") @db.VarChar(16)
+  reason          String?      @db.VarChar(200)
   /// Resend email id of the latest mail (webhook correlation).
-  providerId    String?  @unique @map("provider_id") @db.VarChar(64)
+  providerId      String?      @unique @map("provider_id") @db.VarChar(64)
   /// SHA-256 of the per-recipient footer token (unsubscribe this poll / all, report abuse). Raw token only in the mail.
-  linkTokenHash String   @unique @map("link_token_hash") @db.Char(64)
-  lastEventAt   DateTime @default(now()) @map("last_event_at") @db.Timestamptz(3)
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  linkTokenHash   String       @unique @map("link_token_hash") @db.Char(64)
+  lastEventAt     DateTime     @default(now()) @map("last_event_at") @db.Timestamptz(3)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Step 5 personal link: token = HMAC(EMAIL_LINK_SECRET, id + generation); null = public link only.
+  /// Resend/revoke bump the generation (old link stops working). Only SHA-256(token) is stored for lookup.
+  inviteGen       Int?         @map("invite_gen")
+  inviteTokenHash String?      @unique @map("invite_token_hash") @db.Char(64)
+  revokedAt       DateTime?    @map("revoked_at") @db.Timestamptz(3)
+  /// Participant who answered via this invitation (or linked manually by the organizer).
+  participantId   Int?         @unique @map("participant_id")
+  linkedManually  Boolean      @default(false) @map("linked_manually")
+  participant     Participant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  event           Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, email])
   @@map("invitations")

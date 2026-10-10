@@ -51,7 +51,8 @@ export function groupDates(options: { startAt: Date; endAt: Date | null }[], tz 
   return out.map(({ dateLabel, slots }) => ({ dateLabel, slots }));
 }
 
-const POLL_URL_RE = /^https?:\/\/[^/\s?#]+\/p\/[A-Za-z0-9_-]{1,64}$/;
+/** Public poll link, optionally with a personal invite fragment (#inv=<43-char token>, step 5) – never admin/edit. */
+const POLL_URL_RE = /^https?:\/\/[^/\s?#]+\/p\/[A-Za-z0-9_-]{1,64}(?:#inv=[A-Za-z0-9_-]{43})?$/;
 const SECRET_LINK_RE = /\/p\/[A-Za-z0-9_-]+\/admin|[#?&]edit=|\/admin#/i;
 /** Hard rule: mails carry only the public /p/<id> link – never admin or edit tokens. Throws otherwise. */
 export function assertPublicOnly(d: PollEmailData, r?: Rendered) {

@@ -33,6 +33,8 @@ export function linkSecret(): string {
   return 'dev-only-email-link-secret-not-for-production';
 }
 export const linkTokenFor = (invitationId: number) => createHmac('sha256', linkSecret()).update(`moedetid-inv-link-v1:${invitationId}`).digest('base64url');
+/** Step 5 personal link token: HMAC over (id, generation). Resend/revoke bump the generation → old link dies. */
+export const inviteTokenFor = (invitationId: number, gen: number) => createHmac('sha256', linkSecret()).update(`moedetid-invite-v1:${invitationId}:${gen}`).digest('base64url');
 const pollScope = (eventId: number) => `poll:${eventId}`;
 
 /** Clean the personal message: plain text, keep newlines, drop other control/bidi chars, ≤ 1000 graphemes. */
@@ -106,7 +108,7 @@ async function deliver(eventId: number, msgs: Planned[], byEmail: Map<string, nu
   return { sent: results.length - failed, failed };
 }
 
-export interface InviteInput { recipients: unknown; message?: unknown; organizer_name?: unknown }
+export interface InviteInput { recipients: unknown; message?: unknown; organizer_name?: unknown; track?: unknown }
 
 export async function sendInvitations(eventId: number, body: InviteInput) {
   const { ev, p } = await pollForEmail(eventId);
@@ -135,22 +137,27 @@ export async function sendInvitations(eventId: number, body: InviteInput) {
   if (!(await reserveQuota(toSend.length))) throw new ApiError(429, ['Dagens mailkvote er brugt op. Prøv igen i morgen.'], { code: 'quota' });
 
   // Persist first (status "queued"), with a fresh footer token per recipient; suppressed ones are stored as "unsub".
-  const tokens = new Map<string, string>();
+  const tokens = new Map<string, string>(), invTokens = new Map<string, string>();
+  const track = body.track === true;
   linkSecret(); // fail early (503) when send mode lacks EMAIL_LINK_SECRET
   try {
     await prisma.$transaction(async (tx) => {
-      if (organizerName !== (ev.organizerName ?? '')) await tx.event.update({ where: { id: eventId }, data: { organizerName: organizerName || null } });
+      if (organizerName !== (ev.organizerName ?? '') || (track && !ev.inviteTracking)) {
+        await tx.event.update({ where: { id: eventId }, data: { organizerName: organizerName || null, ...(track ? { inviteTracking: true } : {}) } });
+      }
       for (const r of parsed.valid) {
         const row = await tx.invitation.create({ data: { eventId, email: r.email, name: r.name ?? null, linkTokenHash: sha256Hex(`pending:${eventId}:${r.email}:${Math.random()}`), delivery: suppressed.has(r.email) ? 'unsub' : 'queued' } });
         const t = linkTokenFor(row.id); tokens.set(r.email, t);
-        await tx.invitation.update({ where: { id: row.id }, data: { linkTokenHash: sha256Hex(t) } });
+        const it = track ? inviteTokenFor(row.id, 1) : null;
+        if (it) invTokens.set(r.email, it);
+        await tx.invitation.update({ where: { id: row.id }, data: { linkTokenHash: sha256Hex(t), ...(it ? { inviteGen: 1, inviteTokenHash: sha256Hex(it) } : {}) } });
       }
     });
   } catch (e) { await releaseQuota(toSend.length); if ((e as { code?: string }).code === 'P2002') throw new ApiError(409, ['Nogle modtagere er allerede inviteret.'], { code: 'already_invited' }); throw e; }
 
   p.organizerFromName = organizerName || undefined;
   p.organizerName = organizerName || 'Arrangøren';
-  const plan = planInvitations(p, toSend.map((r) => ({ email: r.email, name: r.name, linkToken: tokens.get(r.email)! })), { appUrl: appUrl(), personalMessage: message || undefined });
+  const plan = planInvitations(p, toSend.map((r) => ({ email: r.email, name: r.name, linkToken: tokens.get(r.email)!, inviteToken: invTokens.get(r.email) })), { appUrl: appUrl(), personalMessage: message || undefined });
   const ids = new Map((await prisma.invitation.findMany({ where: { eventId, email: { in: toSend.map((r) => r.email) } }, select: { id: true, email: true } })).map((r) => [r.email, r.id]));
   const res = await deliver(eventId, plan.messages, ids);
   return { ...res, suppressed: suppressed.size, duplicates: parsed.duplicates, already_invited: parsed.alreadyInvited };
@@ -165,10 +172,13 @@ export async function sendReminder(eventId: number) {
     if (block === 'closed') throw new ApiError(409, ['Afstemningen er lukket – der sendes ikke påmindelser.'], { code: 'closed' });
     if (block === 'limit_reached') throw new ApiError(409, [`Du har brugt alle ${REMINDER_MAX} påmindelser til denne afstemning.`], { code: 'reminder_limit' });
     if (block === 'too_soon') throw new ApiError(429, ['Højst én påmindelse pr. døgn.'], { code: 'reminder_too_soon', next_allowed_at: new Date(p.lastReminderAt!.getTime() + REMINDER_GAP_MS).toISOString() });
-    const inv = await tx.invitation.findMany({ where: { eventId, delivery: { notIn: ['unsub', 'bounced'] } } });
+    // Tracked invitees (personal link): only those who haven't answered and whose link isn't revoked.
+    // Untracked invitees: all non-unsubscribed, non-bounced (we can't know who answered) – design §30.6/§43.
+    const inv = (await tx.invitation.findMany({ where: { eventId, delivery: { notIn: ['unsub', 'bounced'] } } }))
+      .filter((i) => i.inviteGen === null || (i.participantId === null && i.revokedAt === null));
     const suppressed = await suppressedSet(eventId, inv.map((i) => i.email));
     const tokens = new Map(inv.map((i) => [i.email, linkTokenFor(i.id)]));
-    const plan = planReminders(p, inv.map((i) => ({ email: i.email, name: i.name ?? undefined, linkToken: tokens.get(i.email)!, unsubscribedAt: suppressed.has(i.email) ? new Date() : null })), { appUrl: appUrl() });
+    const plan = planReminders(p, inv.map((i) => ({ email: i.email, name: i.name ?? undefined, linkToken: tokens.get(i.email)!, inviteToken: i.inviteGen ? inviteTokenFor(i.id, i.inviteGen) : undefined, unsubscribedAt: suppressed.has(i.email) ? new Date() : null })), { appUrl: appUrl() });
     if (!plan.messages.length) throw new ApiError(400, ['Der er ingen modtagere til en påmindelse.'], { code: 'no_recipients' });
     if (!(await reserveQuota(plan.messages.length))) throw new ApiError(429, ['Dagens mailkvote er brugt op. Prøv igen i morgen.'], { code: 'quota' });
     await tx.event.update({ where: { id: eventId }, data: { remindersSent: { increment: 1 }, lastReminderAt: new Date() } });
@@ -181,16 +191,30 @@ export async function sendReminder(eventId: number) {
 }
 
 export async function listInvitations(eventId: number) {
-  const ev = await prisma.event.findUnique({ where: { id: eventId }, select: { closedAt: true, remindersSent: true, lastReminderAt: true, organizerName: true, mailBlockedAt: true } });
+  const ev = await prisma.event.findUnique({ where: { id: eventId }, select: { closedAt: true, remindersSent: true, lastReminderAt: true, organizerName: true, mailBlockedAt: true, inviteTracking: true } });
   if (!ev) throw new ApiError(404, ['Afstemningen findes ikke.']);
-  const rows = await prisma.invitation.findMany({ where: { eventId }, orderBy: { createdAt: 'asc' }, select: { email: true, name: true, delivery: true, reason: true, lastEventAt: true } });
-  const recipients = rows.filter((r) => r.delivery !== 'unsub' && r.delivery !== 'bounced').length;
+  const rows = await prisma.invitation.findMany({ where: { eventId }, orderBy: { createdAt: 'asc' }, select: {
+    email: true, name: true, delivery: true, reason: true, lastEventAt: true, inviteGen: true, revokedAt: true, participantId: true, linkedManually: true,
+    participant: { select: { name: true } } } });
+  const remindable = (r: typeof rows[number]) => r.delivery !== 'unsub' && r.delivery !== 'bounced' && (r.inviteGen === null || (r.participantId === null && r.revokedAt === null));
+  const recipients = rows.filter(remindable).length;
+  const linked = new Set(rows.map((r) => r.participantId).filter((x): x is number => x !== null));
+  const publicAnswers = ev.inviteTracking
+    ? (await prisma.participant.findMany({ where: { eventId }, orderBy: { createdAt: 'asc' }, select: { id: true, name: true } })).filter((p) => !linked.has(p.id))
+    : [];
   const next = ev.lastReminderAt ? new Date(ev.lastReminderAt.getTime() + REMINDER_GAP_MS) : null;
   return {
-    invitees: rows.map((r) => ({ email: r.email, name: r.name, delivery: r.delivery, reason: r.reason, updated_at: r.lastEventAt.toISOString() })),
+    invitees: rows.map((r) => ({
+      email: r.email, name: r.name, delivery: r.delivery, reason: r.reason, updated_at: r.lastEventAt.toISOString(),
+      // Step 5 "Svar" axis (only for personal links): invited | answered | revoked.
+      response: r.inviteGen === null ? null : r.participantId !== null ? 'answered' : r.revokedAt ? 'revoked' : 'invited',
+      linked_from: r.linkedManually && r.participant ? r.participant.name : null,
+    })),
+    tracking: ev.inviteTracking,
+    public_answers: publicAnswers,
     organizer_name: ev.organizerName ?? '',
     limits: { per_send: MAX_PER_SEND, per_poll: MAX_PER_POLL, used: rows.length, message_max: MESSAGE_MAX },
-    reminder: { used: ev.remindersSent, max: REMINDER_MAX, next_allowed_at: next && next > new Date() ? next.toISOString() : null, recipient_count: recipients, closed: ev.closedAt !== null },
+    reminder: { used: ev.remindersSent, max: REMINDER_MAX, next_allowed_at: next && next > new Date() ? next.toISOString() : null, recipient_count: recipients, answered_count: rows.filter((r) => r.participantId !== null).length, closed: ev.closedAt !== null },
     mail_blocked: ev.mailBlockedAt !== null,
   };
 }
@@ -275,4 +299,79 @@ export async function previewInvitation(eventId: number, body: { message?: unkno
   const plan = planInvitations({ ...p, isClosed: false }, [{ email: 'modtager@example.com', linkToken: 'x'.repeat(43) }], { appUrl: appUrl(), personalMessage: message || undefined });
   const m = plan.messages[0];
   return { subject: m.subject, html: m.html, from_name: m.fromName };
+}
+
+// ---- Step 5: personal invite links ------------------------------------------------------------------
+async function invitationFor(eventId: number, email: unknown) {
+  if (typeof email !== 'string') throw new ApiError(400, ['Angiv en modtager.']);
+  const i = await prisma.invitation.findUnique({ where: { eventId_email: { eventId, email: normEmail(email) } } });
+  if (!i) throw new ApiError(404, ['Modtageren er ikke inviteret.']);
+  return i;
+}
+
+/**
+ * Resend the personal link. Only SHA-256 of the token is stored and the token is derived from a generation
+ * counter, so a resend ISSUES A NEW TOKEN (old link stops working) – deliberate deviation from "same token".
+ * Counts against the mail quota, not as a reminder.
+ */
+export async function resendInvite(eventId: number, email: unknown) {
+  const i = await invitationFor(eventId, email);
+  const { ev, p } = await pollForEmail(eventId);
+  if (p.isClosed) throw new ApiError(409, ['Afstemningen er lukket.'], { code: 'closed' });
+  if (ev.mailBlockedAt) throw new ApiError(403, ['Mails er stoppet for denne afstemning efter rapporter om misbrug.'], { code: 'mail_blocked' });
+  if (i.delivery === 'bounced' || i.delivery === 'unsub') throw new ApiError(409, ['Modtageren kan ikke få mails (afvist eller afmeldt).'], { code: 'not_mailable' });
+  if ((await suppressedSet(eventId, [i.email])).size) throw new ApiError(409, ['Modtageren har afmeldt sig.'], { code: 'not_mailable' });
+  if (!(await reserveQuota(1))) throw new ApiError(429, ['Dagens mailkvote er brugt op. Prøv igen i morgen.'], { code: 'quota' });
+  const gen = (i.inviteGen ?? 0) + 1;
+  const it = inviteTokenFor(i.id, gen);
+  await prisma.invitation.update({ where: { id: i.id }, data: { inviteGen: gen, inviteTokenHash: sha256Hex(it), revokedAt: null, delivery: 'queued' } });
+  if (!ev.inviteTracking) await prisma.event.update({ where: { id: eventId }, data: { inviteTracking: true } });
+  const plan = planInvitations(p, [{ email: i.email, name: i.name ?? undefined, linkToken: linkTokenFor(i.id), inviteToken: it }], { appUrl: appUrl() });
+  const m = plan.messages.map((x) => ({ ...x, idempotencyKey: `${x.idempotencyKey}:g${gen}` }));
+  return deliver(eventId, m, new Map([[i.email, i.id]]));
+}
+
+/** Revoke: the personal link stops working at once; an existing answer is kept (but can't be edited via the link). */
+export async function revokeInvite(eventId: number, email: unknown, reissue: unknown) {
+  const i = await invitationFor(eventId, email);
+  if (i.inviteGen === null) throw new ApiError(409, ['Modtageren har intet personligt link.'], { code: 'no_personal_link' });
+  await prisma.invitation.update({ where: { id: i.id }, data: { revokedAt: new Date(), inviteTokenHash: null, inviteGen: i.inviteGen + 1 } });
+  if (reissue === true) return { revoked: true, ...(await resendInvite(eventId, email)) };
+  return { revoked: true };
+}
+
+/** Organizer links a public ("ikke inviteret") answer to an invitee without an answer; undoable via unlink. */
+export async function linkAnswer(eventId: number, email: unknown, participantId: unknown) {
+  const i = await invitationFor(eventId, email);
+  if (typeof participantId !== 'number' || !Number.isInteger(participantId)) throw new ApiError(400, ['Vælg et svar.'], { code: 'participant_required' });
+  const part = await prisma.participant.findUnique({ where: { id: participantId }, select: { eventId: true } });
+  if (!part || part.eventId !== eventId) throw new ApiError(404, ['Svaret findes ikke.']);
+  if (i.participantId !== null) throw new ApiError(409, ['Modtageren har allerede et svar.'], { code: 'already_answered' });
+  try {
+    await prisma.invitation.update({ where: { id: i.id }, data: { participantId, linkedManually: true } });
+  } catch (e) { if ((e as { code?: string }).code === 'P2002') throw new ApiError(409, ['Svaret er allerede knyttet til en anden modtager.'], { code: 'already_linked' }); throw e; }
+  return { linked: true };
+}
+export async function unlinkAnswer(eventId: number, email: unknown) {
+  const i = await invitationFor(eventId, email);
+  if (!i.linkedManually) throw new ApiError(409, ['Kun manuelle koblinger kan fortrydes.'], { code: 'not_manual' });
+  await prisma.invitation.update({ where: { id: i.id }, data: { participantId: null, linkedManually: false } });
+  return { unlinked: true };
+}
+
+/** Vote page: who is this personal link for? null if unknown/revoked/other poll. */
+export async function inviteByToken(eventId: number, token: string | null) {
+  if (!token || !TOKEN_RE.test(token)) return null;
+  const i = await prisma.invitation.findUnique({ where: { inviteTokenHash: sha256Hex(token) }, select: { id: true, eventId: true, email: true, name: true, revokedAt: true, participantId: true } });
+  if (!i || i.eventId !== eventId || i.revokedAt) return null;
+  return i;
+}
+/** After a vote via a personal link: record the answer (first answer wins; never steals another link's answer). */
+export async function claimInvite(eventId: number, token: string | null, participantId: number) {
+  const i = await inviteByToken(eventId, token);
+  if (!i || i.participantId !== null) return false;
+  try {
+    const r = await prisma.invitation.updateMany({ where: { id: i.id, participantId: null, revokedAt: null }, data: { participantId, linkedManually: false } });
+    return r.count === 1;
+  } catch { return false; }
 }

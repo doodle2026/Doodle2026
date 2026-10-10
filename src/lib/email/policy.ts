@@ -27,6 +27,8 @@ export interface Invitee {
   respondedAt?: Date | null; unsubscribedAt?: Date | null;
   /** Raw per-recipient footer token (only its SHA-256 is stored). */
   linkToken: string;
+  /** Step 5: personal invite token → pollUrl gets #inv=<token>. */
+  inviteToken?: string;
   /** Hard bounce / complaint: cannot receive mail. */
   bounced?: boolean;
 }
@@ -46,7 +48,7 @@ export function pollEmailData(p: PollForEmail, inv: Invitee, ctx: EmailCtx): Pol
   return {
     assetBaseUrl: `${app}/email-assets`, appUrl: app,
     eventTitle: p.title, organizerName: p.organizerName, recipientName: inv.name?.trim() || undefined,
-    description: p.description, pollUrl: `${app}/p/${encodeURIComponent(p.slug)}`,
+    description: p.description, pollUrl: `${app}/p/${encodeURIComponent(p.slug)}${inv.inviteToken ? `#inv=${inv.inviteToken}` : ''}`,
     optionCount: p.options.length, timeZoneLabel: tz === DEFAULT_TZ ? 'dansk tid (Europe/Copenhagen)' : tz,
     dates: groupDates(p.options, tz), deadline: p.deadline ? formatters(tz).deadline(p.deadline) : undefined,
     respondedCount: p.respondedCount, footerText: ctx.footerText ?? 'Mødetid · Planlæg møder uden login',
