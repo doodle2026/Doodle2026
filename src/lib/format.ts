@@ -28,3 +28,20 @@ export function bestIds(opts: { id: number; votes: { yes: number; maybe: number 
   const max = Math.max(0, ...opts.map((o) => score(o.votes)));
   return new Set(max > 0 ? opts.filter((o) => score(o.votes) === max).map((o) => o.id) : []);
 }
+
+const dayLongFmt = new Intl.DateTimeFormat('da-DK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+/** "Onsdag den 14. oktober 2026 · 09.00–10.00 (+1 dag)" (design §29, viewer's time zone). */
+export function whenLong(startIso: string, endIso: string | null): string {
+  const s = new Date(startIso);
+  let out = `${cap(dayLongFmt.format(s))} · ${time.format(s)}`;
+  if (endIso) { const e = new Date(endIso); out += '–' + time.format(e) + nextDayMarker(keyFmt.format(s), keyFmt.format(e)); }
+  return out;
+}
+
+/** Google Calendar "add event" link (design §29). Times in UTC basic format; 1 h default like the .ics. */
+export function googleCalendarUrl(o: { title: string; description?: string; start: string; end: string | null; url: string }): string {
+  const f = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const s = new Date(o.start), e = o.end ? new Date(o.end) : new Date(s.getTime() + 3_600_000);
+  const p = new URLSearchParams({ action: 'TEMPLATE', text: o.title, dates: `${f(s)}/${f(e)}`, details: [o.description, o.url].filter(Boolean).join('\n\n') });
+  return `https://calendar.google.com/calendar/render?${p.toString()}`;
+}
