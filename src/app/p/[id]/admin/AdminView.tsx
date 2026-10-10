@@ -3,6 +3,9 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import type { AdminEvent } from '@/lib/events';
 import { storeAdminToken, takeAdminToken } from '@/lib/admin-client';
 import { bestIds, whenLabel } from '@/lib/format';
+import AdminResults from './AdminResults';
+import OptionEditRow, { type EditResult } from './OptionEditRow';
+import type { EditErr } from '@/lib/admin-ui';
 import { copyText } from '@/lib/share';
 import { counterState, counterText, isBlank, liveTitleError, mapServerErrors, textLength } from '@/lib/form';
 
@@ -10,7 +13,7 @@ const TITLE_MAX = 200;
 const DESC_MAX = 2000;
 
 type Opt = { key: string; id?: number; start_at: string; end_at: string | null; votes: number };
-type Dialog = null | 'close' | 'reopen' | 'rotate' | 'delete';
+type Dialog = null | 'close' | 'reopen' | 'rotate';
 let seq = 0;
 
 export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: string }) {
@@ -33,8 +36,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   const [dialog, setDialog] = useState<Dialog>(null);
   const [chosen, setChosen] = useState<string>('');
   const [busy, setBusy] = useState(false);
-  const [delTarget, setDelTarget] = useState<{ id: number; name: string } | null>(null);
-  const [choosing, setChoosing] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [newAdminUrl, setNewAdminUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState<'' | 'url' | 'admin'>('');
   const [live, setLive] = useState('');
@@ -58,6 +60,9 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     setOpts(data.time_options.map((o) => ({ key: `o${o.id}`, id: o.id, start_at: o.start_at, end_at: o.end_at, votes: o.votes.total })));
     setConfirmedRemovals(0); setPendingRemove(null);
   }, []);
+
+  /** Results changed on the server (delete/choose): refresh vote counts without discarding unsaved form edits. */
+  const syncVotes = (e: AdminEvent) => setOpts((prev) => prev.map((o) => ({ ...o, votes: e.time_options.find((x) => x.id === o.id)?.votes.total ?? o.votes })));
 
   useEffect(() => {
     const t = takeAdminToken(slug, location, sessionStorage, (u) => history.replaceState(null, '', u));
@@ -168,18 +173,24 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     } finally { setSaving(false); }
   }
 
-  async function choose(optionId: number | null) {
-    if (choosing) return;
-    setChoosing(true);
+  /** §31: save one option right away (own endpoint), keep other unsaved form edits. */
+  async function saveOption(id: number, v: EditResult): Promise<EditErr> {
     try {
-      const { res, data } = await api('/choose', { method: 'POST', body: JSON.stringify({ chosen_option_id: optionId }) });
-      if (res.status === 401 || res.status === 403) { setState('denied'); return; }
-      if (!res.ok) { setSummary(Array.isArray(data.errors) ? data.errors : ['Ukendt fejl.']); return; }
+      const { res, data } = await api(`/options/${id}`, { method: 'PATCH', body: JSON.stringify(v) });
+      if (res.status === 401 || res.status === 403) { setState('denied'); return null; }
+      if (res.status === 409 && data.code === 'duplicate_option') return { msg: 'Det tidspunkt findes allerede som et andet forslag.', fields: ['date', 'start'] };
+      if (!res.ok) return { msg: (Array.isArray(data.errors) && data.errors[0]) || 'Tidspunktet kunne ikke gemmes.', fields: data.code === 'order' ? ['end'] : ['date', 'start'] };
       setEv(data);
-      const o = optionId ? data.time_options.find((x: { id: number }) => x.id === optionId) : null;
-      setBanner(o ? `✓ Endeligt tidspunkt valgt: ${whenLabel(o.start_at, o.end_at)}. Deltagerne ser det med det samme.` : '✓ Valget af tidspunkt er fjernet.');
-      focusAfter.current = optionId ? `[data-choose=""]` : `[data-choose="${ev!.chosen_option_id}"]`;
-    } catch { setSummary(['Kunne ikke kontakte serveren. Prøv igen.']); } finally { setChoosing(false); }
+      const fresh = data.time_options.find((x: AdminEvent['time_options'][number]) => x.id === id);
+      setOpts((prev) => prev.map((o) => (o.id === id ? { ...o, start_at: fresh.start_at, end_at: fresh.end_at, votes: fresh.votes.total } : o))
+        .sort((a, b) => a.start_at.localeCompare(b.start_at)));
+      setEditingId(null);
+      const n = data.reset_votes_count as number;
+      const chosenNote = n > 0 && data.chosen_option_id === id ? ' Tjek om det stadig er det rigtige valg.' : '';
+      setBanner(`✓ Tidspunktet er ændret – ${n > 0 ? `${n} svar er nulstillet.` : 'svarene er bevaret.'}${chosenNote}`);
+      focusAfter.current = `[data-oe="${id}"]`;
+      return null;
+    } catch { return { msg: 'Kunne ikke kontakte serveren. Prøv igen.', fields: [] }; }
   }
 
   function openDialog(kind: Exclude<Dialog, null>) {
@@ -197,11 +208,9 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     if (busy) return;
     setBusy(true);
     try {
-      const path = dialog === 'close' ? '/close' : dialog === 'reopen' ? '/reopen' : dialog === 'delete' ? `/participants/${delTarget?.id}` : '/rotate-admin';
+      const path = dialog === 'close' ? '/close' : dialog === 'reopen' ? '/reopen' : '/rotate-admin';
       const body = dialog === 'close' ? { chosen_option_id: chosen ? Number(chosen) : null } : {};
-      const { res, data } = dialog === 'delete'
-        ? await api(path, { method: 'DELETE' })
-        : await api(path, { method: 'POST', body: JSON.stringify(body) });
+      const { res, data } = await api(path, { method: 'POST', body: JSON.stringify(body) });
       if (res.status === 401 || res.status === 403) { closeDialog(); setState('denied'); return; }
       if (!res.ok) { setSummary(Array.isArray(data.errors) ? data.errors : ['Ukendt fejl.']); closeDialog(); return; }
       setEv(data);
@@ -210,11 +219,6 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
         setBanner(`✓ Afstemningen er lukket.${c ? ` Valgt tidspunkt: ${whenLabel(c.start_at, c.end_at)}.` : ''}`);
       } else if (dialog === 'reopen') {
         setBanner('✓ Afstemningen er åbnet igen.');
-      } else if (dialog === 'delete') {
-        // Keep unsaved edits in the form; only refresh vote counts.
-        setOpts((prev) => prev.map((o) => ({ ...o, votes: data.time_options.find((x: AdminEvent['time_options'][number]) => x.id === o.id)?.votes.total ?? o.votes })));
-        setBanner(`✓ ${delTarget?.name} er slettet. Resultatet er opdateret.`);
-        lastFocus.current = document.getElementById('res-h');
       } else {
         storeAdminToken(slug, data.admin_token, sessionStorage);
         setToken(data.admin_token);
@@ -235,9 +239,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   }
 
   const closed = ev.is_closed;
-  const dlgText = dialog === 'delete'
-    ? { h: `Slet ${delTarget?.name ?? ''}?`, p: 'Deltageren og alle deres svar slettes for altid. Det kan ikke fortrydes.', ok: 'Slet deltager', cls: 'btn--danger' }
-    : dialog === 'close'
+  const dlgText = dialog === 'close'
     ? { h: 'Luk afstemningen?', p: 'Ingen kan længere stemme eller ændre svar. Du kan genåbne senere.', ok: 'Luk afstemning', cls: 'btn--danger' }
     : dialog === 'reopen'
       ? { h: 'Genåbn afstemningen?', p: 'Deltagerne kan igen stemme og ændre deres svar. Det valgte tidspunkt nulstilles.', ok: 'Genåbn', cls: 'btn--primary' }
@@ -286,37 +288,8 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
         </div>
       </section>
 
-      <section className="section" aria-labelledby="res-h">
-        <h2 id="res-h">Resultat <span className="meta">({ev.participants.length} deltagere)</span></h2>
-        <ul className="opt-list" id="results">
-          {ev.time_options.map((o) => (
-            <li key={o.id} className={`opt${best.has(o.id) ? ' is-best' : ''}`}>
-              <span className="opt__when">
-                {whenLabel(o.start_at, o.end_at)}{' '}
-                {best.has(o.id) && <span className="best-badge">★ Bedst</span>}{' '}
-                {ev.chosen_option_id === o.id && <span className="chosen-badge">✓ Valgt</span>}
-              </span>
-              <span className="opt__votes">✓ {o.votes.yes} · ( ) {o.votes.maybe} · ✕ {o.votes.no}</span>
-              {ev.chosen_option_id === o.id
-                ? <button type="button" className="btn btn--ghost btn--sm" data-choose="" disabled={choosing} onClick={() => choose(null)} aria-label={`Fjern valget af ${whenLabel(o.start_at, o.end_at)}`}>Fjern valg</button>
-                : <button type="button" className="btn btn--secondary btn--sm" data-choose={o.id} disabled={choosing} onClick={() => choose(o.id)} aria-label={`Vælg ${whenLabel(o.start_at, o.end_at)} som endeligt tidspunkt`}>Vælg</button>}
-            </li>
-          ))}
-        </ul>
-        {ev.chosen_option_id !== null && (
-          <p style={{ marginTop: 'var(--s-3)' }}>
-            <a className="btn btn--secondary btn--sm" id="ics" href={`/api/events/${slug}/ics`} download>📅 Hent kalenderfil (.ics)</a>
-          </p>
-        )}
-        <details style={{ marginTop: 'var(--s-3)' }}>
-          <summary style={{ cursor: 'pointer', color: 'var(--c-primary)', fontWeight: 600 }}>Se alle deltagere</summary>
-          {ev.participants.length
-            ? <ul className="vcard__people">{ev.participants.map((p) => <li key={p.id}><span>{p.name}</span>
-              <button type="button" className="btn btn--danger-ghost btn--sm" data-del={p.id} aria-label={`Slet ${p.name}`}
-                onClick={() => { setDelTarget({ id: p.id, name: p.name }); openDialog('delete'); }}>Slet</button></li>)}</ul>
-            : <p className="meta">Ingen har svaret endnu.</p>}
-        </details>
-      </section>
+      <AdminResults ev={ev} setEv={(e) => { setEv(e); syncVotes(e); }} api={api} appUrl={shareUrl.replace(/\/p\/[^/]+$/, '')}
+        onDenied={() => setState('denied')} onStatus={(m) => { setBanner(m); setLive(m); }} onError={(e) => setSummary(e)} />
 
       <form className="section" id="edit" noValidate aria-labelledby="ed-h" onSubmit={save}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') e.preventDefault(); }}>
@@ -340,11 +313,24 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
           {opts.map((o, i) => {
             const label = whenLabel(o.start_at, o.end_at);
             const removing = pendingRemove === o.key;
+            if (o.id !== undefined && editingId === o.id) {
+              return (
+                <li key={o.key}>
+                  <OptionEditRow opt={{ id: o.id, start_at: o.start_at, end_at: o.end_at, votes: o.votes }}
+                    others={opts.filter((x) => x.key !== o.key)}
+                    onCancel={() => { setEditingId(null); focusAfter.current = `[data-oe="${o.id}"]`; }}
+                    onSave={(v) => saveOption(o.id!, v)} />
+                </li>
+              );
+            }
             return (
               <li key={o.key}>
                 <div className={`opt${removing ? ' opt--removing' : ''}`}>
                   <span className="opt__when">{label}</span>
                   <span className="opt__votes">{o.votes ? `${o.votes} svar` : 'Ingen svar'}</span>
+                  {o.id !== undefined && (
+                    <button type="button" className="btn btn--icon" data-oe={o.id} aria-label={`Redigér ${label}`} onClick={() => { setEditingId(o.id!); setPendingRemove(null); }}>✎</button>
+                  )}
                   <button type="button" className="btn btn--icon" data-rm={o.key} aria-label={`Fjern ${label}`} onClick={() => removeOpt(o, i)}>✕</button>
                 </div>
                 {removing && (
