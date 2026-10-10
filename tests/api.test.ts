@@ -389,3 +389,43 @@ describe('admin token (no accounts)', () => {
     }
   });
 });
+
+describe('OG image route + link preview', () => {
+  const pngSize = (buf: Buffer) => ({ sig: buf.subarray(1, 4).toString(), w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) });
+
+  test('GET /p/<id>/opengraph-image → 1200×630 PNG, cacheable', async () => {
+    const { body: { id } } = await post({ title: '👨‍👩‍👧‍👦 Familiemiddag </title><script>x</script> ' + 'lang '.repeat(30), time_options: [opt(iso('11-03T09:00:00Z'))] });
+    const r = await fetch(`${BASE}/p/${id}/opengraph-image`);
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toBe('image/png');
+    expect(r.headers.get('cache-control')).toMatch(/public, max-age=86400/);
+    const buf = Buffer.from(await r.arrayBuffer());
+    expect(pngSize(buf)).toEqual({ sig: 'PNG', w: 1200, h: 630 });
+    expect(buf.length).toBeGreaterThan(10_000);
+  }, 60_000);
+
+  test('unknown or malformed id → 404, no image', async () => {
+    for (const s of ['AAAAAAAAAAAAAAAAAAAAAA', 'short', '%3Cscript%3E']) {
+      const r = await fetch(`${BASE}/p/${s}/opengraph-image`);
+      expect(r.status, s).toBe(404);
+      expect(r.headers.get('content-type')).not.toMatch(/image/);
+    }
+  });
+
+  test('poll page: og:image + twitter summary_large_image with absolute URLs, escaped alt, no token', async () => {
+    const c = await post({ title: 'Møde "A" & <b>B</b>', time_options: [opt(iso('11-03T09:00:00Z'))] });
+    const { id, admin_token: token } = c.body;
+    const r = await call(`/p/${id}`);
+    const img = `${BASE}/p/${id}/opengraph-image`;
+    expect(r.text).toContain(`<meta property="og:image" content="${img}"/>`);
+    expect(r.text).toContain('<meta property="og:image:width" content="1200"/>');
+    expect(r.text).toContain('<meta property="og:image:height" content="630"/>');
+    expect(r.text).toContain('<meta property="og:image:alt" content="Mødetid-afstemning: Møde &quot;A&quot; &amp; &lt;b&gt;B&lt;/b&gt;"/>');
+    expect(r.text).toContain('<meta name="twitter:card" content="summary_large_image"/>');
+    expect(r.text).toContain(`<meta name="twitter:image" content="${img}"/>`);
+    expect(r.text).not.toContain(token);
+    // Admin page: still no OG image / preview tags
+    const adm = await call(`/p/${id}/admin/${token}`);
+    expect(adm.text).not.toMatch(/og:image|twitter:/);
+  });
+});
