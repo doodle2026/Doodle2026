@@ -10,7 +10,10 @@ export interface ApiEvent {
   id: string; slug: string; title: string; description: string; created_at: string;
   closed_at: string | null; is_closed: boolean; chosen_option_id: number | null;
   time_options: ApiTimeOption[];
+  /** Public: names + answers only (votes aligned with time_options; null = not answered). Never tokens. */
+  participants: ApiParticipant[];
 }
+export interface ApiParticipant { id: number; name: string; votes: ('yes' | 'maybe' | 'no' | null)[] }
 export interface DesignOption { date: string; start: string; end: string | null; end_date?: string }
 export interface ApiEventResponse extends ApiEvent { timezone: string; options: DesignOption[]; url: string }
 
@@ -23,6 +26,10 @@ const publicSelect = {
   timeOptions: {
     select: { id: true, startAt: true, endAt: true, position: true },
     orderBy: [{ startAt: 'asc' }, { endAt: { sort: 'asc', nulls: 'first' } }, { position: 'asc' }],
+  },
+  participants: {
+    select: { id: true, name: true, votes: { select: { timeOptionId: true, value: true } } }, // never editTokenHash
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   },
 } satisfies Prisma.EventSelect;
 
@@ -37,6 +44,10 @@ export async function loadEvent(slug: unknown): Promise<ApiEvent | null> {
     time_options: ev.timeOptions.map((o) => ({
       id: o.id, start_at: o.startAt.toISOString(), end_at: o.endAt ? o.endAt.toISOString() : null, position: o.position,
     })),
+    participants: ev.participants.map((p) => {
+      const by = new Map(p.votes.map((v) => [v.timeOptionId, v.value]));
+      return { id: p.id, name: p.name, votes: ev.timeOptions.map((o) => by.get(o.id) ?? null) };
+    }),
   };
 }
 
@@ -131,24 +142,20 @@ export function withDesignShape(ev: ApiEvent, tz?: string | null): ApiEventRespo
 export interface AdminOption extends ApiTimeOption { votes: { yes: number; maybe: number; no: number; total: number } }
 export interface AdminEvent extends Omit<ApiEvent, 'time_options'> {
   time_options: AdminOption[];
-  participants: { name: string }[];
 }
 
 export async function loadAdminEvent(slug: string): Promise<AdminEvent | null> {
   const ev = await loadEvent(slug);
   if (!ev) return null;
   const ids = ev.time_options.map((o) => o.id);
-  const [counts, people] = await Promise.all([
-    prisma.vote.groupBy({ by: ['timeOptionId', 'value'], where: { timeOptionId: { in: ids } }, _count: { _all: true } }),
-    prisma.participant.findMany({ where: { event: { slug } }, select: { name: true }, orderBy: { createdAt: 'asc' } }),
-  ]);
+  const counts = await prisma.vote.groupBy({ by: ['timeOptionId', 'value'], where: { timeOptionId: { in: ids } }, _count: { _all: true } });
   const by = new Map<number, AdminOption['votes']>();
   for (const id of ids) by.set(id, { yes: 0, maybe: 0, no: 0, total: 0 });
   for (const c of counts) {
     const v = by.get(c.timeOptionId)!;
     v[c.value] += c._count._all; v.total += c._count._all;
   }
-  return { ...ev, time_options: ev.time_options.map((o) => ({ ...o, votes: by.get(o.id)! })), participants: people };
+  return { ...ev, time_options: ev.time_options.map((o) => ({ ...o, votes: by.get(o.id)! })) };
 }
 
 export class ApiError extends Error {

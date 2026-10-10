@@ -61,15 +61,31 @@ model Participant {
   id            Int      @id @default(autoincrement())
   eventId       Int      @map("event_id")
   name          String
-  /// SHA-256 (hex) of the participant's secret edit token.
-  editTokenHash String   @map("edit_token_hash") @db.Char(64)
+  /// Case-insensitive uniqueness key: NFKC + trim + lower-case (see participantNameKey()).
+  nameKey       String   @map("name_key")
+  /// SHA-256 (hex) of the participant's secret edit token (256-bit random → safe to look up by hash).
+  editTokenHash String   @unique @map("edit_token_hash") @db.Char(64)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
   event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   votes         Vote[]
+  idempotencyKeys VoteIdempotencyKey[]
 
+  @@unique([eventId, nameKey])
   @@index([eventId])
   @@map("participants")
+}
+
+/// Idempotent vote submit: sha256(Idempotency-Key) → participant; edit token AES-GCM-sealed under the raw key.
+model VoteIdempotencyKey {
+  keyHash       String      @id @map("key_hash") @db.Char(64)
+  participantId Int         @map("participant_id")
+  editTokenEnc  String      @map("edit_token_enc")
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([participantId])
+  @@map("vote_idempotency_keys")
 }
 
 enum VoteValue {

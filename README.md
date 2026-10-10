@@ -56,6 +56,12 @@ Aldrig tokens/hashes. 404 for ukendt eller forkert formateret id.
 - Alle skrivende kald (inkl. `POST /api/events`): kun `application/json` (415), maks. 32 kB (413), rate limit (token bucket pr. IP, burst 20, derefter 20/min; `RATE_LIMIT_CAPACITY`/`RATE_LIMIT_REFILL_PER_SEC`) → **429** JSON + `Retry-After`. Begrænsning: in-memory pr. serverless-instans (best effort); flyt til Postgres/Redis for et globalt loft.
 - Offentlig GET har nu `chosen_option_id`.
 
+### Afstemning (feature 3)
+- `POST /api/events/:id/votes` `{name, votes:[{option_id, value:'yes'|'maybe'|'no'|null}]}` → **201** `{participant_id, edit_token, edit_url:"/p/<id>#edit=<token>", event}`. Valgfri `Idempotency-Key` (samme nøgle → samme deltager + token, 200). Navn: zero-width fjernes, trimmes, maks. 100 grafemer, unikt pr. afstemning uden hensyn til store/små bogstaver (NFKC) → **409** `code:"name_taken"`. Mindst ét svar. Lukket afstemning → **423** `code:"closed"` (tjekkes med rækkelås i transaktionen).
+- `GET|PUT /api/events/:id/votes/me` med `Authorization: Bearer <edit_token>`: egne svar / erstat navn+svar (401/403/423/409/400).
+- Offentlig GET har `participants:[{id,name,votes[]}]` (votes i samme rækkefølge som `time_options`, `null` = ikke svaret). Aldrig tokens/hashes.
+- Redigeringstoken: kun SHA-256 i DB (256 bit → opslag på hash). Klienten gemmer `{token, participant_id}` i `localStorage` pr. afstemning, så "✎ Redigér" kun vises på egen række. Gammel `?edit=` → 302 til `#edit=`.
+
 ## Sider
 - `/` opret · `/p/<id>` visning (SSR `<title>`/description/canonical/og/twitter, escaped) · `?created=1` åbner del-boksen med offentligt link + hemmeligt admin-link (vises én gang; overleveres via `sessionStorage`, aldrig i URL'en; luk uden "Jeg har gemt…" → `<dialog>`).
 - `/p/<id>/admin#<token>` admin-UI (design admin.html): siden læser fragmentet, gemmer tokenet i `sessionStorage` (pr. fane), fjerner fragmentet fra adresselinjen og kalder API'et med Bearer. Redigér titel/beskrivelse/tidsforslag (advarsel ved sletning af tidsforslag med svar), luk/genåbn-dialog med valgfrit endeligt tidspunkt, nyt admin-link. Gammel form `/p/<id>/admin/<token>` → 302 til `#`-formen (no-store). Trailing-slash-redirects laves i middleware, så de også får sikkerhedsheaders. Lukkede afstemninger viser `closed-banner` på `/p/<id>`. Admin/`?edit=`-URL'er: `X-Robots-Tag: noindex, nofollow`, `<meta robots noindex>`, ingen OG/canonical, `Cache-Control: no-store`. Alle sider: `Referrer-Policy: no-referrer`, nonce-CSP.

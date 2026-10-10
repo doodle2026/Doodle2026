@@ -1,4 +1,5 @@
 import { describe, test, expect, inject, afterAll } from 'vitest';
+import { randomBytes } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 
 const BASE = inject('baseUrl');
@@ -126,14 +127,14 @@ describe('PATCH /api/events/:id', () => {
 
   test('removing an option with votes needs confirm_remove_voted (409 otherwise); other votes survive', async () => {
     const a = await create();
-    const p = await prisma.participant.create({ data: { event: { connect: { slug: a.id } }, name: 'Anders', editTokenHash: 'a'.repeat(64) } });
+    const p = await prisma.participant.create({ data: { event: { connect: { slug: a.id } }, name: 'Anders', nameKey: 'anders', editTokenHash: randomBytes(32).toString('hex') } });
     await prisma.vote.createMany({ data: [
       { participantId: p.id, timeOptionId: a.opts[0].id, value: 'yes' },
       { participantId: p.id, timeOptionId: a.opts[1].id, value: 'maybe' },
     ] });
     const adm = await call(`/api/events/${a.id}/admin`, { token: a.token });
     expect(adm.body.time_options[0].votes).toEqual({ yes: 1, maybe: 0, no: 0, total: 1 });
-    expect(adm.body.participants).toEqual([{ name: 'Anders' }]);
+    expect(adm.body.participants.map((x: Json) => x.name)).toEqual(['Anders']);
 
     const without = patchBody(a.opts.slice(1));
     const r409 = await call(`/api/events/${a.id}`, json('PATCH', without, a.token));
