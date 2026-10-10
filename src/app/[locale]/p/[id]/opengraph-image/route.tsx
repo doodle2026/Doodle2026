@@ -3,8 +3,10 @@ import { join } from 'node:path';
 import { ImageResponse } from 'next/og';
 import { BRAND } from '@/lib/brand';
 import { loadEvent } from '@/lib/events';
-import { dateRangeDa } from '@/lib/meta';
-import { countLabel, OG_SIZE, ogTitle } from '@/lib/og';
+import { formatSpan } from '@/lib/dates';
+import { OG_SIZE, ogTitle } from '@/lib/og';
+import { getTranslations } from 'next-intl/server';
+import { DEFAULT_LOCALE, isLocale } from '@/i18n/config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,14 +35,18 @@ function fonts() {
 const CACHE = 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800';
 
 /** OG image 1200×630 (design §14.4, port of doodle-ui/og-template.html). Public data only – never tokens. */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ev = await loadEvent((await params).id);
-  if (!ev) return new Response('Ikke fundet', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+/** Texts ("5 date proposals", range, "Vote now →") in the URL's locale (§45.3); the title is never translated. */
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string; locale: string }> }) {
+  const { id, locale: l } = await params;
+  const locale = isLocale(l) ? l : DEFAULT_LOCALE;
+  const t = await getTranslations({ locale });
+  const ev = await loadEvent(id);
+  if (!ev) return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
 
   const art = await brandArt();
   const title = ogTitle(ev.title);
-  const count = countLabel(ev.time_options.length);
-  const dates = dateRangeDa(ev.time_options.map((o) => o.date));
+  const count = t('date.count', { n: ev.time_options.length });
+  const dates = formatSpan(ev.time_options.map((o) => o.date), locale);
   const el = (
     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
       backgroundImage: 'linear-gradient(135deg, #2B6CB0 0%, #63B3ED 100%)', fontFamily: 'Inter' }}>
@@ -59,7 +65,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 20 }}>
           <span style={{ background: '#EBF4FC', color: '#1F5690', fontSize: 30, fontWeight: 700, padding: '14px 28px', borderRadius: 999 }}>{count}</span>
           <span style={{ fontSize: 28, color: '#5A6B7D', maxWidth: 520, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dates}</span>
-          <span style={{ marginLeft: 'auto', fontSize: 28, fontWeight: 700, color: '#2B6CB0' }}>Stem nu →</span>
+          <span style={{ marginLeft: 'auto', fontSize: 28, fontWeight: 700, color: '#2B6CB0' }}>{t('poll.voteNow')}</span>
         </div>
       </div>
     </div>

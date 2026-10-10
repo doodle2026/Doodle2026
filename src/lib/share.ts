@@ -37,15 +37,6 @@ export async function shareLink(
 
 export const canNativeShare = (nav: unknown) => typeof (nav as { share?: unknown })?.share === 'function';
 
-export const shareText = (title: string) => `Hvornår kan du? ${title}`;
-
-export function participantMailto(title: string, url: string): string {
-  return `mailto:?subject=${encodeURIComponent(shareText(title))}&body=${encodeURIComponent(
-    `Hej!\n\nVælg de datoer, der passer dig:\n${url}\n`)}`;
-}
-
-/** "Send til mig selv": both links, no recipient (design §19). */
-export function adminMailto(title: string, adminUrl: string, url: string): string {
-  return `mailto:?subject=${encodeURIComponent(`Mit admin-link: ${title}`)}&body=${encodeURIComponent(
-    `Admin-link (hemmeligt):\n${adminUrl}\n\nLink til deltagerne:\n${url}\n\nGem denne mail. Del ikke linket.\n`)}`;
-}
+/** mailto: without recipient, subject/body URL-encoded (texts come from the message catalog). */
+export const mailtoLink = (subject: string, body: string) =>
+  `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;

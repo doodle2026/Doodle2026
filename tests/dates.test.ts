@@ -1,9 +1,9 @@
 import { describe, test, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { addDays, addMonths, basicDate, columnHead, dateRange, formatDateLong, formatDateShort, isRealDate, minAllowedDate, weekdayMon } from '../src/lib/dates';
+import { addDays, addMonths, basicDate, columnHead, dateRange, formatDateLong, formatDateShort, formatSpan, isRealDate, minAllowedDate, weekdayHeads, weekdayMon } from '../src/lib/dates';
 import { validateEvent } from '../src/lib/validate';
 import { buildIcs } from '../src/lib/ics';
-import { googleCalendarUrlFor, optionLong } from '../src/lib/format';
+import { googleCalendarUrlFor } from '../src/lib/format';
 
 describe('date helpers (UTC strings only)', () => {
   test('real calendar dates incl. leap years', () => {
@@ -17,7 +17,24 @@ describe('date helpers (UTC strings only)', () => {
     expect(formatDateShort('2026-10-16')).toBe('fre. 16. okt. 2026');
     expect(formatDateLong('2026-11-03')).toBe('tirsdag 3. november 2026');
     expect(columnHead('2026-10-16')).toEqual(['Fre.', '16. okt.']);
-    expect(optionLong({ date: '2026-10-16' })).toBe('fre. 16. okt. 2026 (hele dagen)');
+  });
+  test('§45.5 formats per locale (Intl, timeZone UTC); week starts Monday everywhere', () => {
+    const want = {
+      en: ['Fri, Oct 16, 2026', 'Friday, October 16, 2026', ['Wed', 'Oct 14'], 'October 14 – 22, 2026', 'Mon'],
+      da: ['fre. 16. okt. 2026', 'fredag 16. oktober 2026', ['Ons.', '14. okt.'], '14.–22. oktober 2026', 'man'],
+      fr: ['ven. 16 oct. 2026', 'vendredi 16 octobre 2026', ['Mer.', '14 oct.'], '14–22 octobre 2026', 'lun'],
+      de: ['Fr., 16. Okt. 2026', 'Freitag, 16. Oktober 2026', ['Mi', '14. Okt.'], '14.–22. Oktober 2026', 'Mo'],
+    } as const;
+    for (const [l, [s, lg, head, span, mon]] of Object.entries(want) as [keyof typeof want, (typeof want)[keyof typeof want]][]) {
+      expect(formatDateShort('2026-10-16', l)).toBe(s);
+      expect(formatDateLong('2026-10-16', l)).toBe(lg);
+      expect(columnHead('2026-10-14', l)).toEqual(head);
+      expect(formatSpan(['2026-10-22', '2026-10-14', '2026-10-18'], l).replace(/\u2009/g, ' ')).toBe(span);
+      expect(weekdayHeads(l)[0]).toBe(mon);
+      expect(weekdayHeads(l)).toHaveLength(7);
+    }
+    expect(formatSpan(['2026-12-30', '2027-01-02'], 'en').replace(/\u2009/g, ' ')).toBe('December 30, 2026 – January 2, 2027');
+    expect(formatSpan(['2026-10-14'], 'de')).toBe('14. Oktober 2026');
   });
   test('calendar math', () => {
     expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
@@ -61,7 +78,8 @@ describe('same date renders identically in every process time zone', () => {
     const out = execFileSync('node_modules/.bin/vite-node', ['tests/fixtures/tz-render.ts'], { env: { ...process.env, TZ: tz } }).toString().trim().split('\n').pop()!;
     const res = JSON.parse(out);
     expect(res.pop()).toBe(tz); // the child really ran in that zone
-    expect(res).toEqual(['fre. 16. okt. 2026', 'torsdag 1. januar 2026', ['Søn.', '29. mar.'], '2026-03-30', 4, 'fre. 16. okt. 2026',
+    expect(res).toEqual(['fre. 16. okt. 2026', 'torsdag 1. januar 2026', ['Søn.', '29. mar.'], '2026-03-30', 4,
+      [['Fri, Oct 16, 2026', 'October 14\u2009–\u200922, 2026'], ['ven. 16 oct. 2026', '14–22 octobre 2026'], ['Fr., 16. Okt. 2026', '14.–22. Oktober 2026']],
       'DTSTART;VALUE=DATE:20261016\r\nDTEND;VALUE=DATE:20261017', [{ dateLabel: 'tors. 1. jan. 2026' }, { dateLabel: 'fre. 16. okt. 2026' }]]);
   });
 });

@@ -1,8 +1,7 @@
 'use client';
-import { plural } from '@/lib/plural';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { optionLabel } from '@/lib/format';
-import { formatDateShort, localTodayIso } from '@/lib/dates';
+import { localTodayIso } from '@/lib/dates';
+import { useI18n } from '@/i18n/use';
 import type { EditErr } from '@/lib/admin-ui';
 import DatePicker from '@/components/DatePicker';
 
@@ -15,6 +14,7 @@ export default function OptionEditRow({ opt, others, onSave, onCancel }: {
   opt: EditableOpt; others: O[];
   onSave: (v: EditResult) => Promise<EditErr>; onCancel: () => void;
 }) {
+  const { t, fd, rich } = useI18n();
   const orig = opt.date ?? '';
   const [pick, setPick] = useState(orig);
   const [action, setAction] = useState<'reset' | 'keep'>('reset');
@@ -26,9 +26,9 @@ export default function OptionEditRow({ opt, others, onSave, onCancel }: {
 
   async function save() {
     if (saving) return;
-    if (!pick) { setErr({ msg: 'Vælg en dato i kalenderen.', fields: ['date'] }); return; }
-    if (taken.includes(pick)) { setErr({ msg: 'Den dato findes allerede som et andet forslag.', fields: ['date'] }); return; }
-    if (pick !== orig && pick < localTodayIso()) { setErr({ msg: 'Datoen ligger i fortiden.', fields: ['date'] }); return; }
+    if (!pick) { setErr({ msg: t('app.pickDateCal'), fields: ['date'] }); return; }
+    if (taken.includes(pick)) { setErr({ msg: t('admin.errDup'), fields: ['date'] }); return; }
+    if (pick !== orig && pick < localTodayIso()) { setErr({ msg: t('err.past'), fields: ['date'] }); return; }
     setSaving(true);
     const r = await onSave({ date: pick, reset_votes: opt.votes > 0 && action === 'reset' });
     setSaving(false);
@@ -40,26 +40,25 @@ export default function OptionEditRow({ opt, others, onSave, onCancel }: {
 
   return (
     <div className="opt-edit" role="group" aria-labelledby="oe-h" data-editing={opt.id} onKeyDown={onKey} ref={box}>
-      <p id="oe-h" className="field__label" style={{ margin: '0 0 var(--s-2)' }}>Skift dato – {optionLabel(opt)}</p>
-      {!opt.date && <p className="field__hint">Ældre forslag med klokkeslæt. Skifter du dato, bliver det et rent datoforslag (hele dagen).</p>}
+      <p id="oe-h" className="field__label" style={{ margin: '0 0 var(--s-2)' }}>{t('admin.changeDateH', { date: fd(opt.date) })}</p>
       <DatePicker id="oe-cal" mode="single" selected={pick ? [pick] : []} initialMonth={pick || undefined} taken={taken}
-        label="Ny dato"
+        label={t('app.newDateLabel')}
         onChange={(ds) => { setPick(ds[0]); setErr(null); }} onError={(m) => setErr({ msg: m, fields: ['date'] })} />
-      <p className="field__hint" id="oe-sel" aria-live="polite">Ny dato: <strong>{pick ? formatDateShort(pick) : '–'}</strong></p>
+      <p className="field__hint" id="oe-sel" aria-live="polite">{rich('admin.newDate', { date: pick ? fd(pick) : '–' })}</p>
       <div className="field__error" id="oe-err" aria-live="polite">{err?.msg ?? ''}</div>
       {opt.votes > 0 && (
         <fieldset>
-          <legend>{plural(opt.votes, 'deltager har', 'deltagere har')} svaret på denne dato. Hvad skal der ske med svarene?</legend>
+          <legend>{t('admin.votesQ', { n: opt.votes })}</legend>
           <label className="radio"><input type="radio" name="oe-v" value="reset" checked={action === 'reset'} onChange={() => setAction('reset')} />{' '}
-            <span><strong>Nulstil svarene</strong> (anbefalet) – deltagerne skal svare igen på den nye dato.</span></label>
+            <span>{rich('admin.resetAns')}</span></label>
           <label className="radio"><input type="radio" name="oe-v" value="keep" checked={action === 'keep'} onChange={() => setAction('keep')} />{' '}
-            <span><strong>Behold svarene</strong> – kun hvis du rettede en fejl, og svarene stadig gælder.</span></label>
+            <span>{rich('admin.keepAns')}</span></label>
         </fieldset>
       )}
       <div className="opt-edit__actions">
-        <button type="button" className="btn btn--primary btn--sm" data-oe-save onClick={save} disabled={saving} aria-busy={saving || undefined}>Gem dato</button>
-        <button type="button" className="btn btn--ghost btn--sm" data-oe-cancel onClick={onCancel}>Annullér</button>
-        <span className="field__hint" style={{ alignSelf: 'center' }}>Esc annullerer</span>
+        <button type="button" className="btn btn--primary btn--sm" data-oe-save onClick={save} disabled={saving} aria-busy={saving || undefined}>{t('admin.saveDate')}</button>
+        <button type="button" className="btn btn--ghost btn--sm" data-oe-cancel onClick={onCancel}>{t('common.cancel')}</button>
+        <span className="field__hint" style={{ alignSelf: 'center' }}>{t('admin.escHint')}</span>
       </div>
     </div>
   );

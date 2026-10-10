@@ -1,8 +1,9 @@
 'use client';
 import { useLp } from '@/i18n/link';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { counterState, counterText, isBlank, mapServerErrors, shouldBlockEnter, textLength, liveTitleError } from '@/lib/form';
-import { formatDateShort, MAX_DATE_OPTIONS } from '@/lib/dates';
+import { counterState, isBlank, mapServerErrors, shouldBlockEnter, textLength, liveTitleError } from '@/lib/form';
+import { MAX_DATE_OPTIONS } from '@/lib/dates';
+import { useI18n } from '@/i18n/use';
 import DatePicker, { DateChips } from '@/components/DatePicker';
 
 const TITLE_MAX = 200;
@@ -19,6 +20,7 @@ const newKey = () =>
  */
 export default function CreateForm() {
   const lp = useLp();
+  const { t, fd } = useI18n();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [dates, setDates] = useState<string[]>([]);
@@ -45,14 +47,14 @@ export default function CreateForm() {
     const errs: string[] = [];
     const tLen = textLength(title.trim());
     const titleBad = isBlank(title) || tLen > TITLE_MAX;
-    if (isBlank(title)) { errs.push('Titel skal udfyldes.'); setTitleErr('Giv afstemningen en titel.'); }
-    else if (tLen > TITLE_MAX) { const m = `Titlen er ${tLen - TITLE_MAX} tegn for lang (højst ${TITLE_MAX}).`; errs.push(m); setTitleErr(m); }
+    if (isBlank(title)) { errs.push(t('app.titleRequiredSum')); setTitleErr(t('err.titleRequired')); }
+    else if (tLen > TITLE_MAX) { const m = t('err.titleTooLong', { n: tLen - TITLE_MAX, max: TITLE_MAX }); errs.push(m); setTitleErr(m); }
     else setTitleErr('');
     const dLen = textLength(description.trim());
     const descBad = dLen > DESC_MAX;
-    if (descBad) { const m = `Beskrivelsen er ${dLen - DESC_MAX} tegn for lang (højst ${DESC_MAX}).`; errs.push(m); setDescErr(m); }
+    if (descBad) { const m = t('err.descTooLong', { n: dLen - DESC_MAX, max: DESC_MAX }); errs.push(m); setDescErr(m); }
     else setDescErr('');
-    if (!dates.length) { errs.push('Vælg mindst én dato.'); setPropErr('Vælg mindst én dato i kalenderen.'); }
+    if (!dates.length) { errs.push(t('err.minDatesShort')); setPropErr(t('err.minDates')); }
     setSummary(errs);
     if (errs.length) { if (titleBad || descBad) document.getElementById(titleBad ? 'title' : 'desc')?.focus(); else document.querySelector<HTMLElement>('#dp td[tabindex="0"]')?.focus(); return; }
 
@@ -65,8 +67,8 @@ export default function CreateForm() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const { rows, general } = mapServerErrors(Array.isArray(data.errors) ? data.errors : ['Ukendt fejl.']);
-        setSummary([...general, ...[...rows].map(([n, m]) => `${dates[n - 1] ? formatDateShort(dates[n - 1]) : `Dato ${n}`}: ${m}`)]);
+        const { rows, general } = mapServerErrors(Array.isArray(data.errors) ? data.errors : [t('app.unknownError')]);
+        setSummary([...general, ...[...rows].map(([n, m]) => `${dates[n - 1] ? fd(dates[n - 1]) : t('app.dateN', { n })}: ${m}`)]);
         setSubmitting(false);
         document.getElementById('summary')?.focus();
         return;
@@ -75,7 +77,7 @@ export default function CreateForm() {
       try { if (data.admin_url) sessionStorage.setItem(`mt-admin-${data.id}`, data.admin_url); } catch { /* private mode */ }
       window.location.assign(`${lp(data.url)}?created=1`); // keep button locked while navigating
     } catch {
-      setSummary(['Kunne ikke kontakte serveren. Prøv igen.']);
+      setSummary([t('app.network')]);
       setSubmitting(false);
     }
   }
@@ -86,14 +88,14 @@ export default function CreateForm() {
         onKeyDown={(e: KeyboardEvent<HTMLFormElement>) => {
           if (shouldBlockEnter(e.key, e.target as HTMLInputElement)) e.preventDefault();
         }}>
-        <h1>Opret en afstemning</h1>
-        <p className="lead">Foreslå datoer, og del linket med deltagerne.</p>
+        <h1>{t('create.h1')}</h1>
+        <p className="lead">{t('create.lead')}</p>
         <div className="alert" id="summary" role="alert" tabIndex={-1}>
-          {summary.length > 0 && (<><strong>Ret venligst følgende:</strong><ul>{summary.map((x) => <li key={x}>{x}</li>)}</ul></>)}
+          {summary.length > 0 && (<><strong>{t('common.fixN', { n: summary.length })}</strong><ul>{summary.map((x) => <li key={x}>{x}</li>)}</ul></>)}
         </div>
         <div className="field">
-          <label className="field__label" htmlFor="title">Titel *</label>
-          <input className="input" id="title" name="title" placeholder="F.eks. Teammøde om Q4" autoComplete="off"
+          <label className="field__label" htmlFor="title">{t('common.title')}</label>
+          <input className="input" id="title" name="title" placeholder={t('create.titlePh')} autoComplete="off"
             aria-describedby="title-err title-count" aria-invalid={titleErr ? true : undefined}
             value={title} onChange={(e) => { setTitle(e.target.value); setTitleErr((err) => liveTitleError(err, e.target.value)); }} />
           <div className="field__meta">
@@ -102,8 +104,8 @@ export default function CreateForm() {
           </div>
         </div>
         <div className="field">
-          <label className="field__label" htmlFor="desc">Beskrivelse <span className="field__hint">(valgfri)</span></label>
-          <textarea className="input" id="desc" name="description" placeholder="Hvad handler det om? Sted, link, agenda…"
+          <label className="field__label" htmlFor="desc">{t('common.description')} <span className="field__hint">{t('common.optional')}</span></label>
+          <textarea className="input" id="desc" name="description" placeholder={t('create.descPh')}
             aria-describedby="desc-err desc-count" aria-invalid={descErr ? true : undefined}
             value={description} onChange={(e) => setDescription(e.target.value)} />
           <div className="field__meta">
@@ -111,21 +113,21 @@ export default function CreateForm() {
             <Counter id="desc-count" value={description} max={DESC_MAX} />
           </div>
         </div>
-        <h2 id="prop-h">Datoforslag</h2>
-        <p className="field__hint" style={{ marginTop: 'calc(-1 * var(--s-2))' }}>Vælg de datoer, deltagerne kan stemme på. Kun hele dage.</p>
+        <h2 id="prop-h">{t('create.datesH')}</h2>
+        <p className="field__hint" style={{ marginTop: 'calc(-1 * var(--s-2))' }}>{t('create.datesHint')}</p>
         <div className="field__error" id="prop-err" aria-live="polite">{propErr}</div>
         <div className="date-picker-layout">
-          <DatePicker selected={dates} max={MAX} label="Vælg datoer"
+          <DatePicker selected={dates} max={MAX} label={t('app.pickDates')}
             onChange={(ds, msg) => { setDates(ds); setPropErr(''); if (msg) setLive(msg); }}
             onError={(m) => { setPropErr(m); setLive(m); }} />
           <DateChips dates={dates} max={MAX}
-            onRemove={(d) => { setDates((ds) => ds.filter((x) => x !== d)); setLive(`${formatDateShort(d)} fjernet`); }}
-            onClear={() => { setDates([]); setLive('Alle datoer fjernet'); setTimeout(() => document.querySelector<HTMLElement>('#dp td[tabindex="0"]')?.focus(), 0); }} />
+            onRemove={(d) => { setDates((ds) => ds.filter((x) => x !== d)); setLive(t('create.removed', { date: fd(d) })); }}
+            onClear={() => { setDates([]); setLive(t('create.allRemoved')); setTimeout(() => document.querySelector<HTMLElement>('#dp td[tabindex="0"]')?.focus(), 0); }} />
         </div>
         <div className="form-actions">
-          <button type="reset" className="btn btn--ghost">Annullér</button>
+          <button type="reset" className="btn btn--ghost">{t('common.cancel')}</button>
           <button type="submit" className="btn btn--primary" id="submit" disabled={submitting} aria-busy={submitting || undefined}>
-            {submitting ? 'Opretter…' : 'Opret afstemning'}
+            {submitting ? t('create.creating') : t('create.submit')}
           </button>
         </div>
       </form>
@@ -136,11 +138,12 @@ export default function CreateForm() {
 
 /** Live grapheme counter (design §11). Never truncates; warn ≥ 90 %, over limit is blocked on submit. */
 function Counter({ id, value, max }: { id: string; value: string; max: number }) {
+  const { t } = useI18n();
   const n = textLength(value.trim());
   const st = counterState(n, max);
   return (
     <span className={`counter${st === 'over' ? ' counter--over' : st === 'warn' ? ' counter--warn' : ''}`} id={id} data-max={max}>
-      {counterText(n, max)}
+      {t('common.counter', { n, max })}{n > max ? ` – ${t('common.overBy', { n: n - max })}` : ''}
     </span>
   );
 }

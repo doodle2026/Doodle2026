@@ -1,5 +1,5 @@
 import { describe, test, expect, vi } from 'vitest';
-import { adminMailto, canNativeShare, copyText, participantMailto, shareLink, shareText } from '../src/lib/share';
+import { canNativeShare, copyText, mailtoLink, shareLink } from '../src/lib/share';
 
 describe('copy button logic', () => {
   test('Clipboard API success → copied', async () => {
@@ -20,7 +20,7 @@ describe('copy button logic', () => {
 });
 
 describe('share button logic (Web Share API with fallback)', () => {
-  const data = { title: 'T', text: shareText('T'), url: 'https://x/p/a' };
+  const data = { title: 'T', text: 'When are you free? T', url: 'https://x/p/a' };
   test('only offered when navigator.share exists', () => {
     expect(canNativeShare({ share: () => Promise.resolve() })).toBe(true);
     expect(canNativeShare({})).toBe(false);
@@ -39,12 +39,9 @@ describe('share button logic (Web Share API with fallback)', () => {
     expect(await shareLink(data, {})).toBe('fallback');
   });
   test('mailto links are URL-encoded and have no recipient', () => {
-    const m = participantMailto('Møde & "kage"?', 'https://x/p/a');
+    const m = mailtoLink('Hvornår kan du? Møde & "kage"?', 'Hej!\n\nhttps://x/p/a?x=1&y=2');
     expect(m.startsWith('mailto:?subject=')).toBe(true);
     expect(decodeURIComponent(m.split('subject=')[1].split('&body=')[0])).toBe('Hvornår kan du? Møde & "kage"?');
-    expect(decodeURIComponent(m.split('&body=')[1])).toContain('https://x/p/a');
-    const a = adminMailto('T', 'https://x/p/a/admin/TOKEN', 'https://x/p/a');
-    expect(decodeURIComponent(a)).toContain('Mit admin-link: T');
-    expect(decodeURIComponent(a)).toContain('Gem denne mail. Del ikke linket.');
+    expect(decodeURIComponent(m.split('&body=')[1])).toBe('Hej!\n\nhttps://x/p/a?x=1&y=2');
   });
 });

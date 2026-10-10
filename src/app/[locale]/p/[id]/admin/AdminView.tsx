@@ -1,10 +1,10 @@
 'use client';
-import { plural } from '@/lib/plural';
 import { useLp } from '@/i18n/link';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { AdminEvent } from '@/lib/events';
 import { forgetAdminToken, storeAdminToken, takeAdminToken } from '@/lib/admin-client';
-import { bestIds, optionLabel } from '@/lib/format';
+import { bestIds } from '@/lib/format';
+import { useI18n } from '@/i18n/use';
 import { MAX_DATE_OPTIONS } from '@/lib/dates';
 import DatePicker from '@/components/DatePicker';
 import AdminResults from './AdminResults';
@@ -24,6 +24,8 @@ let seq = 0;
 
 export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: string }) {
   const lp = useLp();
+  const { t, fd, rich } = useI18n();
+  const optionLabel = (o: { date: string }) => fd(o.date);
   const [token, setToken] = useState<string | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'denied' | 'error'>('loading');
   const [ev, setEv] = useState<AdminEvent | null>(null);
@@ -71,9 +73,9 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   const syncVotes = (e: AdminEvent) => setOpts((prev) => prev.map((o) => ({ ...o, votes: e.time_options.find((x) => x.id === o.id)?.votes.total ?? o.votes })));
 
   useEffect(() => {
-    const t = takeAdminToken(slug, location, sessionStorage, (u) => history.replaceState(null, '', u));
-    if (!t) { setState('denied'); return; }
-    setToken(t);
+    const tok = takeAdminToken(slug, location, sessionStorage, (u) => history.replaceState(null, '', u));
+    if (!tok) { setState('denied'); return; }
+    setToken(tok);
   }, [slug]);
 
   useEffect(() => {
@@ -94,18 +96,17 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     focusAfter.current = null;
   });
 
-  if (state === 'loading') return <div className="card"><p>Indlæser…</p></div>;
+  if (state === 'loading') return <div className="card"><p>{t('app.loading')}</p></div>;
   if (state === 'denied') {
     return (
       <section className="card notfound" aria-labelledby="den-h">
-        <h1 id="den-h">Admin-linket virker ikke</h1>
-        <p className="lead">Linket mangler en del, er skrevet forkert eller er blevet udskiftet med et nyt.
-          Brug det seneste admin-link, du har gemt. Store og små bogstaver har betydning.</p>
-        <div className="notfound__actions"><a className="btn btn--primary" href={lp(`/p/${slug}`)}>Se afstemningen</a></div>
+        <h1 id="den-h">{t('app.deniedH')}</h1>
+        <p className="lead">{t('app.deniedP')}</p>
+        <div className="notfound__actions"><a className="btn btn--primary" href={lp(`/p/${slug}`)}>{t('app.seePoll')}</a></div>
       </section>
     );
   }
-  if (state === 'error' || !ev) return <div className="card"><div className="alert" role="alert">Kunne ikke hente afstemningen. Prøv igen.</div></div>;
+  if (state === 'error' || !ev) return <div className="card"><div className="alert" role="alert">{t('app.loadFailed')}</div></div>;
 
   const best = bestIds(ev.time_options);
   const optById = new Map(ev.time_options.map((o) => [o.id, o]));
@@ -117,7 +118,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   }
 
   function removeOpt(o: Opt, idx: number) {
-    if (opts.length === 1) { setOptErr('Der skal være mindst én dato.'); return; }
+    if (opts.length === 1) { setOptErr(t('app.minOneDate')); return; }
     if (o.votes > 0 && pendingRemove !== o.key) {
       setPendingRemove(o.key);
       focusAfter.current = '[data-confirm-remove]';
@@ -126,7 +127,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     if (o.votes > 0) setConfirmedRemovals((n) => n + 1);
     const next = opts.filter((x) => x.key !== o.key);
     setOpts(next); setPendingRemove(null); setOptErr('');
-    setLive(`${optionLabel(o)} fjernet`);
+    setLive(t('app.removedLive', { date: optionLabel(o) }));
     const target = next[idx] ?? next[idx - 1];
     focusAfter.current = target ? `[data-rm="${target.key}"]` : '#nd';
   }
@@ -135,10 +136,10 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
   function addDates() {
     const fresh = addSel.filter((d) => !opts.some((o) => o.date === d));
     if (!fresh.length) return;
-    if (opts.length + fresh.length > MAX_DATE_OPTIONS) { setOptErr(`Du kan højst have ${MAX_DATE_OPTIONS} datoer.`); return; }
+    if (opts.length + fresh.length > MAX_DATE_OPTIONS) { setOptErr(t('app.maxOptions', { max: MAX_DATE_OPTIONS })); return; }
     setOptErr('');
     setOpts([...opts, ...fresh.map((d) => ({ key: `n${++seq}`, date: d, votes: 0 }))].sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
-    setLive(`${fresh.length} ${fresh.length === 1 ? 'dato' : 'datoer'} tilføjet`);
+    setLive(t('app.addedLive', { n: fresh.length }));
     setAddSel([]); setAddOpen(false);
     focusAfter.current = '#addopt';
   }
@@ -148,10 +149,10 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     if (saving) return;
     const tLen = textLength(title.trim());
     const errs: string[] = [];
-    if (isBlank(title)) { setTitleErr('Giv afstemningen en titel.'); errs.push('Titel skal udfyldes.'); }
-    else if (tLen > TITLE_MAX) { const m = `Titlen er ${tLen - TITLE_MAX} tegn for lang (højst ${TITLE_MAX}).`; setTitleErr(m); errs.push(m); }
+    if (isBlank(title)) { setTitleErr(t('err.titleRequired')); errs.push(t('app.titleRequiredSum')); }
+    else if (tLen > TITLE_MAX) { const m = t('err.titleTooLong', { n: tLen - TITLE_MAX, max: TITLE_MAX }); setTitleErr(m); errs.push(m); }
     const dLen = textLength(desc.trim());
-    if (dLen > DESC_MAX) errs.push(`Beskrivelsen er ${dLen - DESC_MAX} tegn for lang (højst ${DESC_MAX}).`);
+    if (dLen > DESC_MAX) errs.push(t('err.descTooLong', { n: dLen - DESC_MAX, max: DESC_MAX }));
     setSummary(errs);
     if (errs.length) { document.getElementById(isBlank(title) || tLen > TITLE_MAX ? 'title' : 'desc')?.focus(); return; }
     setSaving(true); setBanner('');
@@ -165,16 +166,16 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
       });
       if (res.status === 401 || res.status === 403) { setState('denied'); return; }
       if (!res.ok) {
-        const { rows, general } = mapServerErrors(Array.isArray(data.errors) ? data.errors : ['Ukendt fejl.']);
-        setSummary([...general, ...[...rows].map(([n, m]) => `Dato ${n} (${opts[n - 1] ? optionLabel(opts[n - 1]) : '?'}): ${m}`)]);
+        const { rows, general } = mapServerErrors(Array.isArray(data.errors) ? data.errors : [t('app.unknownError')]);
+        setSummary([...general, ...[...rows].map(([n, m]) => `${t('app.dateRow', { n, date: opts[n - 1] ? optionLabel(opts[n - 1]) : '?' })}: ${m}`)]);
         document.getElementById('summary')?.focus();
         return;
       }
       load(data);
       setSummary([]);
-      setBanner('✓ Ændringerne er gemt. Deltagerne ser dem med det samme.');
+      setBanner(t('app.savedLive'));
     } catch {
-      setSummary(['Kunne ikke kontakte serveren. Prøv igen.']);
+      setSummary([t('app.network')]);
     } finally { setSaving(false); }
   }
 
@@ -183,19 +184,19 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
     try {
       const { res, data } = await api(`/options/${id}`, { method: 'PATCH', body: JSON.stringify(v) });
       if (res.status === 401 || res.status === 403) { setState('denied'); return null; }
-      if (res.status === 409 && data.code === 'duplicate_option') return { msg: 'Den dato findes allerede som et andet forslag.', fields: ['date'] };
-      if (!res.ok) return { msg: (Array.isArray(data.errors) && data.errors[0]) || 'Datoen kunne ikke gemmes.', fields: ['date'] };
+      if (res.status === 409 && data.code === 'duplicate_option') return { msg: t('admin.errDup'), fields: ['date'] };
+      if (!res.ok) return { msg: (Array.isArray(data.errors) && data.errors[0]) || t('app.dateSaveFailed'), fields: ['date'] };
       setEv(data);
       const fresh = data.time_options.find((x: AdminEvent['time_options'][number]) => x.id === id);
       setOpts((prev) => prev.map((o) => (o.id === id ? { ...o, date: fresh.date, votes: fresh.votes.total } : o))
         .sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
       setEditingId(null);
       const n = data.reset_votes_count as number;
-      const chosenNote = n > 0 && data.chosen_option_id === id ? ' Tjek om det stadig er det rigtige valg.' : '';
-      setBanner(`✓ Datoen er ændret til ${fresh.date ? optionLabel(fresh) : ''} – ${n > 0 ? `${n} svar er nulstillet.` : 'svarene er bevaret.'}${chosenNote}`);
+      const chosenNote = n > 0 && data.chosen_option_id === id ? t('app.checkChoice') : '';
+      setBanner(t('admin.dateChanged', { date: optionLabel(fresh), mode: n > 0 ? 'reset' : 'kept', n }) + chosenNote);
       focusAfter.current = `[data-oe="${id}"]`;
       return null;
-    } catch { return { msg: 'Kunne ikke kontakte serveren. Prøv igen.', fields: [] }; }
+    } catch { return { msg: t('app.network'), fields: [] }; }
   }
 
   function openDialog(kind: Exclude<Dialog, null>) {
@@ -218,70 +219,70 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
       if (dialog === 'delete-poll') {
         const { res, data } = await api('', { method: 'DELETE' });
         if (res.status === 401 || res.status === 403) { setState('denied'); return; }
-        if (!res.ok && res.status !== 404) { dlgRef.current?.close(); setSummary(Array.isArray(data.errors) ? data.errors : ['Sletning mislykkedes.']); return; }
+        if (!res.ok && res.status !== 404) { dlgRef.current?.close(); setSummary(Array.isArray(data.errors) ? data.errors : [t('app.deleteFailed')]); return; }
         forgetAdminToken(slug, sessionStorage);
         location.replace(lp('/?deleted=1'));
         return;
       }
       const { res, data } = await api(path, { method: 'POST', body: JSON.stringify(body) });
       if (res.status === 401 || res.status === 403) { closeDialog(); setState('denied'); return; }
-      if (!res.ok) { setSummary(Array.isArray(data.errors) ? data.errors : ['Ukendt fejl.']); closeDialog(); return; }
+      if (!res.ok) { setSummary(Array.isArray(data.errors) ? data.errors : [t('app.unknownError')]); closeDialog(); return; }
       setEv(data);
       if (dialog === 'close') {
         const c = data.chosen_option_id ? optById.get(data.chosen_option_id) : null;
-        setBanner(`✓ Afstemningen er lukket.${c ? ` Valgt dato: ${optionLabel(c)}.` : ''}`);
+        setBanner(c ? t('app.closedChosen', { date: optionLabel(c) }) : t('admin.closedOk'));
       } else if (dialog === 'reopen') {
-        setBanner('✓ Afstemningen er åbnet igen.');
+        setBanner(t('admin.reopenedOk'));
       } else {
         storeAdminToken(slug, data.admin_token, sessionStorage);
         setToken(data.admin_token);
-        setNewAdminUrl(`${location.origin}${data.admin_url}`);
-        setBanner('✓ Nyt admin-link oprettet. Det gamle virker ikke længere.');
+        setNewAdminUrl(`${location.origin}${lp(data.admin_url)}`);
+        setBanner(t('app.rotatedOk'));
       }
       closeDialog();
     } catch {
-      setSummary(['Kunne ikke kontakte serveren. Prøv igen.']); closeDialog();
+      setSummary([t('app.network')]); closeDialog();
     } finally { setBusy(false); }
   }
 
   async function copy(which: 'url' | 'admin', text: string, inputId: string) {
     const input = document.getElementById(inputId) as HTMLInputElement | null;
     const r = await copyText(text, { clipboard: navigator.clipboard, legacyCopy: () => { input?.select(); return document.execCommand?.('copy') ?? false; } });
-    if (r === 'copied') { setCopied(which); setLive(which === 'url' ? 'Linket til deltagerne er kopieret' : 'Admin-linket er kopieret'); setTimeout(() => setCopied(''), 2000); }
-    else { input?.focus(); input?.select(); setLive('Kunne ikke kopiere. Markér og kopiér manuelt.'); }
+    if (r === 'copied') { setCopied(which); setLive(which === 'url' ? t('share.copiedPub') : t('share.copiedAdmin')); setTimeout(() => setCopied(''), 2000); }
+    else { input?.focus(); input?.select(); setLive(t('share.copyFailedLive')); }
   }
 
   const closed = ev.is_closed;
   const dlgText = dialog === 'delete-poll'
-    ? { h: `Slet «${ev.title}»?`, p: `Afstemningen, ${ev.time_options.length} datoforslag og ${plural(ev.participants.length, 'deltagers', 'deltageres')} svar slettes for altid. Både deltager- og admin-linket holder op med at virke. Det kan ikke fortrydes.`, ok: 'Slet for altid', cls: 'btn--danger' }
+    ? { h: t('app.delPollH', { title: ev.title }), p: t('app.delPollP', { count: t('date.count', { n: ev.time_options.length }), n: ev.participants.length }), ok: t('app.delForever'), cls: 'btn--danger' }
     : dialog === 'close'
-    ? { h: 'Luk afstemningen?', p: 'Ingen kan længere stemme eller ændre svar. Du kan genåbne senere.', ok: 'Luk afstemning', cls: 'btn--danger' }
+    ? { h: t('admin.closeQ'), p: t('admin.closeP'), ok: t('admin.closePoll'), cls: 'btn--danger' }
     : dialog === 'reopen'
-      ? { h: 'Genåbn afstemningen?', p: 'Deltagerne kan igen stemme og ændre deres svar. Den valgte dato nulstilles.', ok: 'Genåbn', cls: 'btn--primary' }
-      : { h: 'Lav et nyt admin-link?', p: 'Det nuværende admin-link holder op med at virke med det samme. Gem det nye link et sikkert sted.', ok: 'Lav nyt link', cls: 'btn--danger' };
+      ? { h: t('admin.reopenQ'), p: t('app.reopenP'), ok: t('admin.reopen'), cls: 'btn--primary' }
+      : { h: t('app.rotateH'), p: t('app.rotateP'), ok: t('app.rotateOk'), cls: 'btn--danger' };
 
   return (
     <div className="card">
       <div className="admin-head">
-        <span className="admin-badge">🔒 Admin – kun for dig</span>
+        <span className="admin-badge">{t('admin.badge')}</span>
         <span className={`status ${closed ? 'status--closed' : 'status--open'}`}>
-          <span aria-hidden="true">●</span> {closed ? 'Lukket' : 'Åben for svar'}
+          <span aria-hidden="true">●</span> {closed ? t('admin.statusClosed') : t('admin.statusOpen')}
         </span>
       </div>
       <div className="alert" id="summary" role="alert" tabIndex={-1}>
-        {summary.length > 0 && (<><strong>Ret venligst følgende:</strong><ul>{summary.map((x) => <li key={x}>{x}</li>)}</ul></>)}
+        {summary.length > 0 && (<><strong>{t('common.fixN', { n: summary.length })}</strong><ul>{summary.map((x) => <li key={x}>{x}</li>)}</ul></>)}
       </div>
       <div id="banner" role="status">{banner && <div className="success">{banner}</div>}</div>
 
       {newAdminUrl && (
         <div className="linkbox linkbox--secret" role="group" aria-labelledby="na-l" aria-describedby="na-d">
-          <p className="linkbox__label" id="na-l"><span className="icon-lock" aria-hidden="true">!</span> Dit nye hemmelige admin-link – gem det nu</p>
-          <p className="linkbox__desc" id="na-d"><strong>Del det ikke.</strong> Det gamle link virker ikke længere. Linket vises kun her.</p>
+          <p className="linkbox__label" id="na-l"><span className="icon-lock" aria-hidden="true">!</span> {t('app.newAdminLabel')}</p>
+          <p className="linkbox__desc" id="na-d">{rich('app.newAdminDesc')}</p>
           <div className="linkbox__row">
-            <input className="input" id="new-admin-url" readOnly value={newAdminUrl} aria-label="Nyt hemmeligt admin-link" onFocus={(e) => e.currentTarget.select()} />
+            <input className="input" id="new-admin-url" readOnly value={newAdminUrl} aria-label={t('app.newAdminAria')} onFocus={(e) => e.currentTarget.select()} />
             <div className="linkbox__actions">
               <button type="button" className={`btn btn--secondary${copied === 'admin' ? ' btn--copied' : ''}`} onClick={() => copy('admin', newAdminUrl, 'new-admin-url')}>
-                {copied === 'admin' ? '✓ Kopieret' : 'Kopiér admin-link'}
+                {copied === 'admin' ? `✓ ${t('common.copied')}` : t('share.copyAdmin')}
               </button>
             </div>
           </div>
@@ -289,29 +290,29 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
       )}
 
       <section aria-labelledby="sh-h">
-        <h1 id="sh-h" style={{ fontSize: 'var(--fs-lg)' }}>Del med deltagerne</h1>
+        <h1 id="sh-h" style={{ fontSize: 'var(--fs-lg)' }}>{t('admin.shareH')}</h1>
         <div className="linkbox" style={{ marginTop: 'var(--s-2)' }}>
           <div className="linkbox__row">
-            <input className="input" id="url" readOnly value={shareUrl} aria-label="Offentligt link" onFocus={(e) => e.currentTarget.select()} />
+            <input className="input" id="url" readOnly value={shareUrl} aria-label={t('admin.publicLink')} onFocus={(e) => e.currentTarget.select()} />
             <div className="linkbox__actions">
               <button type="button" className={`btn ${copied === 'url' ? 'btn--copied' : 'btn--primary'}`} onClick={() => copy('url', shareUrl, 'url')}>
-                {copied === 'url' ? '✓ Kopieret' : 'Kopiér link'}
+                {copied === 'url' ? `✓ ${t('common.copied')}` : t('common.copyLink')}
               </button>
-              <a className="btn btn--ghost" href={lp(`/p/${slug}`)} target="_blank" rel="noopener noreferrer">Åbn som deltager ↗</a>
+              <a className="btn btn--ghost" href={lp(`/p/${slug}`)} target="_blank" rel="noopener noreferrer">{t('admin.openAsParticipant')}</a>
             </div>
           </div>
         </div>
       </section>
 
       <InviteSection api={api} slug={slug} closed={ev.is_closed} onDenied={() => setState('denied')} onStatus={(m) => { setBanner(m); setLive(m); }} />
-      <AdminResults ev={ev} setEv={(e) => { setEv(e); syncVotes(e); }} api={api} appUrl={shareUrl.replace(/\/p\/[^/]+$/, '')}
+      <AdminResults ev={ev} setEv={(e) => { setEv(e); syncVotes(e); }} api={api} appUrl={shareUrl.replace(/\/[a-z]{2}\/p\/[^/]+$/, '')}
         onDenied={() => setState('denied')} onStatus={(m) => { setBanner(m); setLive(m); }} onError={(e) => setSummary(e)} />
 
       <form className="section" id="edit" noValidate aria-labelledby="ed-h" onSubmit={save}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') e.preventDefault(); }}>
-        <h2 id="ed-h">Redigér afstemning</h2>
+        <h2 id="ed-h">{t('admin.editH')}</h2>
         <div className="field">
-          <label className="field__label" htmlFor="title">Titel *</label>
+          <label className="field__label" htmlFor="title">{t('common.title')}</label>
           <input className="input" id="title" value={title} onChange={(e) => onTitle(e.target.value)} autoComplete="off"
             aria-describedby="title-err title-count" aria-invalid={titleErr ? true : undefined} />
           <div className="field__meta">
@@ -320,11 +321,11 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
           </div>
         </div>
         <div className="field">
-          <label className="field__label" htmlFor="desc">Beskrivelse <span className="field__hint">(valgfri)</span></label>
+          <label className="field__label" htmlFor="desc">{t('common.description')} <span className="field__hint">{t('common.optional')}</span></label>
           <textarea className="input" id="desc" value={desc} onChange={(e) => setDesc(e.target.value)} aria-describedby="desc-count" />
           <div className="field__meta"><span /><Counter id="desc-count" value={desc} max={DESC_MAX} /></div>
         </div>
-        <h3 style={{ margin: 'var(--s-4) 0 var(--s-2)' }}>Datoforslag</h3>
+        <h3 style={{ margin: 'var(--s-4) 0 var(--s-2)' }}>{t('poll.datesH')}</h3>
         <ul className="opt-list" id="opts">
           {opts.map((o, i) => {
             const label = optionLabel(o);
@@ -343,19 +344,18 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
               <li key={o.key}>
                 <div className={`opt${removing ? ' opt--removing' : ''}`}>
                   <span className="opt__when">{label}</span>
-                  <span className="opt__votes">{o.votes ? `${o.votes} svar` : 'Ingen svar'}</span>
+                  <span className="opt__votes">{t('admin.nAnswers', { n: o.votes })}</span>
                   {o.id !== undefined && (
-                    <button type="button" className="btn btn--icon" data-oe={o.id} aria-label={`Redigér ${label}`} onClick={() => { setEditingId(o.id!); setPendingRemove(null); }}>✎</button>
+                    <button type="button" className="btn btn--icon" data-oe={o.id} aria-label={t('app.editAria', { date: label })} onClick={() => { setEditingId(o.id!); setPendingRemove(null); }}>✎</button>
                   )}
-                  <button type="button" className="btn btn--icon" data-rm={o.key} aria-label={`Fjern ${label}`} onClick={() => removeOpt(o, i)}>✕</button>
+                  <button type="button" className="btn btn--icon" data-rm={o.key} aria-label={t('admin.removeDateAria', { date: label })} onClick={() => removeOpt(o, i)}>✕</button>
                 </div>
                 {removing && (
                   <div className="inline-warn" role="alert">
-                    <strong>{plural(o.votes, 'deltager har', 'deltagere har')} svaret på denne dato.</strong> Fjerner du den,
-                    slettes deres svar på den for altid. Deres øvrige svar bevares.
+                    {rich('admin.removeWarn', { n: o.votes })}
                     <div className="inline-warn__actions">
-                      <button type="button" className="btn btn--danger btn--sm" data-confirm-remove onClick={() => removeOpt(o, i)}>Fjern alligevel</button>
-                      <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setPendingRemove(null); focusAfter.current = `[data-rm="${o.key}"]`; }}>Behold</button>
+                      <button type="button" className="btn btn--danger btn--sm" data-confirm-remove onClick={() => removeOpt(o, i)}>{t('admin.removeAnyway')}</button>
+                      <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setPendingRemove(null); focusAfter.current = `[data-rm="${o.key}"]`; }}>{t('admin.keep')}</button>
                     </div>
                   </div>
                 )}
@@ -365,24 +365,24 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
         </ul>
         <div style={{ marginTop: 'var(--s-3)' }}>
           <button type="button" className="btn btn--secondary" id="addopt" aria-expanded={addOpen} aria-controls="addpop"
-            onClick={() => { setAddOpen(!addOpen); setAddSel([]); }}>+ Tilføj datoer</button>
+            onClick={() => { setAddOpen(!addOpen); setAddSel([]); }}>{t('admin.addDates')}</button>
         </div>
         {addOpen && (
           <div className="dp-pop" id="addpop"
             onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setAddOpen(false); setAddSel([]); document.getElementById('addopt')?.focus(); } }}>
             <DatePicker id="addcal" selected={addSel} taken={opts.filter((o) => o.date).map((o) => o.date!)} max={Math.max(0, MAX_DATE_OPTIONS - opts.length)}
-              label="Tilføj datoer" onChange={(ds, msg) => { setAddSel(ds); setOptErr(''); if (msg) setLive(msg); }} onError={(m) => setOptErr(m)} />
-            <p className="field__hint">Prikkede datoer er allerede foreslået. Esc annullerer.</p>
+              label={t('app.addDatesLabel')} onChange={(ds, msg) => { setAddSel(ds); setOptErr(''); if (msg) setLive(msg); }} onError={(m) => setOptErr(m)} />
+            <p className="field__hint">{t('app.dottedEsc')}</p>
             <div className="opt-edit__actions">
               <button type="button" className="btn btn--primary btn--sm" id="addgo" disabled={!addSel.length} onClick={addDates}>
-                {addSel.length ? `Tilføj ${addSel.length} ${addSel.length === 1 ? 'dato' : 'datoer'}` : 'Tilføj datoer'}</button>
+                {t('admin.addN', { n: addSel.length })}</button>
             </div>
           </div>
         )}
         <div className="field__error" id="opt-err" aria-live="polite">{optErr}</div>
         <div className="form-actions">
           <button type="submit" className="btn btn--primary" id="save" disabled={saving} aria-busy={saving || undefined}>
-            {saving ? (<><span className="spinner" aria-hidden="true" /> Gemmer…</>) : 'Gem ændringer'}
+            {saving ? (<><span className="spinner" aria-hidden="true" /> {t('vote.saving')}</>) : t('admin.save')}
           </button>
         </div>
       </form>
@@ -391,21 +391,21 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
         <div className="danger">
           {closed ? (
             <>
-              <h2 id="dz-h">Afstemningen er lukket</h2>
-              <p>Deltagerne kan se resultatet, men ikke stemme. Du kan åbne den igen når som helst.</p>
-              <button type="button" className="btn btn--danger-ghost" id="toggle" onClick={() => openDialog('reopen')}>Genåbn afstemning</button>
+              <h2 id="dz-h">{t('admin.dzClosedH')}</h2>
+              <p>{t('admin.dzClosedP')}</p>
+              <button type="button" className="btn btn--danger-ghost" id="toggle" onClick={() => openDialog('reopen')}>{t('admin.reopenPoll')}</button>
             </>
           ) : (
             <>
-              <h2 id="dz-h">Farezone</h2>
-              <p>Når du lukker afstemningen, kan ingen længere stemme eller ændre svar. Du kan vælge den endelige dato, og du kan genåbne senere.</p>
-              <button type="button" className="btn btn--danger" id="toggle" onClick={() => openDialog('close')}>Luk afstemning…</button>
+              <h2 id="dz-h">{t('admin.dzH')}</h2>
+              <p>{t('app.dzCloseP')}</p>
+              <button type="button" className="btn btn--danger" id="toggle" onClick={() => openDialog('close')}>{t('admin.closePollEllipsis')}</button>
             </>
           )}
-          <p>Har du delt admin-linket ved en fejl? Lav et nyt – det gamle holder op med at virke.</p>
-          <button type="button" className="btn btn--danger-ghost" id="rotate" onClick={() => openDialog('rotate')}>Lav nyt admin-link…</button>
-          <p>Slet hele afstemningen med alle datoforslag og svar. Linkene holder op med at virke. Det kan ikke fortrydes.</p>
-          <button type="button" className="btn btn--danger" id="delete-poll" onClick={() => openDialog('delete-poll')}>Slet afstemning…</button>
+          <p>{t('app.rotateHint')}</p>
+          <button type="button" className="btn btn--danger-ghost" id="rotate" onClick={() => openDialog('rotate')}>{t('app.rotateBtn')}</button>
+          <p>{t('app.deleteHint')}</p>
+          <button type="button" className="btn btn--danger" id="delete-poll" onClick={() => openDialog('delete-poll')}>{t('app.deleteBtn')}</button>
         </div>
       </section>
 
@@ -417,17 +417,17 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
             <p id="dlg-p">{dlgText.p}</p>
             {dialog === 'close' && (
               <div>
-                <label className="field__label" htmlFor="pick">Endelig dato (valgfri)</label>
+                <label className="field__label" htmlFor="pick">{t('app.finalOptional')}</label>
                 <select className="input" id="pick" value={chosen} onChange={(e) => setChosen(e.target.value)}>
-                  <option value="">Vælg ikke nu</option>
+                  <option value="">{t('app.notNow')}</option>
                   {ev.time_options.map((o) => (
-                    <option key={o.id} value={o.id}>{optionLabel(o)}{best.has(o.id) ? ' – ★ flest ja' : ''}</option>
+                    <option key={o.id} value={o.id}>{optionLabel(o)}{best.has(o.id) ? t('app.mostYes') : ''}</option>
                   ))}
                 </select>
               </div>
             )}
             <div className="modal__actions">
-              <button type="button" className="btn btn--ghost" id="dlg-cancel" onClick={closeDialog}>Annullér</button>
+              <button type="button" className="btn btn--ghost" id="dlg-cancel" onClick={closeDialog}>{t('common.cancel')}</button>
               <button type="button" className={`btn ${dlgText.cls}`} id="dlg-ok" onClick={confirmDialog} disabled={busy} aria-busy={busy || undefined}>{dlgText.ok}</button>
             </div>
           </>
@@ -439,7 +439,8 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
 }
 
 function Counter({ id, value, max }: { id: string; value: string; max: number }) {
+  const { tr } = useI18n();
   const n = textLength(value.trim());
   const st = counterState(n, max);
-  return <span className={`counter${st === 'over' ? ' counter--over' : st === 'warn' ? ' counter--warn' : ''}`} id={id}>{counterText(n, max)}</span>;
+  return <span className={`counter${st === 'over' ? ' counter--over' : st === 'warn' ? ' counter--warn' : ''}`} id={id}>{counterText(n, max, tr)}</span>;
 }

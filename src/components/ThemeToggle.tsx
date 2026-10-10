@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 // Port of doodle-ui/theme.js: Auto → Lys → Mørk, stored in localStorage['mt-theme'].
 type Theme = 'auto' | 'light' | 'dark';
-const LABEL: Record<Theme, string> = { auto: '◐ Auto', light: '☀ Lys', dark: '☾ Mørk' };
+const ICON: Record<Theme, string> = { auto: '◐', light: '☀', dark: '☾' };
 const NEXT: Record<Theme, Theme> = { auto: 'light', light: 'dark', dark: 'auto' };
 const KEY = 'mt-theme';
 
@@ -13,6 +14,7 @@ export function applyTheme(t: Theme) {
 }
 
 export default function ThemeToggle() {
+  const t = useTranslations('theme');
   const [theme, setTheme] = useState<Theme>('auto');
   useEffect(() => {
     const cur = document.documentElement.getAttribute('data-theme');
@@ -20,13 +22,13 @@ export default function ThemeToggle() {
   }, []);
   return (
     <button type="button" className="icon-btn" id="theme-toggle"
-      aria-label={`Tema: ${LABEL[theme].slice(2)}. Tryk for at skifte.`}
+      aria-label={t('aria', { name: t(theme) })}
       onClick={() => {
         const n = NEXT[theme];
         try { localStorage.setItem(KEY, n); } catch { /* private mode */ }
         applyTheme(n); setTheme(n);
       }}>
-      {LABEL[theme]}
+      {`${ICON[theme]} ${t(theme)}`}
     </button>
   );
 }

@@ -1,9 +1,10 @@
+import type { Tr } from '@/i18n/translator';
 // Pure helpers for the admin UI (unit-tested).
 
 /** Toast text after pick / change / clear (design §27). */
-export function undoMessage(prev: number | null, next: number | null, label: string): string {
-  if (next === null) return 'Valget er fjernet.';
-  return prev === null ? `${label} er valgt.` : `Skiftet til ${label}.`;
+export function undoMessage(prev: number | null, next: number | null, label: string, t: Tr): string {
+  if (next === null) return t('admin.choiceRemoved');
+  return prev === null ? t('admin.chosenLive', { date: label }) : t('admin.switchedLive', { date: label });
 }
 
 /** Focus target after deleting `id` from an ordered list: next, else previous, else null (→ heading). */

@@ -1,4 +1,4 @@
-import { addDays, basicDate, formatDateShort } from './dates';
+import { addDays, basicDate } from './dates';
 // Browser-side formatting helpers. Dates are plain 'YYYY-MM-DD' (whole days, same in every time zone).
 
 /** Score for "★ Bedst": yes = 2, maybe = 1 (design §15.3). */
@@ -11,10 +11,6 @@ export function bestIds(opts: { id: number; votes: { yes: number; maybe: number 
 }
 
 type Opt = { date: string };
-/** "fre. 16. okt. 2026". */
-export const optionLabel = (o: Opt) => formatDateShort(o.date);
-/** Result banner: "fre. 16. okt. 2026 (hele dagen)". */
-export const optionLong = (o: Opt) => `${formatDateShort(o.date)} (hele dagen)`;
 /** Google Calendar all-day link: dates=YYYYMMDD/YYYYMMDD (next day). */
 export function googleCalendarUrlFor(o: Opt, ev: { title: string; description?: string; url: string }): string {
   const p = new URLSearchParams({ action: 'TEMPLATE', text: ev.title, dates: `${basicDate(o.date)}/${basicDate(addDays(o.date, 1))}`, details: [ev.description, ev.url].filter(Boolean).join('\n\n') });

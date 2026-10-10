@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { countLabel, ogImagePath, ogTitle } from '../src/lib/og';
+import { ogImagePath, ogTitle } from '../src/lib/og';
 import { textLength } from '../src/lib/validate';
 
 describe('OG image text rules (design §14.4)', () => {
@@ -25,8 +25,6 @@ describe('OG image text rules (design §14.4)', () => {
     expect(ogTitle(' <b>x</b>\n\t\u0000y ').text).toBe('<b>x</b> y');
   });
   test('labels', () => {
-    expect(countLabel(1)).toBe('1 datoforslag');
-    expect(countLabel(5)).toBe('5 datoforslag');
     expect(ogImagePath('abc')).toBe('/en/p/abc/opengraph-image');
     expect(ogImagePath('abc', 'da')).toBe('/da/p/abc/opengraph-image');
   });
