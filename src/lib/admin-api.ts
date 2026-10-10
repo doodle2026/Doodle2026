@@ -11,8 +11,8 @@ export function bearer(req: Request): string | null {
   return m ? m[1] : null;
 }
 
-type Ctx = { params: Promise<{ id: string; pid?: string }> };
-type Handler = (a: { req: Request; slug: string; eventId: number; body: unknown; params: { id: string; pid?: string } }) => Promise<Response>;
+type Ctx = { params: Promise<{ id: string; pid?: string; oid?: string }> };
+type Handler = (a: { req: Request; slug: string; eventId: number; body: unknown; params: { id: string; pid?: string; oid?: string } }) => Promise<Response>;
 
 /**
  * Wraps admin endpoints: rate limit (writes), JSON-only + size cap (writes), Bearer token check
