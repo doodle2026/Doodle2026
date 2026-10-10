@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { isAdmin, pollExists } from '@/lib/events';
+import { pollExists } from '@/lib/events';
 
 /** Per-request nonce CSP (Next.js picks the nonce up for its own inline scripts) + security headers. */
 export async function middleware(req: NextRequest) {
@@ -22,7 +22,16 @@ export async function middleware(req: NextRequest) {
   // Unknown/malformed poll ids → real SSR 404 page. (notFound() thrown from a dynamic page renders
   // only the client error shell in Next 15, so we resolve it here and rewrite to the not-found route.)
   let res: NextResponse;
-  if ((await resolvePollPath(req.nextUrl.pathname)) === 'missing') {
+  const path = req.nextUrl.pathname;
+  const legacyAdmin = /^\/p\/([^/]+)\/admin\/([^/]+)\/?$/.exec(path);
+  if (legacyAdmin) {
+    // Old form /p/<id>/admin/<token> → token moves into the fragment (never sent to servers again).
+    // 302 + no-store so no cache keeps the token; no DB lookup, same response for valid/invalid tokens.
+    res = redirect(req, `/p/${legacyAdmin[1]}/admin#${legacyAdmin[2]}`, 302);
+  } else if (path.length > 1 && path.endsWith('/')) {
+    // We handle trailing-slash redirects ourselves (skipTrailingSlashRedirect) so they get our headers.
+    res = redirect(req, path.replace(/\/+$/, '') + req.nextUrl.search, 308);
+  } else if ((await resolvePollPath(path)) === 'missing') {
     requestHeaders.set('x-not-found', 'poll');
     res = NextResponse.rewrite(new URL('/_not-found', req.url), { request: { headers: requestHeaders } });
   } else {
@@ -41,15 +50,20 @@ export async function middleware(req: NextRequest) {
 }
 
 const isSecretUrl = (req: NextRequest) =>
-  /^\/p\/[^/]+\/admin(\/|$)/.test(req.nextUrl.pathname) || req.nextUrl.searchParams.has('edit');
+  /^\/p\/[^/]+\/admin(\/|$)/.test(req.nextUrl.pathname) ||
+  /^\/api\/events\/[^/]+\/(admin|close|reopen|rotate-admin)\/?$/.test(req.nextUrl.pathname) ||
+  (req.method === 'PATCH' && req.nextUrl.pathname.startsWith('/api/')) ||
+  req.nextUrl.searchParams.has('edit');
+
+/** Location built on APP_URL (not the Host header); Next emits same-origin redirects as relative paths. */
+const redirect = (req: NextRequest, location: string, status: 301 | 302 | 308) =>
+  NextResponse.redirect(new URL(location, process.env.APP_URL || req.nextUrl.origin), status);
 
 const safeDecode = (s: string) => { try { return decodeURIComponent(s); } catch { return ''; } };
 
-/** /p/<id> and /p/<id>/admin/<token>: resolve existence (and admin token) before rendering. */
+/** /p/<id> and /p/<id>/admin: poll must exist (the admin token is checked client→API, it never reaches pages). */
 async function resolvePollPath(path: string): Promise<'ok' | 'missing' | null> {
-  const admin = /^\/p\/([^/]*)\/admin\/([^/]*)\/?$/.exec(path);
-  if (admin) return (await isAdmin(safeDecode(admin[1]), safeDecode(admin[2]))) ? 'ok' : 'missing';
-  const m = /^\/p\/([^/]*)\/?$/.exec(path);
+  const m = /^\/p\/([^/]*)(?:\/admin)?$/.exec(path);
   if (m) return (await pollExists(safeDecode(m[1]))) ? 'ok' : 'missing';
   return null;
 }

@@ -7,7 +7,9 @@ type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-ex
 interface Res { status: number; headers: Headers; body: Json; text: string }
 
 async function call(path: string, init: RequestInit = {}): Promise<Res> {
-  const r = await fetch(BASE + path, { redirect: 'manual', ...init });
+  // Fresh client IP per request so the per-IP rate limiter doesn't interfere (it has its own tests).
+  const headers = { 'X-Forwarded-For': `10.${(Math.random() * 255) | 0}.${(Math.random() * 255) | 0}.${(Math.random() * 255) | 0}`, ...(init.headers as Record<string, string> ?? {}) };
+  const r = await fetch(BASE + path, { redirect: 'manual', ...init, headers });
   const text = await r.text();
   let body: Json = {};
   try { body = JSON.parse(text); } catch { /* html/text */ }
@@ -317,7 +319,7 @@ describe('admin token (no accounts)', () => {
     const c = await post(valid());
     expect(c.status).toBe(201);
     expect(c.body.admin_token).toMatch(TOKEN_RE);
-    expect(c.body.admin_url).toBe(`/p/${c.body.id}/admin/${c.body.admin_token}`);
+    expect(c.body.admin_url).toBe(`/p/${c.body.id}/admin#${c.body.admin_token}`); // fragment: never sent to servers
     expect(c.headers.get('cache-control')).toMatch(/no-store/);
     const g = await call(`/api/events/${c.body.id}?tz=Europe/Copenhagen`);
     expect(g.status).toBe(200);
@@ -343,20 +345,22 @@ describe('admin token (no accounts)', () => {
     const c = await post(valid());
     const { id, admin_token: token } = c.body;
     const pages = [
-      await call(`/p/${id}`), await call(`/p/${id}?created=1`), await call(`/e/${id}`),
-      await call(`/p/${id}/admin/${token.slice(0, -1)}x`), await call(`/api/events/${id}`),
-      await postRaw('{"title": 1}'), await call(`/api/events/${id}/admin/${token}`),
+      await call(`/p/${id}`), await call(`/p/${id}?created=1`), await call(`/e/${id}`), await call(`/p/${id}/admin`),
+      await call(`/api/events/${id}`), await postRaw('{"title": 1}'),
+      await call(`/api/events/${id}/admin`, { headers: { Authorization: `Bearer ${token.slice(0, -1)}x` } }),
     ];
     for (const r of pages) expect(leaks(r.text + JSON.stringify([...r.headers]), token)).toBe(false);
-    // Admin page itself: works, but no canonical/og:url (would leak the token into previews).
-    const adm = await call(`/p/${id}/admin/${token}`);
+    // Admin page shell: public data only, no canonical/og:url, noindex/no-store/no-referrer.
+    const adm = await call(`/p/${id}/admin`);
     expect(adm.status).toBe(200);
-    expect(adm.text).toContain('Du ser afstemningen som arrangør');
     expect(adm.text).not.toMatch(/rel="canonical"|property="og:/);
     expect(adm.text).toMatch(/<meta name="robots" content="noindex/);
     expect(adm.headers.get('cache-control')).toMatch(/no-store/);
     expect(adm.headers.get('referrer-policy')).toBe('no-referrer');
     expect(adm.headers.get('x-robots-tag')).toMatch(/noindex/);
+    // Using the token (Bearer) works and is not logged either.
+    const ok = await call(`/api/events/${id}/admin`, { headers: { Authorization: `Bearer ${token}` } });
+    expect(ok.status).toBe(200);
     const log = inject('serverLog');
     if (log) {
       await new Promise((r) => setTimeout(r, 300));
@@ -364,29 +368,38 @@ describe('admin token (no accounts)', () => {
     }
   });
 
-  test('admin/edit routes always send noindex + Referrer-Policy: no-referrer (incl. 404 and ?edit=)', async () => {
+  test('N1: admin/edit routes incl. redirects send no-store + noindex + no-referrer', async () => {
     const c = await post(valid());
-    for (const path of [`/p/${c.body.id}/admin/${c.body.admin_token}`, `/p/${c.body.id}/admin/${'B'.repeat(43)}`,
-      `/p/${c.body.id}?edit=${'C'.repeat(43)}`]) {
+    const { id, admin_token: token } = c.body;
+    for (const path of [`/p/${id}/admin`, `/p/${id}/admin/`, `/p/${id}/admin/${token}`, `/p/${id}/admin/${'B'.repeat(43)}/`,
+      `/p/${id}?edit=${'C'.repeat(43)}`, `/p/AAAAAAAAAAAAAAAAAAAAAA/admin`]) {
       const r = await call(path);
       expect(r.headers.get('referrer-policy'), path).toBe('no-referrer');
       expect(r.headers.get('x-robots-tag'), path).toMatch(/noindex, nofollow/);
-      expect(r.text, path).toMatch(/<meta name="robots" content="noindex/);
+      expect(r.headers.get('cache-control'), path).toMatch(/no-store/);
+      if (r.status === 200) expect(r.text, path).toMatch(/<meta name="robots" content="noindex/);
       expect(r.text, path).not.toMatch(/property="og:|rel="canonical"/);
     }
   });
-  test('wrong, malformed or other poll\'s admin token → friendly 404', async () => {
-    const a = await post(valid()); const b = await post(valid());
-    for (const path of [
-      `/p/${a.body.id}/admin/${b.body.admin_token}`,
-      `/p/${a.body.id}/admin/${'A'.repeat(43)}`,
-      `/p/${a.body.id}/admin/short`,
-      `/p/${a.body.id}/admin/${a.body.admin_token.toLowerCase() === a.body.admin_token ? 'x' : a.body.admin_token.toLowerCase()}`,
-    ]) {
-      const r = await call(path);
-      expect(r.status, path).toBe(404);
-      expect(r.text).toContain('Hov, den afstemning kan vi ikke finde');
+
+  test('legacy /p/<id>/admin/<token> → 302 to /p/<id>/admin#<token> (no DB check, no cache)', async () => {
+    const c = await post(valid());
+    const { id, admin_token: token } = c.body;
+    for (const t of [token, 'A'.repeat(43)]) {
+      const r = await call(`/p/${id}/admin/${t}`);
+      expect(r.status).toBe(302);
+      expect(r.headers.get('location')).toBe(`/p/${id}/admin#${t}`);
+      expect(r.headers.get('cache-control')).toMatch(/no-store/);
     }
+    const slash = await call(`/p/${id}/admin/`);
+    expect(slash.status).toBe(308);
+    expect(slash.headers.get('location')).toBe(`/p/${id}/admin`);
+  });
+
+  test('admin page for unknown poll → friendly 404', async () => {
+    const r = await call('/p/AAAAAAAAAAAAAAAAAAAAAA/admin');
+    expect(r.status).toBe(404);
+    expect(r.text).toContain('Hov, den afstemning kan vi ikke finde');
   });
 });
 
@@ -425,7 +438,7 @@ describe('OG image route + link preview', () => {
     expect(r.text).toContain(`<meta name="twitter:image" content="${img}"/>`);
     expect(r.text).not.toContain(token);
     // Admin page: still no OG image / preview tags
-    const adm = await call(`/p/${id}/admin/${token}`);
+    const adm = await call(`/p/${id}/admin`);
     expect(adm.text).not.toMatch(/og:image|twitter:/);
   });
 });

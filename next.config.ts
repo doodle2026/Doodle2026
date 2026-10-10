@@ -4,6 +4,8 @@ const nextConfig: NextConfig = {
   // Tests build into a separate dir so they never clobber a running dev/prod server's .next.
   distDir: process.env.NEXT_DIST_DIR || '.next',
   poweredByHeader: false,
+  // Trailing-slash redirects are done in middleware so they carry our security headers (N1).
+  skipTrailingSlashRedirect: true,
   reactStrictMode: true,
   // Render metadata blocking (not streamed) for every UA, so notFound() yields a real SSR 404 page
   // and link-preview tags are always in <head>.
