@@ -1,5 +1,14 @@
 import { spawn, execSync, type ChildProcess } from 'node:child_process';
-import { createWriteStream, mkdirSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync } from 'node:fs';
+
+/** N3: `npm test` works without extra env – fall back to .env.test (real env vars always win). */
+function loadEnvTest() {
+  if (!existsSync('.env.test')) return;
+  for (const line of readFileSync('.env.test', 'utf8').split('\n')) {
+    const m = /^\s*([A-Z0-9_]+)\s*=\s*"?([^"#]*)"?\s*(#.*)?$/.exec(line);
+    if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].trim();
+  }
+}
 import type { TestProject } from 'vitest/node';
 
 /**
@@ -11,6 +20,7 @@ import type { TestProject } from 'vitest/node';
 let child: ChildProcess | undefined;
 
 export default async function setup(project: TestProject) {
+  loadEnvTest();
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must point at a Postgres test database');
   let base = process.env.TEST_BASE_URL;
   if (!base) {
