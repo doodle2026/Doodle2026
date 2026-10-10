@@ -5,16 +5,18 @@
 import { describe, test, expect, inject, beforeAll, afterAll } from 'vitest';
 import { existsSync } from 'node:fs';
 import type { Browser } from 'playwright-core';
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
 
 const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
 const BASE = inject('baseUrl');
 const Y = new Date().getUTCFullYear() + 1;
 let browser: Browser;
 
-async function poll(times = [`${Y}-11-03T09:00:00Z`, `${Y}-11-04T21:30:00Z`]) {
+async function poll(dates = [`${Y}-11-03`, `${Y}-11-04`]) {
   const r = await fetch(`${BASE}/api/events`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `10.6.${(Math.random() * 255) | 0}.1` },
-    body: JSON.stringify({ title: 'E2E', time_options: times.map((t, i) => ({ start: t, ...(i === 1 ? { end: `${Y}-11-05T00:30:00Z` } : {}) })) }),
+    body: JSON.stringify({ title: 'E2E', options: dates.map((date) => ({ date })) }),
   });
   return r.json() as Promise<{ id: string; admin_token: string }>;
 }
@@ -24,7 +26,7 @@ describe.skipIf(!existsSync(CHROME))('voting UI (headless Chrome)', () => {
     const { chromium } = await import('playwright-core');
     browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
   });
-  afterAll(async () => { await browser?.close(); });
+  afterAll(async () => { await browser?.close(); await prisma.$disconnect(); });
 
   test('V2: "Måske" chosen after a dropped first save is saved as Måske, not the earlier "Nej"', async () => {
     const { id } = await poll();
@@ -66,7 +68,7 @@ describe.skipIf(!existsSync(CHROME))('voting UI (headless Chrome)', () => {
     await p.close();
   }, 30_000);
 
-  test('V3 mobile hint, V4 name error clears on change, V6 totals only saved, V8 next-day marker', async () => {
+  test('V3 mobile hint, V4 name error clears on change, V6 totals only saved, date column heads', async () => {
     const { id } = await poll();
     const m = await browser.newPage({ viewport: { width: 390, height: 844 } });
     await m.goto(`${BASE}/p/${id}`);
@@ -84,8 +86,27 @@ describe.skipIf(!existsSync(CHROME))('voting UI (headless Chrome)', () => {
     await d.click('.tri[data-i="0"]'); // unsaved Ja
     expect(await d.textContent('tfoot')).toContain('0 ja');
     expect(await d.$('thead th.is-best')).toBeNull();
-    expect(await d.textContent('thead')).toMatch(/\(\+1 dag\)/);
+    expect(await d.textContent('thead')).toMatch(/(Man|Tir|Ons|Tor|Fre|Lør|Søn)\.\s*3\. nov\./);
+    expect(await d.textContent('#grid-h')).toBe('Hvilke datoer passer dig?');
     await d.close();
+  }, 30_000);
+
+  test('date columns render identically in browser time zones UTC+14 and UTC−10 (no shift)', async () => {
+    const { id } = await poll([`${Y}-03-29`, `${Y}-11-01`]);
+    const heads: string[] = [];
+    for (const timezoneId of ['Pacific/Kiritimati', 'America/Adak', 'UTC']) {
+      const ctx = await browser.newContext({ timezoneId, viewport: { width: 1100, height: 900 } });
+      const pg = await ctx.newPage();
+      await pg.goto(`${BASE}/p/${id}`);
+      await pg.waitForSelector('#grid thead');
+      expect(await pg.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(timezoneId);
+      heads.push((await pg.textContent('#grid thead'))!);
+      await ctx.close();
+    }
+    expect(new Set(heads).size).toBe(1);
+    expect(heads[0]).toContain('29. mar.');
+    expect(heads[0]).toContain('1. nov.');
+    expect(heads[0]).not.toMatch(/\d\d[:.]\d\d/);
   }, 30_000);
 
   test('V5: returning voter sees a different message once the poll is closed', async () => {

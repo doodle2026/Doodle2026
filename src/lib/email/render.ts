@@ -1,15 +1,19 @@
 /**
  * the design spec (doodle-ui) e-mail templates (invitation / reminder) → { subject, html, text }.
  * Templates are synced verbatim into ./templates.ts (scripts/sync-email-templates.mjs); Mustache escapes all
- * user values in HTML. Times are formatted server-side in Danish, 24 h, in the poll's time zone.
+ * user values in HTML. Dates are plain days; only a deadline (instant) uses a time zone.
  */
 import Mustache from 'mustache';
 import { TEMPLATES } from './templates';
+import { formatDateShort } from '../dates';
 
 export interface PollEmailData {
   assetBaseUrl: string; appUrl: string; eventTitle: string; organizerName: string; recipientName?: string;
-  description?: string; pollUrl: string; optionCount: number; timeZoneLabel: string;
-  dates: { dateLabel: string; slots: { timeLabel: string }[] }[];
+  description?: string; pollUrl: string; optionCount: number;
+  /** One per option, chronological: "fre. 16. okt. 2026". */
+  dates: { dateLabel: string }[];
+  /** Reminder footer: tracking on → "kun til inviterede, der ikke har svaret". */
+  trackingEnabled?: boolean;
   deadline?: string; respondedCount?: number; footerText?: string;
   /** Organizer's optional message: plain text, ≤ 1000 graphemes, escaped by the template (pre-line). */
   personalMessage?: string;
@@ -38,17 +42,9 @@ export function formatters(tz = DEFAULT_TZ) {
   };
 }
 
-/** Options → chronologically sorted date groups with slot labels. */
-export function groupDates(options: { startAt: Date; endAt: Date | null }[], tz = DEFAULT_TZ): PollEmailData['dates'] {
-  const f = formatters(tz);
-  const out: (PollEmailData['dates'][number] & { k: string })[] = [];
-  for (const o of [...options].sort((a, b) => a.startAt.getTime() - b.startAt.getTime())) {
-    const k = f.dayKey(o.startAt);
-    let g = out[out.length - 1];
-    if (!g || g.k !== k) out.push(g = { k, dateLabel: f.dateLabel(o.startAt), slots: [] });
-    g.slots.push({ timeLabel: f.timeLabel(o.startAt, o.endAt) });
-  }
-  return out.map(({ dateLabel, slots }) => ({ dateLabel, slots }));
+/** Options → chronological labels "fre. 16. okt. 2026" (time-zone free). */
+export function dateLabels(options: { date: string }[]): PollEmailData['dates'] {
+  return [...options].sort((a, b) => a.date.localeCompare(b.date)).map((o) => ({ dateLabel: formatDateShort(o.date) }));
 }
 
 /** Public poll link, optionally with a personal invite fragment (#inv=<43-char token>, step 5) – never admin/edit. */
@@ -67,9 +63,10 @@ const escape = (v: unknown) => String(v).replace(/[&<>"']/g, (c) => ESC[c]);
 const decode = (s: string) => s.replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d)).replace(/&amp;/g, '&');
 
 function render(kind: 'invitation' | 'reminder', d: PollEmailData, subject: string): Rendered {
+  const T = TEMPLATES;
   assertPublicOnly(d);
   const data = { ...d, description: d.description?.trim() || undefined, personalMessage: d.personalMessage?.trim() || undefined, respondedCount: d.respondedCount || undefined };
-  const r = { subject: oneLine(subject), html: Mustache.render(TEMPLATES[kind].html, data, undefined, { escape }), text: Mustache.render(TEMPLATES[kind].text, data, undefined, { escape: String }) }; // plain text: no HTML escaping
+  const r = { subject: oneLine(subject), html: Mustache.render(T[kind].html, data, undefined, { escape }), text: Mustache.render(T[kind].text, data, undefined, { escape: String }) }; // plain text: no HTML escaping
   assertPublicOnly(d, r);
   return r;
 }

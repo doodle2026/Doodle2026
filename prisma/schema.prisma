@@ -47,13 +47,14 @@ model Event {
 model TimeOption {
   id       Int       @id @default(autoincrement())
   eventId  Int       @map("event_id")
-  startAt  DateTime  @map("start_at") @db.Timestamptz(3)
-  endAt    DateTime? @map("end_at") @db.Timestamptz(3)
+  /// Calendar date (no time zone): every option is a whole day.
+  date     DateTime  @db.Date
   position Int
   event    Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   votes    Vote[]
   chosenBy Event?    @relation("ChosenOption")
 
+  @@unique([eventId, date])
   @@index([eventId])
   @@map("time_options")
 }

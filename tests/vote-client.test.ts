@@ -74,7 +74,7 @@ describe('V1: shared name normalizer (no impersonation with invisible chars)', (
 });
 
 describe('V3/V5/V8 helpers', async () => {
-  const { savedMessage, nextDayMarker, HINT_CARDS, HINT_GRID } = await import('../src/lib/vote-client');
+  const { savedMessage, HINT_CARDS, HINT_GRID } = await import('../src/lib/vote-client');
   test('V5 saved message: fresh / returning / closed', () => {
     expect(savedMessage('Jan', true, false)).toBe('✓ Tak, Jan! Dine svar er gemt.');
     expect(savedMessage('Jan', false, false)).toMatch(/^✓ Du har svaret som Jan\./);
@@ -83,16 +83,5 @@ describe('V3/V5/V8 helpers', async () => {
   test('V3 hints differ for grid and cards; card hint mentions no keyboard/cell cycling', () => {
     expect(HINT_GRID).toMatch(/celle/);
     expect(HINT_CARDS).not.toMatch(/celle|←|Delete/);
-  });
-  test('V8 next-day marker', () => {
-    expect(nextDayMarker('2026-12-01', '2026-12-01')).toBe('');
-    expect(nextDayMarker('2026-12-01', '2026-12-02')).toBe(' (+1 dag)');
-    expect(nextDayMarker('2026-12-31', '2027-01-02')).toBe(' (+2 dage)');
-  });
-  test('V8 whenLabel shows the marker (browser tz)', async () => {
-    const { whenLabel } = await import('../src/lib/format');
-    // 21:30Z–00:30Z crosses local midnight in UTC and in Europe/* zones alike.
-    expect(whenLabel('2026-12-01T21:30:00Z', '2026-12-02T00:30:00Z')).toMatch(/ \(\+1 dag\)$/);
-    expect(whenLabel('2026-12-01T10:00:00Z', '2026-12-01T11:00:00Z')).not.toMatch(/dag/);
   });
 });

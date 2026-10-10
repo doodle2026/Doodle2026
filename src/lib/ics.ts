@@ -1,3 +1,4 @@
+import { addDays, basicDate } from './dates';
 import { INVISIBLE_FORMAT_RE } from './validate';
 // Minimal RFC 5545 VCALENDAR/VEVENT writer (no deps).
 const CRLF = '\r\n';
@@ -26,17 +27,17 @@ export function icsFold(line: string): string {
 /** 20261103T090000Z */
 export const icsDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
-export interface IcsEvent { uid: string; stamp: Date; sequence?: number; lastModified?: Date; start: Date; end: Date | null; summary: string; description?: string; url?: string }
-export const DEFAULT_DURATION_MS = 60 * 60 * 1000;
+/** All-day event: `date` 'YYYY-MM-DD' → DTSTART;VALUE=DATE + DTEND next day, no TZID. */
+export type IcsEvent = { uid: string; stamp: Date; sequence?: number; lastModified?: Date; summary: string; description?: string; url?: string; date: string };
 
 export function buildIcs(e: IcsEvent): string {
-  const end = e.end ?? new Date(e.start.getTime() + DEFAULT_DURATION_MS);
+  const when = [`DTSTART;VALUE=DATE:${basicDate(e.date)}`, `DTEND;VALUE=DATE:${basicDate(addDays(e.date, 1))}`];
   const lines = [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//GrabAday//GrabAday//DA', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT',
     `UID:${e.uid}`, `DTSTAMP:${icsDate(e.stamp)}`,
     ...(e.sequence !== undefined ? [`SEQUENCE:${e.sequence}`] : []),
-    ...(e.lastModified ? [`LAST-MODIFIED:${icsDate(e.lastModified)}`] : []), `DTSTART:${icsDate(e.start)}`, `DTEND:${icsDate(end)}`,
+    ...(e.lastModified ? [`LAST-MODIFIED:${icsDate(e.lastModified)}`] : []), ...when,
     `SUMMARY:${icsEscape(e.summary)}`,
     ...(e.description ? [`DESCRIPTION:${icsEscape(e.description)}`] : []),
     ...(e.url ? [`URL:${e.url}`] : []),
@@ -49,7 +50,8 @@ export function buildIcs(e: IcsEvent): string {
 export function icsDisposition(rawTitle: string): string {
   // Bidi controls / invisible chars could spoof the displayed name ("…\u202Egnp.exe") → removed from BOTH variants.
   const title = rawTitle.replace(INVISIBLE_FORMAT_RE, '');
-  const base = title.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/æ/gi, 'ae').replace(/ø/gi, 'oe').replace(/å/gi, 'aa')
+  // K5: transliterate æ/ø/å BEFORE NFKD (which would turn å into plain a), strip accents, drop everything else non-ASCII.
+  const base = title.replace(/æ/gi, 'ae').replace(/ø/gi, 'oe').replace(/å/gi, 'aa').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).toLowerCase() || 'moede';
   const utf8 = encodeURIComponent((title.replace(/[\\/:*?"<>|\u0000-\u001F]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'moede') + '.ics');
   return `attachment; filename="${base}.ics"; filename*=UTF-8''${utf8}`;

@@ -24,20 +24,15 @@ const DAY = 86_400_000;
 const base = new Date(Date.UTC(new Date().getUTCFullYear() + 1, 10, 3)); // 3 Nov next year (CET, UTC+1)
 const Y = base.getUTCFullYear();
 const iso = (s: string) => `${Y}-${s}`;
-const opt = (start: string, end?: string | null) => (end === undefined ? { start } : { start, end });
-const valid = () => ({
-  title: '  Teammøde  ', description: '  Kvartalsmøde \n',
-  time_options: [
-    opt(iso('11-05T14:00:00+01:00'), iso('11-05T15:00:00+01:00')),
-    opt(iso('11-03T09:00:00+01:00')),
-    opt(iso('11-03T08:30:00Z'), ''),
-  ],
-});
+const d = (date: string) => ({ date });
+const valid = () => ({ title: '  Teammøde  ', description: '  Kvartalsmøde \n', options: [d(iso('11-05')), d(iso('11-03')), d(iso('11-04'))] });
+const utcToday = () => new Date().toISOString().slice(0, 10);
+const addDays = (s: string, n: number) => new Date(Date.parse(`${s}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
 let keySeq = 0;
 const uniqueKey = (p: string) => `${p}-${Date.now().toString(36)}-${keySeq++}-${Math.random().toString(36).slice(2, 10)}`;
 
 describe('create + fetch', () => {
-  test('creates, stores UTC, sorts, returns design shape', async () => {
+  test('creates a date poll: plain dates, sorted ascending, no time zone anywhere', async () => {
     const c = await post(valid());
     expect(c.status).toBe(201);
     expect(c.body.id).toMatch(/^[A-Za-z0-9_-]{22}$/);
@@ -47,23 +42,11 @@ describe('create + fetch', () => {
     expect(g.status).toBe(200);
     expect(g.body.title).toBe('Teammøde');
     expect(g.body.description).toBe('Kvartalsmøde');
-    expect(g.body.time_options.map((o: Json) => [o.start_at, o.end_at])).toEqual([
-      [iso('11-03T08:00:00.000Z'), null],
-      [iso('11-03T08:30:00.000Z'), null],
-      [iso('11-05T13:00:00.000Z'), iso('11-05T14:00:00.000Z')],
-    ]);
-    expect(g.body.timezone).toBe('UTC');
-    expect(g.body.options[0]).toEqual({ date: iso('11-03'), start: '08:00', end: null });
-  });
-
-  test('?tz= renders design options in that zone; invalid tz falls back to UTC', async () => {
-    const { body: { id } } = await post(valid());
-    const cph = await call(`/api/events/${id}?tz=Europe/Copenhagen`);
-    expect(cph.body.timezone).toBe('Europe/Copenhagen');
-    expect(cph.body.options[2]).toEqual({ date: iso('11-05'), start: '14:00', end: '15:00' });
-    const bad = await call(`/api/events/${id}?tz=Not/AZone`);
-    expect(bad.status).toBe(200);
-    expect(bad.body.timezone).toBe('UTC');
+    expect(g.body.time_options.map((o: Json) => o.date)).toEqual([iso('11-03'), iso('11-04'), iso('11-05')]);
+    expect(g.body.time_options[0]).not.toHaveProperty('start_at');
+    expect(g.body).not.toHaveProperty('mode');
+    expect(g.body.options.map((o: Json) => o.date)).toEqual([iso('11-03'), iso('11-04'), iso('11-05')]);
+    expect(g.body).not.toHaveProperty('timezone');
   });
 
   test('ids are unique', async () => {
@@ -71,32 +54,33 @@ describe('create + fetch', () => {
     expect(a.body.id).not.toBe(b.body.id);
   });
 
-  test('duplicates (same instant, different offsets) are deduplicated', async () => {
-    const r = await post({ title: 'x', time_options: [
-      opt(iso('11-03T09:00:00+01:00'), iso('11-03T10:00:00+01:00')),
-      opt(iso('11-03T08:00:00Z'), iso('11-03T09:00:00Z')),
-      opt(iso('11-03T09:00:00+01:00')),
-      opt(iso('11-03T09:00:00+01:00'), null),
-    ] });
-    expect(r.status).toBe(201);
-    expect(r.body.time_options).toHaveLength(2);
+  test('duplicate dates → clear 400 (not deduplicated)', async () => {
+    const r = await post({ title: 'x', options: [d(iso('11-03')), d(iso('11-04')), d(iso('11-03'))] });
+    expect(r.status).toBe(400);
+    expect(r.body.errors).toEqual([`Dato 3: ${iso('11-03')} er valgt flere gange.`]);
+  });
+
+  test('time_options with times is rejected – polls are date-only', async () => {
+    const r = await post({ title: 'x', time_options: [{ start: iso('11-03T09:00:00Z') }] });
+    expect(r.status).toBe(400);
+    expect(r.body.errors[0]).toMatch(/options/);
   });
 });
 
 describe('validation → 400, never 500', () => {
-  const o1 = [opt(iso('11-03T09:00:00Z'))];
+  const o1 = [d(iso('11-03'))];
   const weird: [string, unknown][] = [
     ['null body', 'null'], ['array body', '[]'], ['string body', '"hi"'], ['number body', '42'], ['empty body', ''],
-    ['title number', { title: 5, time_options: o1 }],
-    ['title object', { title: { a: 1 }, time_options: o1 }],
-    ['description array', { title: 'x', description: [1], time_options: o1 }],
-    ['options string', { title: 'x', time_options: 'tomorrow' }],
-    ['options object', { title: 'x', time_options: { 0: o1[0] } }],
-    ['option null', { title: 'x', time_options: [null] }],
-    ['option number', { title: 'x', time_options: [7] }],
-    ['start number', { title: 'x', time_options: [{ start: 1762160400000 }] }],
-    ['start object', { title: 'x', time_options: [{ start: { $gt: '' } }] }],
-    ['end bool', { title: 'x', time_options: [{ start: iso('11-03T09:00:00Z'), end: true }] }],
+    ['title number', { title: 5, options: o1 }],
+    ['title object', { title: { a: 1 }, options: o1 }],
+    ['description array', { title: 'x', description: [1], options: o1 }],
+    ['options string', { title: 'x', options: 'tomorrow' }],
+    ['options object', { title: 'x', options: { 0: o1[0] } }],
+    ['option null', { title: 'x', options: [null] }],
+    ['option number', { title: 'x', options: [7] }],
+    ['date number', { title: 'x', options: [{ date: 1762160400000 }] }],
+    ['date object', { title: 'x', options: [{ date: { $gt: '' } }] }],
+    ['date with time', { title: 'x', options: [{ date: iso('11-03T09:00:00Z') }] }],
   ];
   test.each(weird)('%s', async (_name, body) => {
     const r = await postRaw(typeof body === 'string' ? body : JSON.stringify(body));
@@ -119,66 +103,68 @@ describe('validation → 400, never 500', () => {
     expect((await postRaw('{bad')).status).toBe(400);
   });
   test('missing/blank title and no options', async () => {
-    const r = await post({ title: '   ', time_options: [] });
+    const r = await post({ title: '   ', options: [] });
     expect(r.status).toBe(400);
     expect(r.body.errors).toHaveLength(2);
   });
   test('max lengths: title 200, description 2000 (after trim)', async () => {
-    expect((await post({ title: 'a'.repeat(200), description: 'b'.repeat(2000), time_options: o1 })).status).toBe(201);
-    expect((await post({ title: ' ' + 'a'.repeat(200) + ' ', time_options: o1 })).status).toBe(201);
-    expect((await post({ title: 'a'.repeat(201), time_options: o1 })).status).toBe(400);
-    expect((await post({ title: 'x', description: 'b'.repeat(2001), time_options: o1 })).status).toBe(400);
+    expect((await post({ title: 'a'.repeat(200), description: 'b'.repeat(2000), options: o1 })).status).toBe(201);
+    expect((await post({ title: ' ' + 'a'.repeat(200) + ' ', options: o1 })).status).toBe(201);
+    expect((await post({ title: 'a'.repeat(201), options: o1 })).status).toBe(400);
+    expect((await post({ title: 'x', description: 'b'.repeat(2001), options: o1 })).status).toBe(400);
   });
   test('M1: over-long title/description → 400, never truncated', async () => {
     const t = 'a'.repeat(5000);
-    const r = await post({ title: t, description: 'b'.repeat(10000), time_options: o1 });
+    const r = await post({ title: t, description: 'b'.repeat(10000), options: o1 });
     expect(r.status).toBe(400);
     expect(r.body.errors).toEqual(['Titel må højst være 200 tegn.', 'Beskrivelse må højst være 2000 tegn.']);
-    const ok = await post({ title: 'a'.repeat(200), description: 'b'.repeat(2000), time_options: o1 });
+    const ok = await post({ title: 'a'.repeat(200), description: 'b'.repeat(2000), options: o1 });
     expect(ok.body.title).toHaveLength(200);
     expect(ok.body.description).toHaveLength(2000);
   });
   test('M2: whitespace / zero-width-only titles rejected', async () => {
     for (const t of ['\u200B\u200B', ' \u200C\u200D\uFEFF ', '\u2060', '\u00A0\u3000\t\n', '\u00AD']) {
-      const r = await post({ title: t, time_options: o1 });
+      const r = await post({ title: t, options: o1 });
       expect(r.status, JSON.stringify(t)).toBe(400);
       expect(r.body.errors).toContain('Titel er påkrævet.');
     }
-    expect((await post({ title: 'a\u200Bb', time_options: o1 })).status).toBe(201);
+    expect((await post({ title: 'a\u200Bb', options: o1 })).status).toBe(201);
   });
   test('L1: lengths counted in graphemes (👨‍👩‍👧‍👦 = 1, 👍🏽 = 1)', async () => {
     const fam = '👨‍👩‍👧‍👦';
-    const ok = await post({ title: fam.repeat(200), description: '👍🏽'.repeat(2000), time_options: o1 });
+    const ok = await post({ title: fam.repeat(200), description: '👍🏽'.repeat(2000), options: o1 });
     expect(ok.status).toBe(201);
     expect(ok.body.title).toBe(fam.repeat(200));
-    expect((await post({ title: fam.repeat(201), time_options: o1 })).status).toBe(400);
-    expect((await post({ title: 'x', description: '👍🏽'.repeat(2001), time_options: o1 })).status).toBe(400);
+    expect((await post({ title: fam.repeat(201), options: o1 })).status).toBe(400);
+    expect((await post({ title: 'x', description: '👍🏽'.repeat(2001), options: o1 })).status).toBe(400);
   });
-  test('max 100 time options', async () => {
-    const mk = (n: number) => Array.from({ length: n }, (_, i) => opt(new Date(base.getTime() + i * 60_000).toISOString()));
-    expect((await post({ title: 'x', time_options: mk(100) })).status).toBe(201);
-    expect((await post({ title: 'x', time_options: mk(101) })).status).toBe(400);
+  test('1–100 dates: 100 ok, 101 rejected, 0 rejected', async () => {
+    const mk = (n: number) => Array.from({ length: n }, (_, i) => d(addDays(iso('01-01'), i)));
+    expect((await post({ title: 'x', options: mk(100) })).status).toBe(201);
+    const r = await post({ title: 'x', options: mk(101) });
+    expect(r.status).toBe(400);
+    expect(r.body.errors).toEqual(['Højst 100 datoer.']);
+    expect((await post({ title: 'x', options: [] })).body.errors).toContain('Mindst én dato er påkrævet.');
   });
-  test('invalid datetimes: no offset, impossible date, bad hour, end before start', async () => {
-    const r = await post({ title: 'x', time_options: [
-      opt(iso('11-03T09:00:00')), opt(`${Y + 1}-02-30T10:00:00Z`), opt(iso('11-03T25:00:00Z')),
-      opt(iso('11-03T10:00:00Z'), iso('11-03T09:00:00Z')), opt(iso('11-03T10:00:00Z'), iso('11-03T10:00:00Z')),
-      opt(iso('11-03')),
-    ] });
+  test('real calendar dates only: leap years (2028-02-29 ok, 2027-02-29 not), month/day ranges, strict format', async () => {
+    expect((await post({ title: 'x', options: [d('2028-02-29')] })).status).toBe(201);
+    const r = await post({ title: 'x', options: [d('2027-02-29'), d(`${Y}-04-31`), d(`${Y}-13-01`), d(`${Y}-1-05`), d(`${Y}-11-03 `), d('')] });
     expect(r.status).toBe(400);
     expect(r.body.errors).toHaveLength(6);
+    expect(r.body.errors[0]).toMatch(/^Dato 1: ugyldig dato/);
   });
-  test('past time options rejected', async () => {
-    const r = await post({ title: 'x', time_options: [opt(new Date(Date.now() - 60_000).toISOString())] });
+  test('today boundary: accepts dates ≥ UTC today − 1 day (no valid local today rejected), rejects older', async () => {
+    const t = utcToday();
+    for (const ok of [addDays(t, -1), t, addDays(t, 1)]) expect((await post({ title: 'x', options: [d(ok)] })).status, ok).toBe(201);
+    const r = await post({ title: 'x', options: [d(addDays(t, -2))] });
     expect(r.status).toBe(400);
     expect(r.body.errors[0]).toMatch(/fortiden/);
-    expect((await post({ title: 'x', time_options: [opt(new Date(Date.now() + DAY).toISOString())] })).status).toBe(201);
   });
 });
 
 describe('limits & idempotency', () => {
   test('payload > 32kb → 413 JSON', async () => {
-    const r = await post({ title: 'x', description: 'a'.repeat(40 * 1024), time_options: [] });
+    const r = await post({ title: 'x', description: 'a'.repeat(40 * 1024), options: [] });
     expect(r.status).toBe(413);
     expect(r.headers.get('content-type')).toMatch(/json/);
     expect(r.body.errors.length).toBeGreaterThan(0);
@@ -225,7 +211,7 @@ describe('slugs, pages, XSS', () => {
   });
   test('view page server-renders escaped <title> and og tags, og:url from APP_URL', async () => {
     const evil = `</title><script>alert(1)</script>"'&`;
-    const { body: { id } } = await post({ title: evil, description: '"><img src=x onerror=alert(1)>', time_options: [opt(iso('11-03T09:00:00Z'))] });
+    const { body: { id } } = await post({ title: evil, description: '"><img src=x onerror=alert(1)>', options: [d(iso('11-03'))] });
     const r = await call(`/p/${id}`, { headers: { Host: 'evil.example' } });
     expect(r.status).toBe(200);
     expect(r.text).not.toContain('<script>alert');
@@ -283,14 +269,14 @@ describe('slugs, pages, XSS', () => {
     expect(r.text).toMatch(/<script nonce="[^"]+">\(function\(\)\{try\{var q=/); // theme init before paint, CSP-nonced
   });
   test('link-preview meta per design §14.3 (absolute URLs, locale, canonical, description)', async () => {
-    const { body: { id } } = await post({ title: 'Frokost & "kage"', description: '', time_options: [
-      opt(iso('10-14T07:00:00Z')), opt(iso('10-16T07:00:00Z')) ] });
+    const { body: { id } } = await post({ title: 'Frokost & "kage"', description: '', options: [
+      d(iso('10-14')), d(iso('10-16')) ] });
     const r = await call(`/p/${id}`);
     expect(r.text).toContain(`<link rel="canonical" href="${BASE}/p/${id}"`);
     expect(r.text).toContain('<meta property="og:locale" content="da_DK"');
     expect(r.text).toContain('<meta property="og:site_name" content="GrabAday"');
     expect(r.text).toContain('<meta property="og:title" content="Frokost &amp; &quot;kage&quot;"');
-    expect(r.text).toContain(`<meta name="description" content="Stem på det tidspunkt, der passer dig. 2 tidsforslag, 14.–16. oktober ${Y}."`);
+    expect(r.text).toContain(`<meta name="description" content="Vælg de datoer, der passer dig. 2 datoforslag, 14.–16. oktober ${Y}."`);
     expect(r.text).toContain('<meta name="twitter:title" content="Frokost &amp; &quot;kage&quot;"');
     expect(r.text).toContain('<meta name="theme-color" content="#2B6CB0"');
   });
@@ -315,11 +301,11 @@ describe('slugs, pages, XSS', () => {
 
 describe('invisible characters in titles (shared INVISIBLE_RE)', () => {
   test('format chars (ZWJ outside emoji, soft hyphen, ZWNJ, bidi, BOM) are stripped; emoji ZWJ kept', async () => {
-    const r = await post({ title: '\u202EM\u00ADø\u200Cde\u200D\uFEFF\u2066 👨‍👩‍👧', description: 'a\u200Bb', time_options: [opt(iso('11-03T09:00:00Z'))] });
+    const r = await post({ title: '\u202EM\u00ADø\u200Cde\u200D\uFEFF\u2066 👨‍👩‍👧', description: 'a\u200Bb', options: [d(iso('11-03'))] });
     expect(r.status).toBe(201);
     expect(r.body.title).toBe('Møde 👨‍👩‍👧');
     expect(r.body.description).toBe('ab');
-    for (const t of ['\u00AD', '\u200C\u200D', '\u2066\u2069', '\u202E', '\u034F\u061C']) expect((await post({ title: t, time_options: [opt(iso('11-03T09:00:00Z'))] })).status).toBe(400);
+    for (const t of ['\u00AD', '\u200C\u200D', '\u2066\u2069', '\u202E', '\u034F\u061C']) expect((await post({ title: t, options: [d(iso('11-03'))] })).status).toBe(400);
   });
 });
 
@@ -335,7 +321,7 @@ describe('admin token (no accounts)', () => {
     expect(c.body.admin_token).toMatch(TOKEN_RE);
     expect(c.body.admin_url).toBe(`/p/${c.body.id}/admin#${c.body.admin_token}`); // fragment: never sent to servers
     expect(c.headers.get('cache-control')).toMatch(/no-store/);
-    const g = await call(`/api/events/${c.body.id}?tz=Europe/Copenhagen`);
+    const g = await call(`/api/events/${c.body.id}`);
     expect(g.status).toBe(200);
     expect(hasSecretField(g.body)).toBe(false);
     expect(leaks(g.text, c.body.admin_token)).toBe(false);
@@ -421,7 +407,7 @@ describe('OG image route + link preview', () => {
   const pngSize = (buf: Buffer) => ({ sig: buf.subarray(1, 4).toString(), w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) });
 
   test('GET /p/<id>/opengraph-image → 1200×630 PNG, cacheable', async () => {
-    const { body: { id } } = await post({ title: '👨‍👩‍👧‍👦 Familiemiddag </title><script>x</script> ' + 'lang '.repeat(30), time_options: [opt(iso('11-03T09:00:00Z'))] });
+    const { body: { id } } = await post({ title: '👨‍👩‍👧‍👦 Familiemiddag </title><script>x</script> ' + 'lang '.repeat(30), options: [d(iso('11-03'))] });
     const r = await fetch(`${BASE}/p/${id}/opengraph-image`);
     expect(r.status).toBe(200);
     expect(r.headers.get('content-type')).toBe('image/png');
@@ -440,7 +426,7 @@ describe('OG image route + link preview', () => {
   });
 
   test('poll page: og:image + twitter summary_large_image with absolute URLs, escaped alt, no token', async () => {
-    const c = await post({ title: 'Møde "A" & <b>B</b>', time_options: [opt(iso('11-03T09:00:00Z'))] });
+    const c = await post({ title: 'Møde "A" & <b>B</b>', options: [d(iso('11-03'))] });
     const { id, admin_token: token } = c.body;
     const r = await call(`/p/${id}`);
     const img = `${BASE}/p/${id}/opengraph-image`;

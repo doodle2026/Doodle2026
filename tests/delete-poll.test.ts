@@ -6,7 +6,7 @@ const Y = new Date().getUTCFullYear() + 1;
 const ip = () => `10.8.${(Math.random() * 255) | 0}.${(Math.random() * 250 + 1) | 0}`;
 async function create() {
   const r = await fetch(`${BASE}/api/events`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip() },
-    body: JSON.stringify({ title: 'Slet mig', time_options: [{ start: `${Y}-11-03T09:00:00Z` }] }) });
+    body: JSON.stringify({ title: 'Slet mig', options: [{ date: `${Y}-11-03` }] }) });
   const e = await r.json() as { id: string; admin_token: string; time_options: { id: number }[] };
   await fetch(`${BASE}/api/events/${e.id}/votes`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip() },
     body: JSON.stringify({ name: 'Anna', votes: [{ option_id: e.time_options[0].id, value: 'yes' }] }) });

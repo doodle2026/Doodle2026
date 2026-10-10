@@ -1,26 +1,29 @@
 import { describe, expect, it, vi } from 'vitest';
-import { sanitizeDisplayName, createMailer, groupDates, planInvitations, planReminders, renderInvitation, renderReminder, pollEmailData, assertPublicOnly, type PollForEmail } from '../src/lib/email';
+import { sanitizeDisplayName, createMailer, dateLabels, planInvitations, planReminders, renderInvitation, renderReminder, pollEmailData, assertPublicOnly, type PollForEmail } from '../src/lib/email';
 
 const poll: PollForEmail = {
   slug: 'Gsrire3V9kntecH6ffjlqA', title: 'Teammøde <script>alert(1)</script> & kage', description: 'Lokale 3', isClosed: false,
   organizerName: 'Mette Hansen',
-  options: [
-    { startAt: new Date('2026-10-16T13:00:00Z'), endAt: new Date('2026-10-16T14:00:00Z') },
-    { startAt: new Date('2026-10-14T07:00:00Z'), endAt: new Date('2026-10-14T08:00:00Z') },
-    { startAt: new Date('2026-10-14T21:30:00Z'), endAt: new Date('2026-10-14T22:30:00Z') },
-    { startAt: new Date('2026-10-15T08:30:00Z'), endAt: null },
-  ],
+  options: [{ date: '2026-10-16' }, { date: '2026-10-14' }, { date: '2026-11-03' }],
 };
 const ctx = { appUrl: 'https://grabaday.com/' };
 const ADMIN_TOKEN = 'A'.repeat(43);
 
 describe('email templates (the design spec (doodle-ui))', () => {
-  it('Danish 24 h grouping in Europe/Copenhagen, sorted, +1 dag across midnight', () => {
-    expect(groupDates(poll.options)).toEqual([
-      { dateLabel: 'Onsdag 14. oktober 2026', slots: [{ timeLabel: '09:00–10:00' }, { timeLabel: '23:30–00:30 (+1 dag)' }] },
-      { dateLabel: 'Torsdag 15. oktober 2026', slots: [{ timeLabel: '10:30' }] },
-      { dateLabel: 'Fredag 16. oktober 2026', slots: [{ timeLabel: '15:00–16:00' }] },
-    ]);
+  it('date polls: one plain date label per option, sorted, no times / time zone', () => {
+    expect(dateLabels(poll.options)).toEqual([
+      { dateLabel: 'ons. 14. okt. 2026' }, { dateLabel: 'fre. 16. okt. 2026' }, { dateLabel: 'tirs. 3. nov. 2026' }]);
+    const r = renderInvitation(pollEmailData(poll, { email: 'a@b.dk', linkToken: 'T'.repeat(43) }, ctx));
+    expect(r.text).toContain('  - fre. 16. okt. 2026');
+    expect(r.text + r.html).not.toMatch(/tidszone|Europe\/Copenhagen|\d\d:\d\d/);
+  });
+
+  it('reminder footer follows tracking: all non-unsubscribed vs. only those who have not answered', () => {
+    const inv = { email: 'a@b.dk', linkToken: 'T'.repeat(43) };
+    const off = renderReminder(pollEmailData(poll, inv, ctx));
+    expect(off.text).toContain('Påmindelser sendes til alle inviterede, der ikke har afmeldt sig.');
+    const on = renderReminder(pollEmailData({ ...poll, trackingEnabled: true }, inv, ctx));
+    for (const t of [on.text, on.html]) { expect(t).toContain('ikke har svaret endnu'); expect(t).not.toContain('alle inviterede, der ikke har afmeldt'); }
   });
 
   it('invitation: subject, escaped HTML, absolute asset + public poll links, text part, Outlook VML button', () => {
@@ -33,7 +36,7 @@ describe('email templates (the design spec (doodle-ui))', () => {
     expect(r.html).toMatch(/v:roundrect/);
     expect(r.html).toContain('Hej Jan!');
     expect(r.text).toContain('https://grabaday.com/p/Gsrire3V9kntecH6ffjlqA');
-    expect(r.text).toContain('23:30–00:30 (+1 dag)');
+    expect(r.text).toContain('ons. 14. okt. 2026');
     expect(r.text).toContain('Teammøde <script>alert(1)</script> & kage'); // plain text is not HTML-escaped
   });
 

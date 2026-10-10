@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { jsonError, readJson } from '@/lib/http';
 import { rateLimit } from '@/lib/ratelimit';
 import { LIMITS } from '@/lib/validate';
-import { eventForVoting, participantByToken, updateParticipant, validateVote } from '@/lib/votes';
+import { eventForVoting, participantByToken, pastVoteErrors, updateParticipant, validateVote, type VoteValue } from '@/lib/votes';
 import { editBearer, guarded, publicEvent } from '@/lib/votes-api';
 import { ApiError } from '@/lib/events';
 
@@ -42,7 +42,9 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (ev.closedAt) throw new ApiError(423, ['Afstemningen er lukket. Svar kan ikke længere gives eller ændres.'], { code: 'closed' });
     const { errors, value } = validateVote(body.data, new Set(ev.timeOptions.map((o) => o.id)));
     if (errors.length || !value) return jsonError(400, errors);
+    const past = pastVoteErrors(value, ev.timeOptions, new Map(p.votes.map((x) => [x.timeOptionId, x.value as VoteValue])));
+    if (past.length) return jsonError(400, past);
     await updateParticipant(ev.id, p.id, value);
-    return NextResponse.json({ participant_id: p.id, event: await publicEvent(slug, new URL(req.url).searchParams.get('tz')) });
+    return NextResponse.json({ participant_id: p.id, event: await publicEvent(slug) });
   });
 }

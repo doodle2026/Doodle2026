@@ -18,8 +18,8 @@ const json = (method: string, body: unknown, token?: string, extra: Record<strin
   ({ method, token, headers: { 'Content-Type': 'application/json', ...extra }, body: JSON.stringify(body) });
 const Y = new Date().getUTCFullYear() + 1;
 async function create() {
-  const r = await call('/api/events', json('POST', { title: 'Afstemning', time_options: [
-    { start: `${Y}-11-03T09:00:00Z` }, { start: `${Y}-11-04T09:00:00Z` }, { start: `${Y}-11-05T09:00:00Z` }] }));
+  const r = await call('/api/events', json('POST', { title: 'Afstemning', options: [
+    { date: `${Y}-11-03` }, { date: `${Y}-11-04` }, { date: `${Y}-11-05` }] }));
   return { id: r.body.id as string, admin: r.body.admin_token as string, o: (r.body.time_options as Json[]).map((x) => x.id as number) };
 }
 const vote = (o: number[], vals: (string | null)[], name = `Navn ${Math.random().toString(36).slice(2, 8)}`) =>
@@ -176,7 +176,7 @@ describe('edit own answers (Bearer edit token)', () => {
     for (const h of ['cache-control', 'x-robots-tag']) expect(r.headers.get(h)).toBeTruthy();
     expect(r.headers.get('referrer-policy')).toBe('no-referrer');
     const p = await call(`/p/${e.id}`);
-    expect(p.text).toContain('Hvornår kan du?');
+    expect(p.text).toContain('Hvilke datoer passer dig?');
     expect(p.text).toContain('class="vgrid"');
     expect(p.text).toContain('Ingen har stemt endnu');
   });
@@ -191,5 +191,30 @@ describe('edit own answers (Bearer edit token)', () => {
     expect(p.text).not.toContain('id="name"');
     expect(p.text).not.toContain('Gem mine svar');
     expect(p.text).toContain('is-chosen');
+  });
+});
+
+describe('K2: passed dates', () => {
+  test('new yes/maybe on a date before UTC today − 1 → 400; no is fine; existing answers are kept on edit', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+    try {
+      const e = await create();
+      const first = await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['yes', 'maybe', 'no'])));
+      expect(first.status).toBe(201);
+      // the first date now lies in the past (e.g. the poll ran for weeks)
+      await prisma.timeOption.update({ where: { id: e.o[0] }, data: { date: new Date('2020-01-01T00:00:00Z') } });
+      const bad = await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['yes', 'yes'])));
+      expect(bad.status).toBe(400);
+      expect(bad.body.errors[0]).toMatch(/passeret/);
+      expect((await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['maybe'])))).status).toBe(400);
+      expect((await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, ['no', 'yes'])))).status).toBe(201);
+      expect((await call(`/api/events/${e.id}/votes`, json('POST', vote(e.o, [null, 'yes'])))).status).toBe(201);
+      // edit: unchanged 'yes' on the passed date is kept; changing it to 'maybe' is refused
+      const keep = await call(`/api/events/${e.id}/votes/me`, json('PUT', vote(e.o, ['yes', 'yes', 'yes'], 'Ole'), first.body.edit_token));
+      expect(keep.status).toBe(200);
+      expect(keep.body.event.participants[0].votes).toEqual(['yes', 'yes', 'yes']);
+      expect((await call(`/api/events/${e.id}/votes/me`, json('PUT', vote(e.o, ['maybe', 'yes', 'yes'], 'Ole'), first.body.edit_token))).status).toBe(400);
+    } finally { await prisma.$disconnect(); }
   });
 });

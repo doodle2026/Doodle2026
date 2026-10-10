@@ -11,7 +11,7 @@ const ip = () => `10.7.${(Math.random() * 255) | 0}.${(Math.random() * 254 + 1) 
 
 async function setup() {
   const r = await fetch(`${BASE}/api/events`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip() },
-    body: JSON.stringify({ title: 'Runde 4', time_options: [{ start: `${Y}-11-03T09:00:00Z` }, { start: `${Y}-11-04T09:00:00Z` }] }) });
+    body: JSON.stringify({ title: 'Runde 4', options: [{ date: `${Y}-11-03` }, { date: `${Y}-11-04` }] }) });
   const e = await r.json() as { id: string; admin_token: string; time_options: { id: number }[] };
   for (const [name, votes] of [['Anna', ['yes', 'no']], ['Bo', ['maybe', 'yes']]] as const) {
     await fetch(`${BASE}/api/events/${e.id}/votes`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip() },
@@ -42,11 +42,13 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
     await expect.poll(async () => (await pub(e.id)).chosen_option_id).toBeNull();
     await btns.nth(1).click();
     await expect.poll(async () => (await pub(e.id)).chosen_option_id).not.toBeNull();
-    expect(await p.textContent('#result-banner')).toContain('Endeligt tidspunkt');
+    expect(await p.textContent('#result-banner')).toContain('Endelig dato');
+    expect(await p.textContent('#result-banner')).toContain(`(hele dagen)`);
     const v = await browser.newPage();
     await v.goto(`${BASE}/p/${e.id}`);
     await v.waitForSelector('#result-banner #gcal');
-    expect(await v.getAttribute('#gcal', 'href')).toContain('calendar.google.com');
+    expect(await v.getAttribute('#gcal', 'href')).toContain(`dates=${Y}1104%2F${Y}1105`);
+    expect(await v.textContent('#result-banner')).toContain('Den endelige dato er');
     expect(await v.getAttribute('#ics', 'href')).toBe(`/api/events/${e.id}/ics`);
     void b0; await v.close(); await p.close();
   }, 30_000);
@@ -66,30 +68,124 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
     await p.close();
   }, 30_000);
 
-  test('V10: ✎ opens inline edit, Esc cancels, changed start preselects Nulstil, Gem resets votes', async () => {
+  test('§0.6 Skift dato: ✎ opens a single-select calendar, Esc cancels, taken date refused, Gem dato resets votes', async () => {
     const e = await setup();
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
     await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
     await p.click('[data-oe] >> nth=0');
-    await p.waitForSelector('.opt-edit');
+    await p.waitForSelector('.opt-edit #oe-cal');
+    await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute('data-d'))).toBe(`${Y}-11-03`);
     await p.keyboard.press('Escape');
     expect(await p.$('.opt-edit')).toBeNull();
     await p.click('[data-oe] >> nth=0');
-    await p.fill('#oe-s', '07:15');
-    await expect.poll(() => p.isChecked('input[name="oe-v"][value="reset"]')).toBe(true);
-    await p.fill('#oe-e', '06:00');
+    await p.click(`#oe-cal td[data-d="${Y}-11-04"]`, { force: true }); // already proposed (aria-disabled)
+    expect(await p.textContent('#oe-err')).toContain('allerede foreslået');
+    expect(await p.getAttribute(`#oe-cal td[data-d="${Y}-11-04"]`, 'aria-disabled')).toBe('true');
+    await p.keyboard.press('ArrowRight'); await p.keyboard.press('ArrowRight'); await p.keyboard.press('Enter'); // keyboard: 11-04 → 11-06
+    expect(await p.textContent('#oe-sel')).toContain('6. nov.');
+    expect(await p.isChecked('input[name="oe-v"][value="reset"]')).toBe(true);
     await p.click('[data-oe-save]');
-    expect(await p.textContent('#oe-err')).toContain('Sluttid');
-    await p.fill('#oe-e', '');
-    await p.press('#oe-s', 'Enter');
     await p.waitForSelector('.opt-edit', { state: 'detached' });
-    await expect.poll(async () => (await pub(e.id)).participants.map((x: { votes: unknown[] }) => x.votes[0])).toEqual([null, null]);
+    await expect.poll(async () => (await pub(e.id)).time_options.map((o: { date: string }) => o.date)).toEqual([`${Y}-11-04`, `${Y}-11-06`]);
+    await expect.poll(async () => (await pub(e.id)).participants.map((x: { votes: unknown[] }) => x.votes[1])).toEqual([null, null]);
+    await p.close();
+  }, 30_000);
+
+  test('§0.6 + Tilføj datoer: popover calendar, taken dates dotted/disabled, adds N dates on save', async () => {
+    const e = await setup();
+    const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+    await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+    await p.click('#addopt');
+    expect(await p.getAttribute('#addopt', 'aria-expanded')).toBe('true');
+    await p.waitForSelector('#addpop #addcal');
+    // navigate to November of next year
+    for (let k = 0; k < 24 && !(await p.$(`#addcal td[data-d="${Y}-11-10"]`)); k++) await p.click('#addcal [aria-label="Næste måned"]');
+    expect(await p.getAttribute(`#addcal td[data-d="${Y}-11-03"]`, 'class')).toContain('is-taken');
+    await p.click(`#addcal td[data-d="${Y}-11-10"]`);
+    await p.click(`#addcal td[data-d="${Y}-11-12"]`, { modifiers: ['Shift'] }); // range 10–12
+    expect(await p.textContent('#addgo')).toBe('Tilføj 3 datoer');
+    await p.click('#addgo');
+    await p.click('#save');
+    await expect.poll(async () => (await pub(e.id)).time_options.map((o: { date: string }) => o.date))
+      .toEqual([`${Y}-11-03`, `${Y}-11-04`, `${Y}-11-10`, `${Y}-11-11`, `${Y}-11-12`]);
+    await p.close();
+  }, 30_000);
+
+  test('K1: close dialog preselects the CURRENT chosen date; closing untouched keeps it. K4: plural + Esc hint', async () => {
+    const e = await setup(); // best = option 0 (Anna yes + Bo maybe); we choose option 1
+    await fetch(`${BASE}/api/events/${e.id}/choose`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${e.admin_token}`, 'X-Forwarded-For': ip() },
+      body: JSON.stringify({ chosen_option_id: e.time_options[1].id }) });
+    const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+    await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+    await p.waitForSelector('#toggle');
+    expect(await p.textContent('#res-h')).toContain('(2 deltagere)');
+    await p.click('#toggle');
+    await p.waitForSelector('#pick');
+    expect(await p.inputValue('#pick')).toBe(String(e.time_options[1].id));
+    await p.click('#dlg-ok');
+    await expect.poll(async () => (await pub(e.id)).is_closed).toBe(true);
+    expect((await pub(e.id)).chosen_option_id).toBe(e.time_options[1].id);
+    // K4 singular: delete Bo → "(1 deltager)"
+    const one = await setup();
+    const adm = await (await fetch(`${BASE}/api/events/${one.id}/admin`, { headers: { Authorization: `Bearer ${one.admin_token}` } })).json();
+    await fetch(`${BASE}/api/events/${one.id}/participants/${adm.participants[1].id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${one.admin_token}`, 'X-Forwarded-For': ip() } });
+    await p.goto(`${BASE}/p/${one.id}/admin#${one.admin_token}`);
+    await expect.poll(() => p.textContent('#res-h')).toContain('(1 deltager)');
+    await p.click('#addopt');
+    expect(await p.textContent('#addpop')).toContain('Esc annullerer');
+    await p.focus('#addcal td[tabindex="0"]');
+    await p.keyboard.press('Escape');
+    await expect.poll(() => p.$('#addpop')).toBeNull();
+    await p.close();
+  }, 30_000);
+
+  test('K2: passed dates are muted + "passeret" in admin and on the public page; voting on them disabled', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+    const e = await setup();
+    await prisma.timeOption.update({ where: { id: e.time_options[0].id }, data: { date: new Date('2020-01-01T00:00:00Z') } });
+    await prisma.$disconnect();
+    const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+    await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+    await expect.poll(() => p.textContent('#admin-grid thead')).toContain('passeret');
+    expect(await p.getAttribute('#admin-grid thead th:nth-child(2)', 'class')).toContain('is-past');
+    await p.goto(`${BASE}/p/${e.id}`);
+    await expect.poll(() => p.isDisabled('.tri[data-i="0"]')).toBe(true);
+    expect(await p.isDisabled('.tri[data-i="1"]')).toBe(false);
+    expect(await p.textContent('thead')).toContain('passeret');
+    // edit mode counts everyone (incl. the editor): 2 participants before and while editing
+    expect(await p.textContent('thead')).toContain('Deltager (2)');
+    const m = await browser.newPage({ viewport: { width: 390, height: 800 } });
+    await m.goto(`${BASE}/p/${e.id}`);
+    await expect.poll(() => m.isDisabled('.vcard.is-past .seg button >> nth=0')).toBe(true);
+    expect(await m.textContent('.vcard.is-past')).toContain('passeret');
+    await m.close();
+    await p.close();
+  }, 30_000);
+
+  test('K3: admin calendars allow today (add + edit), like the create form', async () => {
+    const e = await setup();
+    const today = new Intl.DateTimeFormat('en-CA').format(new Date()); // browser + test share the box clock/zone
+    const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+    await p.goto(`${BASE}/p/${e.id}/admin#${e.admin_token}`);
+    await p.click('#addopt');
+    await p.waitForSelector(`#addcal td[data-d="${today}"]`);
+    expect(await p.getAttribute(`#addcal td[data-d="${today}"]`, 'class')).not.toContain('is-past');
+    await p.click(`#addcal td[data-d="${today}"]`);
+    await p.click('#addgo');
+    await p.click('#save');
+    await expect.poll(async () => (await pub(e.id)).time_options.map((o: { date: string }) => o.date)).toContain(today);
+    // edit: move the last option to … today is taken now, so use the edit picker to check today isn't past-disabled
+    await p.click('[data-oe] >> nth=-1');
+    await p.waitForSelector('.opt-edit #oe-cal');
+    for (let k = 0; k < 30 && !(await p.$(`#oe-cal td[data-d="${today}"]`)); k++) await p.click('#oe-cal [aria-label="Forrige måned"]');
+    expect(await p.getAttribute(`#oe-cal td[data-d="${today}"]`, 'class')).not.toContain('is-past');
     await p.close();
   }, 30_000);
 
   test('V7: Skjul closes without a dialog → yellow reminder; ✓ Jeg har gemt det collapses the admin link', async () => {
     const r = await fetch(`${BASE}/api/events`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip() },
-      body: JSON.stringify({ title: 'V7', time_options: [{ start: `${Y}-11-03T09:00:00Z` }] }) });
+      body: JSON.stringify({ title: 'V7', options: [{ date: `${Y}-11-03` }] }) });
     const e = await r.json() as { id: string; admin_url: string };
     const p = await browser.newPage({ viewport: { width: 1100, height: 900 } });
     await p.goto(`${BASE}/`);

@@ -40,7 +40,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const art = await brandArt();
   const title = ogTitle(ev.title);
   const count = countLabel(ev.time_options.length);
-  const dates = dateRangeDa(ev.time_options.map((o) => o.start_at));
+  const dates = dateRangeDa(ev.time_options.map((o) => o.date));
   const el = (
     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
       backgroundImage: 'linear-gradient(135deg, #2B6CB0 0%, #63B3ED 100%)', fontFamily: 'Inter' }}>

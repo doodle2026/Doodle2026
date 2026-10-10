@@ -23,5 +23,5 @@ export function ogTitle(raw: string): { text: string; long: boolean } {
   return { text, long: textLength(text) > OG_LONG_AT };
 }
 
-export const countLabel = (n: number) => (n === 1 ? '1 tidsforslag' : `${n} tidsforslag`);
+export const countLabel = (n: number) => `${n} datoforslag`;
 export const ogImagePath = (slug: string) => `/p/${slug}/opengraph-image`;

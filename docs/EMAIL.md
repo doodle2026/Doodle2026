@@ -80,3 +80,7 @@ without tracking we cannot know who answered, so step 4 sends to **all non-unsub
 - `.ics`: `PRODID:-//GrabAday//GrabAday//DA`, UID `<slug>@grabaday.com` (fixed domain, independent of APP_URL so UIDs stay stable across preview / vercel.app / custom domain; existing UIDs changed once – no real users yet).
 - Internal crypto domain-separation labels (`moedetid-email-v1`, `moedetid-inv-link-v1`, `moedetid-invite-v1`, `moedetid-idem-v1`) are intentionally unchanged: renaming them would invalidate stored suppression hashes, sent unsubscribe/invite links and idempotency keys. They are never shown to users.
 - `scripts/sync-email-templates.mjs` rewrites any leftover `Mødetid`/`moedetid.dk` on sync as a safety net.
+
+## Kun datoer (okt. 2026)
+- Skabelonerne er synket fra doodle-ui (`dates:[{dateLabel}]`; `slots`/`timeZoneLabel` er fjernet). `dateLabel` = `fre. 16. okt. 2026` (UTC-formattering, ens i alle tidszoner). Ældre tidsforslag får `… kl. 09:00–10:00` (Europe/Copenhagen) i samme label.
+- `trackingEnabled` sendes med i data. **Kendt skabelonfejl upstream:** reminder-footeren siger altid "Påmindelser sendes til alle inviterede, der ikke har afmeldt sig." – også når sporing er slået til (så går de kun til dem, der ikke har svaret). `scripts/sync-email-templates.mjs` retter det i vores kopi med en `{{#trackingEnabled}}…{{/trackingEnabled}}{{^trackingEnabled}}…{{/trackingEnabled}}`-sektion. **Doodle UI bør** indføre samme sektion i `email/src/build.js`, så omskrivningen kan fjernes.

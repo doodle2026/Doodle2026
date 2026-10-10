@@ -1,17 +1,11 @@
 import { describe, test, expect } from 'vitest';
-import { parseIsoWithOffset, validateEvent } from '../src/lib/validate';
+import { validateEvent } from '../src/lib/validate';
 
 describe('validate (unit)', () => {
-  test('parseIsoWithOffset requires an offset and a real calendar date', () => {
-    expect(parseIsoWithOffset('2030-01-01T10:00:00+02:00')?.toISOString()).toBe('2030-01-01T08:00:00.000Z');
-    expect(parseIsoWithOffset('2030-01-01T10:00')).toBeNull();
-    expect(parseIsoWithOffset('2030-02-29T10:00Z')).toBeNull();
-    expect(parseIsoWithOffset(123)).toBeNull();
-  });
-  test('uses injected clock for "past"', () => {
-    const now = new Date('2030-01-01T12:00:00Z');
-    expect(validateEvent({ title: 'x', time_options: [{ start: '2030-01-01T11:59:00Z' }] }, now).errors).toHaveLength(1);
-    expect(validateEvent({ title: 'x', time_options: [{ start: '2030-01-01T14:01:00+02:00' }] }, now).errors).toHaveLength(0);
+  test('uses injected clock for "past" (dates ≥ UTC today − 1 day)', () => {
+    const now = new Date('2030-01-02T12:00:00Z');
+    expect(validateEvent({ title: 'x', options: [{ date: '2029-12-31' }] }, now).errors).toHaveLength(1);
+    expect(validateEvent({ title: 'x', options: [{ date: '2030-01-01' }] }, now).errors).toHaveLength(0);
   });
 });
 

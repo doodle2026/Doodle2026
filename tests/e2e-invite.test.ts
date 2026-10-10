@@ -16,7 +16,7 @@ const linkToken = (id: number) => createHmac('sha256', 'dev-only-email-link-secr
 
 async function poll() {
   const r = await fetch(`${BASE}/api/events`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip() },
-    body: JSON.stringify({ title: 'Invitér E2E', time_options: [{ start: `${Y}-11-03T09:00:00Z` }] }) });
+    body: JSON.stringify({ title: 'Invitér E2E', options: [{ date: `${Y}-11-03` }] }) });
   return r.json() as Promise<{ id: string; admin_token: string }>;
 }
 

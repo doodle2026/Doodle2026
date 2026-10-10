@@ -2,9 +2,11 @@ import { randomBytes } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from './db';
 import { SLUG_RE, type CleanEvent } from './validate';
+import { fromUtcDate, toUtcDate } from './dates';
 import { newToken, openForKey, sealForKey, sha256Hex, tokenMatches, TOKEN_RE } from './tokens';
 
-export interface ApiTimeOption { id: number; start_at: string; end_at: string | null; position: number }
+/** date: 'YYYY-MM-DD' (whole day, no time zone). */
+export interface ApiTimeOption { id: number; date: string; position: number }
 /** Public shape. Must never contain admin/edit tokens or their hashes (asserted in tests). */
 export interface ApiEvent {
   id: string; slug: string; title: string; description: string; created_at: string;
@@ -14,8 +16,11 @@ export interface ApiEvent {
   participants: ApiParticipant[];
 }
 export interface ApiParticipant { id: number; name: string; votes: ('yes' | 'maybe' | 'no' | null)[] }
-export interface DesignOption { date: string; start: string; end: string | null; end_date?: string }
-export interface ApiEventResponse extends ApiEvent { timezone: string; options: DesignOption[]; url: string }
+/** options = [{ id, date }], no time zone. */
+export interface ApiEventResponse extends ApiEvent { options: { id: number; date: string }[]; url: string }
+
+/** DB columns for a clean option. */
+export const optData = (o: CleanEvent['timeOptions'][number]) => ({ date: toUtcDate(o.date) });
 
 export const newSlug = () => randomBytes(16).toString('base64url'); // 128 bits → 22 chars
 /** Admin link: token in the URL *fragment*, which browsers never send to the server (no logs/Referer). */
@@ -24,8 +29,8 @@ export const adminPath = (slug: string, token: string) => `/p/${slug}/admin#${to
 const publicSelect = {
   slug: true, title: true, description: true, createdAt: true, closedAt: true, chosenOptionId: true, // explicit allow-list: never adminTokenHash
   timeOptions: {
-    select: { id: true, startAt: true, endAt: true, position: true },
-    orderBy: [{ startAt: 'asc' }, { endAt: { sort: 'asc', nulls: 'first' } }, { position: 'asc' }],
+    select: { id: true, date: true, position: true },
+    orderBy: [{ date: 'asc' }, { position: 'asc' }],
   },
   participants: {
     select: { id: true, name: true, votes: { select: { timeOptionId: true, value: true } } }, // never editTokenHash
@@ -41,9 +46,7 @@ export async function loadEvent(slug: unknown): Promise<ApiEvent | null> {
     id: ev.slug, slug: ev.slug, title: ev.title, description: ev.description, created_at: ev.createdAt.toISOString(),
     closed_at: ev.closedAt ? ev.closedAt.toISOString() : null, is_closed: ev.closedAt !== null,
     chosen_option_id: ev.chosenOptionId,
-    time_options: ev.timeOptions.map((o) => ({
-      id: o.id, start_at: o.startAt.toISOString(), end_at: o.endAt ? o.endAt.toISOString() : null, position: o.position,
-    })),
+    time_options: ev.timeOptions.map((o) => ({ id: o.id, date: fromUtcDate(o.date), position: o.position })),
     participants: ev.participants.map((p) => {
       const by = new Map(p.votes.map((v) => [v.timeOptionId, v.value]));
       return { id: p.id, name: p.name, votes: ev.timeOptions.map((o) => by.get(o.id) ?? null) };
@@ -91,7 +94,7 @@ export async function createEvent(v: CleanEvent, idemKey?: string):
       const ev = await tx.event.create({
         data: {
           slug, title: v.title, description: v.description, adminTokenHash: sha256Hex(adminToken),
-          timeOptions: { create: v.timeOptions.map((o, i) => ({ startAt: o.startAt, endAt: o.endAt, position: i })) },
+          timeOptions: { create: v.timeOptions.map((o, i) => ({ ...optData(o), position: i })) },
         },
         select: { id: true },
       });
@@ -111,29 +114,9 @@ export async function createEvent(v: CleanEvent, idemKey?: string):
   }
 }
 
-function resolveZone(tz: unknown): string {
-  if (typeof tz === 'string' && tz.length > 0 && tz.length <= 64) {
-    try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return tz; } catch { /* invalid → UTC */ }
-  }
-  return 'UTC';
-}
-
-/** Adds the design's data shape: options[{date,start,end}] as wall-clock time in an IANA zone (default UTC). */
-export function withDesignShape(ev: ApiEvent, tz?: string | null): ApiEventResponse {
-  const zone = resolveZone(tz);
-  const f = new Intl.DateTimeFormat('en-CA', {
-    timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  });
-  const parts = (iso: string) => {
-    const p = Object.fromEntries(f.formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
-    return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
-  };
-  const options = ev.time_options.map((o): DesignOption => {
-    const s = parts(o.start_at);
-    const e = o.end_at ? parts(o.end_at) : null;
-    return { date: s.date, start: s.time, end: e ? e.time : null, ...(e && e.date !== s.date ? { end_date: e.date } : {}) };
-  });
-  return { ...ev, timezone: zone, options, url: `/p/${ev.slug}` };
+/** Adds `options` ([{id, date}], no time zone) + `url`. */
+export function withDesignShape(ev: ApiEvent): ApiEventResponse {
+  return { ...ev, options: ev.time_options.map((o) => ({ id: o.id, date: o.date })), url: `/p/${ev.slug}` };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -172,12 +155,12 @@ export async function updateEvent(eventId: number, v: CleanEvent, confirmRemoveV
     const existing = await tx.timeOption.findMany({ where: { eventId }, select: { id: true, _count: { select: { votes: true } } } });
     const existingIds = new Set(existing.map((o) => o.id));
     const unknown = v.timeOptions.filter((o) => o.id !== undefined && !existingIds.has(o.id));
-    if (unknown.length) throw new ApiError(400, ['Et eller flere tidsforslag findes ikke (længere). Genindlæs siden.']);
+    if (unknown.length) throw new ApiError(400, ['Et eller flere datoforslag findes ikke (længere). Genindlæs siden.']);
     const keep = new Set(v.timeOptions.map((o) => o.id).filter((x): x is number => x !== undefined));
     const removing = existing.filter((o) => !keep.has(o.id));
     const voted = removing.filter((o) => o._count.votes > 0);
     if (voted.length && !confirmRemoveVoted) {
-      throw new ApiError(409, ['Nogle af de fjernede tidsforslag har svar. Bekræft for at slette dem.'],
+      throw new ApiError(409, ['Nogle af de fjernede datoforslag har svar. Bekræft for at slette dem.'],
         { voted_option_ids: voted.map((o) => o.id) });
     }
     if (removing.length) {
@@ -191,20 +174,20 @@ export async function updateEvent(eventId: number, v: CleanEvent, confirmRemoveV
     await tx.event.update({ where: { id: eventId }, data: { title: v.title, description: v.description } });
     for (const [i, o] of v.timeOptions.entries()) {
       if (o.id !== undefined) {
-        const before = await tx.timeOption.update({ where: { id: o.id }, data: { position: i }, select: { startAt: true, endAt: true, chosenBy: { select: { id: true } } } });
-        const moved = before.startAt.getTime() !== o.startAt.getTime() || (before.endAt?.getTime() ?? null) !== (o.endAt?.getTime() ?? null);
+        const before = await tx.timeOption.update({ where: { id: o.id }, data: { position: i }, select: { date: true, chosenBy: { select: { id: true } } } });
+        const moved = fromUtcDate(before.date) !== o.date;
         if (moved) {
-          await tx.timeOption.update({ where: { id: o.id }, data: { startAt: o.startAt, endAt: o.endAt } });
+          await tx.timeOption.update({ where: { id: o.id }, data: optData(o) });
           if (before.chosenBy) await tx.event.update({ where: { id: eventId }, data: { icsSequence: { increment: 1 }, chosenChangedAt: new Date() } });
         }
       }
-      else await tx.timeOption.create({ data: { eventId, startAt: o.startAt, endAt: o.endAt, position: i } });
+      else await tx.timeOption.create({ data: { eventId, ...optData(o), position: i } });
     }
   });
 }
 
 export async function existingOptions(eventId: number) {
-  return prisma.timeOption.findMany({ where: { eventId }, select: { id: true, startAt: true, endAt: true } });
+  return prisma.timeOption.findMany({ where: { eventId }, select: { id: true, date: true } });
 }
 
 
@@ -217,7 +200,7 @@ async function chosenChange(eventId: number, next: number | null) {
 export async function closeEvent(eventId: number, chosenOptionId: number | null) {
   if (chosenOptionId !== null) {
     const ok = await prisma.timeOption.count({ where: { id: chosenOptionId, eventId } });
-    if (!ok) throw new ApiError(400, ['Det valgte tidspunkt findes ikke i afstemningen.']);
+    if (!ok) throw new ApiError(400, ['Den valgte dato findes ikke i afstemningen.']);
   }
   await prisma.event.update({ where: { id: eventId }, data: { closedAt: new Date(), chosenOptionId, ...(await chosenChange(eventId, chosenOptionId)) } });
 }
@@ -241,7 +224,7 @@ export async function rotateAdminToken(eventId: number): Promise<string> {
 export async function chooseOption(eventId: number, chosenOptionId: number | null) {
   if (chosenOptionId !== null) {
     const ok = await prisma.timeOption.count({ where: { id: chosenOptionId, eventId } });
-    if (!ok) throw new ApiError(400, ['Det valgte tidspunkt findes ikke i afstemningen.']);
+    if (!ok) throw new ApiError(400, ['Den valgte dato findes ikke i afstemningen.']);
   }
   await prisma.event.update({ where: { id: eventId }, data: { chosenOptionId, ...(await chosenChange(eventId, chosenOptionId)) } });
 }
@@ -253,20 +236,18 @@ export async function deleteParticipant(eventId: number, participantId: number) 
 }
 
 /**
- * Edit ONE time option (design §31). `resetVotes` deletes its votes. 409 duplicate_option if another option
- * has the same start+end; past start rejected; moving the chosen option bumps the ICS SEQUENCE.
+ * Edit ONE option's date (design §31). `resetVotes` deletes its votes. 409 duplicate_option if another option has
+ * that date; a changed date must not be in the past; moving the chosen option bumps the ICS SEQUENCE.
  */
-export async function editOption(eventId: number, optionId: number, startAt: Date, endAt: Date | null, resetVotes: boolean) {
+export async function editOption(eventId: number, optionId: number, date: string, resetVotes: boolean, isPast: (d: string) => boolean) {
   return prisma.$transaction(async (tx) => {
-    const o = await tx.timeOption.findFirst({ where: { id: optionId, eventId }, select: { startAt: true, endAt: true, chosenBy: { select: { id: true } } } });
-    if (!o) throw new ApiError(404, ['Tidsforslaget findes ikke (længere). Genindlæs siden.']);
-    const dup = await tx.timeOption.count({ where: { eventId, id: { not: optionId }, startAt, endAt } });
-    if (dup) throw new ApiError(409, ['Det tidspunkt findes allerede som et andet forslag.'], { code: 'duplicate_option' });
-    const changed = o.startAt.getTime() !== startAt.getTime() || (o.endAt?.getTime() ?? null) !== (endAt?.getTime() ?? null);
-    if (changed && startAt.getTime() < Date.now() && o.startAt.getTime() !== startAt.getTime()) {
-      throw new ApiError(400, ['Tidspunktet ligger i fortiden.'], { code: 'past' });
-    }
-    await tx.timeOption.update({ where: { id: optionId }, data: { startAt, endAt } });
+    const o = await tx.timeOption.findFirst({ where: { id: optionId, eventId }, select: { date: true, chosenBy: { select: { id: true } } } });
+    if (!o) throw new ApiError(404, ['Forslaget findes ikke (længere). Genindlæs siden.']);
+    const dup = await tx.timeOption.count({ where: { eventId, id: { not: optionId }, date: toUtcDate(date) } });
+    if (dup) throw new ApiError(409, ['Den dato findes allerede som et andet forslag.'], { code: 'duplicate_option' });
+    const changed = fromUtcDate(o.date) !== date;
+    if (changed && isPast(date)) throw new ApiError(400, ['Datoen ligger i fortiden.'], { code: 'past' });
+    await tx.timeOption.update({ where: { id: optionId }, data: { date: toUtcDate(date) } });
     const reset = resetVotes ? (await tx.vote.deleteMany({ where: { timeOptionId: optionId } })).count : 0;
     if (changed && o.chosenBy) await tx.event.update({ where: { id: eventId }, data: { icsSequence: { increment: 1 }, chosenChangedAt: new Date() } });
     return { changed, reset };
