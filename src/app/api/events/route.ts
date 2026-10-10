@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { IDEMPOTENCY_RE, LIMITS, validateEvent } from '@/lib/validate';
 import { adminPath, createEvent, findByIdempotencyKey, loadEvent, withDesignShape } from '@/lib/events';
-import { jsonError, readBodyLimited } from '@/lib/http';
+import { jsonError, logError, readJson } from '@/lib/http';
+import { rateLimit } from '@/lib/ratelimit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -25,6 +26,8 @@ export async function POST(req: Request) {
     // CSRF hardening: only application/json (cross-site forms can't send it without a CORS preflight).
     const ct = (req.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
     if (ct !== 'application/json') return jsonError(415, ['Content-Type skal være application/json.']);
+    const limited = rateLimit(req);
+    if (limited) return limited;
     const tz = new URL(req.url).searchParams.get('tz');
     const idemKey = req.headers.get('idempotency-key') ?? undefined;
     if (idemKey !== undefined && !IDEMPOTENCY_RE.test(idemKey)) {
@@ -35,18 +38,16 @@ export async function POST(req: Request) {
       const hit = await findByIdempotencyKey(idemKey);
       if (hit) return respond(hit.slug, hit.adminToken, 200, tz);
     }
-    const body = await readBodyLimited(req, LIMITS.bodyBytes);
-    if ('tooLarge' in body) return jsonError(413, ['Forespørgslen er for stor (maks. 32 kB).']);
-    let parsed: unknown;
-    try { parsed = JSON.parse(body.text); } catch { return jsonError(400, ['Ugyldig JSON.']); }
+    const body = await readJson(req, LIMITS.bodyBytes);
+    if ('response' in body) return body.response;
+    const parsed = body.data;
 
     const { errors, value } = validateEvent(parsed, new Date());
     if (errors.length || !value) return jsonError(400, errors);
     const { slug, adminToken, replayed } = await createEvent(value, idemKey);
     return respond(slug, adminToken, replayed ? 200 : 201, tz);
   } catch (e) {
-    // Log only the error class/code — never request data (could contain keys) or tokens.
-    console.error('POST /api/events failed:', e instanceof Error ? `${e.name}${'code' in e ? ` ${String(e.code)}` : ''}` : 'unknown');
+    logError('POST /api/events', e); // class/code only — never request data, keys or tokens
     return jsonError(500, ['Serverfejl.']);
   }
 }
