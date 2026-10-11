@@ -48,6 +48,9 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
   const cdlg = useRef<HTMLDialogElement>(null);
   const returnFocus = useRef<string | null>(null);
+  // Render only one layout (table ≥640 px, list below) so each row has exactly one "Send nyt link" in the DOM/a11y tree.
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => { const m = matchMedia('(max-width:639px)'); const f = () => setNarrow(m.matches); f(); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
   const dlg = useRef<HTMLDialogElement>(null);
   const remBtn = useRef<HTMLButtonElement>(null);
 
@@ -248,7 +251,7 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
           <div className="filters" role="group" aria-label={t('st.filterAria')} id="filters">
             {F.map(([k, l]) => <button key={k} type="button" data-f={k} aria-pressed={filter === k} onClick={() => { setFilter(k); setShowAll(false); }}>{l}<span className="n">{counts[k]}</span></button>)}
           </div>
-          <table className="rtable" id="rtable"><caption className="sr-only">{t('st.caption')}</caption>
+          {!narrow && <table className="rtable" id="rtable"><caption className="sr-only">{t('st.caption')}</caption>
             <thead>{T ? <tr><th scope="col">{t('st.colRecipient')}</th><th scope="col">{t('st.colDelivery')}</th><th scope="col">{t('st.colResponse')}</th><th scope="col"><span className="sr-only">{t('st.colActions')}</span></th></tr>
               : <tr><th scope="col">{t('st.colRecipient')}</th><th scope="col">{t('st.colDelivery')}</th><th scope="col">{t('st.colLatest')}</th></tr>}</thead>
             <tbody>{filter === 'public' ? null : show.length ? show.map((r) => T ? (
@@ -256,11 +259,11 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
             ) : (
               <tr key={r.email}><td className="addr">{r.email}</td><td>{badge(r)}{r.reason && r.delivery !== 'blocked' && <div className="meta">{r.reason}</div>}</td><td className="meta">{when(r.updated_at, locale)}</td></tr>
             )) : <tr><td colSpan={T ? 4 : 3} className="meta">{t('st.none')}</td></tr>}</tbody>
-          </table>
-          <ul className="rlist" id="rlist">{filter === 'public' ? null : show.length ? show.map((r) => (
+          </table>}
+          {narrow && <ul className="rlist" id="rlist">{filter === 'public' ? null : show.length ? show.map((r) => (
             <li key={r.email}><span className="addr">{r.email}</span><span className="badges">{badge(r)}{T && ans(r)}</span><span className="meta">{when(r.updated_at, locale)}{r.reason && r.delivery !== 'blocked' ? ` · ${r.reason}` : ''}</span>
               {T && <span style={{ gridColumn: '1/-1' }}>{act(r)}</span>}</li>
-          )) : <li className="meta">{t('st.none')}</li>}</ul>
+          )) : <li className="meta">{t('st.none')}</li>}</ul>}
           {T && (filter === 'all' || filter === 'public') && st.public_answers.length > 0 && (
             <div className="pub" aria-labelledby="pub-h" id="public-answers"><h4 id="pub-h">{t('pub.h')} <span className="meta">{t('pub.notInvitedParen')}</span></h4>
               <p className="field__hint">{t('pub.hint')}</p>

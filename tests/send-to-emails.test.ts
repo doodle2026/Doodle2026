@@ -121,7 +121,7 @@ describe.skipIf(!existsSync(CHROME))('UI (headless)', () => {
     expect(await pg.inputValue('#se-pmsg')).toBe('Hej');
     await pg.click('#share-open'); await pg.waitForSelector('#share #se-rows');
     expect(await pg.inputValue('#se-pmsg')).toBe('Hej');
-    await pg.waitForLoadState('networkidle'); const before = await pg.locator('#se-rows li').count(); await pg.click('#se-more'); await expect.poll(() => pg.locator('#se-rows li').count()).toBe(before + 5); // count settles after the panel remount (CI flake)
+    const before = await pg.locator('#se-rows li').count(); await pg.click('#se-more'); expect(await pg.locator('#se-rows li').count()).toBe(before + 5);
     await prisma.invitation.updateMany({ where: { event: { slug: p.id } }, data: { delivery: 'bounced' } });
     await pg.reload(); await pg.waitForSelector('#se-rows >> text=Afvist – tjek adressen');
     await prisma.invitation.updateMany({ where: { event: { slug: p.id } }, data: { delivery: 'sent' } });
@@ -130,5 +130,35 @@ describe.skipIf(!existsSync(CHROME))('UI (headless)', () => {
     const v = await browser.newPage(); await v.goto(`${BASE}/da/p/${p.id}`); await v.waitForLoadState('networkidle');
     expect(await v.locator('#se').count()).toBe(0);
     await v.close(); await pg.close();
+  });
+
+  test('F1: hide/show the share panel keeps "Sendt tidligere" rows (never vanish) and "Vis flere" adds exactly 5', async () => {
+    const p = await poll();
+    for (const k of ['e1', 'e2']) await send(p, { recipients: [`${k}-${uniq()}@example.com`] });
+    const pg = await browser.newPage();
+    await pg.goto(`${BASE}/da`);
+    await pg.evaluate(([id, tok]) => { sessionStorage.setItem(`mt-admin-${id}`, `/p/${id}/admin#${tok}`); localStorage.removeItem('ga-se-mode'); }, [p.id, p.token]);
+    await pg.goto(`${BASE}/da/p/${p.id}?created=1`);
+    await pg.waitForFunction(() => document.querySelectorAll('#se-rows li[data-status="earlier"]').length === 2);
+    const n0 = await pg.locator('#se-rows li').count();
+    // record the minimum number of earlier rows seen at any DOM mutation from now on
+    await pg.evaluate(() => {
+      const w = window as unknown as { minEarlier: number };
+      w.minEarlier = 99;
+      const f = () => { w.minEarlier = Math.min(w.minEarlier, document.querySelectorAll('#se-rows li[data-status="earlier"]').length); };
+      new MutationObserver(f).observe(document.body, { subtree: true, childList: true, attributes: true }); f();
+    });
+    for (let i = 0; i < 2; i++) {
+      await pg.click('#share-close'); await pg.waitForSelector('#share', { state: 'hidden' });
+      await pg.click('#share-open'); await pg.waitForSelector('#share #se-rows');
+    }
+    // immediately (no waiting for network): exactly +5
+    await pg.click('#se-more');
+    expect(await pg.locator('#se-rows li').count()).toBe(n0 + 5);
+    await pg.waitForTimeout(1500); // a late refresh must not add/remove rows
+    expect(await pg.locator('#se-rows li').count()).toBe(n0 + 5);
+    expect(await pg.locator('#se-rows li[data-status="earlier"]').count()).toBe(2);
+    expect(await pg.evaluate(() => (window as unknown as { minEarlier: number }).minEarlier)).toBe(2);
+    await pg.close();
   });
 });

@@ -19,11 +19,15 @@ type St = 'idle' | 'sending' | 'sent' | 'failed' | 'bounced' | 'rejected';
 type Row = { id: number; value: string; status: St; touched: boolean; earlier?: boolean };
 const POLL_MS = 20_000;
 let uid = 0;
-/** Unsent drafts survive remounts (share panel hidden/shown) but not a reload (§46.2: drafts are lost on reload). */
 type BSt = '' | 'sending' | 'sent' | 'failed' | 'blocked' | 'bounced';
 type BItem = { id: number; raw: string; email: string; name?: string; status: BSt };
 type Kind = 'valid' | 'invalid' | 'dup' | 'already';
-const drafts = new Map<string, { rows: Row[]; message: string; bulk?: BItem[] }>();
+/**
+ * F1: the whole box state survives remounts (share panel hidden/shown moves the box) – rows incl. "Sendt tidligere",
+ * chips, invitation list, quota and the loaded flag – so nothing vanishes/pops back. A reload clears it (module state),
+ * and unsent drafts are lost on reload as §46.2 says.
+ */
+const drafts = new Map<string, { rows: Row[]; message: string; bulk: BItem[]; inv: Invitee[]; quota: Quota | null; loaded: boolean }>();
 const MODE_KEY = 'ga-se-mode';
 /** Split pasted text: ; , newline/whitespace, and Outlook "Name <x@y>" (keeps only the address). */
 /** Split pasted text into addresses, keeping display names from `Name <x@y>` / `"Lund, Jan" <x@y>` (L4, H3). */
@@ -55,11 +59,12 @@ export const waitMinutes = (sec: number) => (sec < 60 ? 0 : Math.ceil(sec / 60))
 const isIpLimit = (status: number | undefined, d: Record<string, unknown>) => status === 429 && (d.error === 'rate_ip' || d.code === 'ip_limit');
 
 /** P4: current label + invisible ghosts of Send / Sender… / Prøv igen in one grid cell → constant button width. */
-function Stack({ g, cur }: { g: [string, string, string]; cur: ReactNode }) {
+function Stack({ g, cur }: { g: [string, string, string, string]; cur: ReactNode }) {
   return (<span className="se-btn__stack"><span>{cur}</span>
     <span className="ghost" aria-hidden="true">{g[0]}</span>
     <span className="ghost" aria-hidden="true"><span className="spinner" /> {g[1]}</span>
-    <span className="ghost" aria-hidden="true">{g[2]}</span></span>);
+    <span className="ghost" aria-hidden="true">{g[2]}</span>
+    <span className="ghost" aria-hidden="true">{g[3]}</span></span>);
 }
 
 export default function SendToEmails({ slug, token }: { slug: string; token: string }) {
@@ -67,23 +72,24 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
   const lp = useLp();
   const [open, setOpen] = useState(true);
   const [rows, setRows] = useState<Row[]>(() => {
-    const d = drafts.get(slug)?.rows ?? [];
-    return [...d, ...Array.from({ length: Math.max(0, 5 - d.length) }, () => newRow())];
+    const d = (drafts.get(slug)?.rows ?? []).map((r) => (r.status === 'sending' ? { ...r, status: 'idle' as St } : r));
+    const idle = d.filter((r) => !r.earlier && r.status === 'idle').length;
+    return [...d, ...Array.from({ length: d.length ? Math.max(0, 1 - idle) : 5 }, () => newRow())];
   });
-  const [invitees, setInvitees] = useState<Invitee[]>([]);
-  const [quota, setQuota] = useState<Quota | null>(null);
+  const [invitees, setInvitees] = useState<Invitee[]>(() => drafts.get(slug)?.inv ?? []);
+  const [quota, setQuota] = useState<Quota | null>(() => drafts.get(slug)?.quota ?? null);
   const [pmOpen, setPmOpen] = useState(() => !!drafts.get(slug)?.message);
   const [message, setMessage] = useState(() => drafts.get(slug)?.message ?? '');
   const [live, setLive] = useState('');
   const [mode, setModeS] = useState<'rows' | 'bulk'>('rows');
-  const [B, setB] = useState<BItem[]>(() => drafts.get(slug)?.bulk ?? []);
+  const [B, setB] = useState<BItem[]>(() => (drafts.get(slug)?.bulk ?? []).map((x) => (x.status === 'sending' ? { ...x, status: '' as BSt } : x)));
   const [bulkText, setBulkText] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   useEffect(() => { try { if (localStorage.getItem(MODE_KEY) === 'bulk') setModeS('bulk'); } catch { /* private mode */ } }, []);
   const [ipWait, setIpWait] = useState<number | null>(null);
   const rootRef = useRef<HTMLElement>(null);
-  const loaded = useRef(false);
+  const loaded = useRef(drafts.get(slug)?.loaded ?? false);
   const sentHere = useRef(0);
 
   const ipTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -98,8 +104,8 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
   };
   useEffect(() => () => clearInterval(ipTimer.current), []);
   useEffect(() => {
-    drafts.set(slug, { bulk: B.filter((x) => x.status !== 'sent' && x.status !== 'bounced' && x.status !== 'sending'), rows: rows.filter((r) => !r.earlier && r.status !== 'sent' && r.status !== 'sending' && r.status !== 'bounced').map((r) => ({ ...r, status: r.status === 'failed' ? 'failed' : 'idle' })), message });
-  }, [slug, rows, message, B]);
+    drafts.set(slug, { bulk: B, rows, message, inv: invitees, quota, loaded: loaded.current });
+  }, [slug, rows, message, B, invitees, quota]);
   const say = (m: string) => { setLive(''); setTimeout(() => setLive(m), 30); };
   const api = useCallback(async (path: string, init?: RequestInit) => {
     const res = await fetch(`/api/events/${encodeURIComponent(slug)}/invitations${path}`, {
@@ -109,7 +115,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
 
   // H1: stable callbacks (no t/invitees deps) → exactly one interval; no side effects inside state updaters.
   const tRef = useRef(t); tRef.current = t;
-  const invRef = useRef<Invitee[]>([]);
+  const invRef = useRef<Invitee[]>(drafts.get(slug)?.inv ?? []);
   const apply = useCallback((d: { invitations?: Invitee[]; remaining?: Quota }) => {
     if (d.remaining) setQuota(d.remaining);
     if (!d.invitations) return;
@@ -368,11 +374,11 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
                       onBlur={(e) => { if (!r.touched && r.value.trim() && (e.relatedTarget as HTMLElement | null)?.dataset?.send !== String(r.id)) upd(r.id, { touched: true, value: normSe(r.value) }); }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (r.status !== 'sent' && !ro) void send(r); } }} />
                     <span className="se-btnwrap">
-                      {r.status === 'sending' ? <button type="button" className="btn btn--secondary btn--sm se-btn" disabled aria-busy="true"><Stack g={[t('se.send'), t('se.sending'), t('se.retry')]} cur={<><span className="spinner" aria-hidden="true" /> {t('se.sending')}</>} /></button>
+                      {r.status === 'sending' ? <button type="button" className="btn btn--secondary btn--sm se-btn" disabled aria-busy="true"><Stack g={[t('se.send'), t('se.sending'), t('se.retry'), t('se.sent')]} cur={<><span className="spinner" aria-hidden="true" /> {t('se.sending')}</>} /></button>
                         : r.status === 'bounced' ? <button type="button" className="btn btn--sm se-btn se-btn--bounced" disabled>{'⊘ '}{t('se.bouncedBtn')}</button>
-                        : r.status === 'failed' ? <button type="button" className="btn btn--secondary btn--sm se-btn" data-send={r.id} disabled={lim} onClick={() => send(r)}><Stack g={[t('se.send'), t('se.sending'), t('se.retry')]} cur={t('se.retry')} /></button>
-                        : r.status === 'sent' || r.earlier ? <button type="button" className="btn btn--sm se-btn se-btn--done" disabled>{t('se.sent')}</button>
-                        : <button type="button" className="btn btn--secondary btn--sm se-btn" data-send={r.id} disabled={dis} aria-label={t('se.sendAria', { n })} onClick={() => send(r)}><Stack g={[t('se.send'), t('se.sending'), t('se.retry')]} cur={t('se.send')} /></button>}
+                        : r.status === 'failed' ? <button type="button" className="btn btn--secondary btn--sm se-btn" data-send={r.id} disabled={lim} onClick={() => send(r)}><Stack g={[t('se.send'), t('se.sending'), t('se.retry'), t('se.sent')]} cur={t('se.retry')} /></button>
+                        : r.status === 'sent' || r.earlier ? <button type="button" className="btn btn--sm se-btn se-btn--done" disabled><Stack g={[t('se.send'), t('se.sending'), t('se.retry'), t('se.sent')]} cur={t('se.sent')} /></button>
+                        : <button type="button" className="btn btn--secondary btn--sm se-btn" data-send={r.id} disabled={dis} aria-label={t('se.sendAria', { n })} onClick={() => send(r)}><Stack g={[t('se.send'), t('se.sending'), t('se.retry'), t('se.sent')]} cur={t('se.send')} /></button>}
                     </span>
                   </div>
                   <div className="se-row__st" id={`se-s${r.id}`} aria-live="off">
