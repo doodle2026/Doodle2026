@@ -845,6 +845,6 @@
     "seQuotaHour": "Kun {n} invitationer tilbage i denne time – fjern {m}.",
     "ownerNotConfigured": "Ejer-login er ikke sat op på serveren.",
     "ownerRetry": "Noget gik galt. Genindlæs siden, og prøv igen.",
-    "ownerPlaceholder": "Statistikken kommer her."
+    "ownerSkip": "Spring til indhold"
   }
 }

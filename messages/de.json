@@ -845,6 +845,6 @@
     "seQuotaHour": "In dieser Stunde nur noch {n} Einladungen – entfernen Sie {m}.",
     "ownerNotConfigured": "Die Inhaber-Anmeldung ist auf dem Server nicht eingerichtet.",
     "ownerRetry": "Etwas ist schiefgelaufen. Lade die Seite neu und versuche es erneut.",
-    "ownerPlaceholder": "Hier erscheinen die Statistiken."
+    "ownerSkip": "Zum Inhalt springen"
   }
 }

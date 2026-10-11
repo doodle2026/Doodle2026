@@ -845,6 +845,6 @@
     "seQuotaHour": "Plus que {n} invitations cette heure-ci – retirez-en {m}.",
     "ownerNotConfigured": "La connexion propriétaire n'est pas configurée sur le serveur.",
     "ownerRetry": "Une erreur est survenue. Rechargez la page et réessayez.",
-    "ownerPlaceholder": "Les statistiques apparaîtront ici."
+    "ownerSkip": "Aller au contenu"
   }
 }

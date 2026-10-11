@@ -193,6 +193,8 @@ export async function activityLog(type: string | undefined, pageIn: unknown) {
   const typeOf = (o: string) => Object.entries(LOG_TYPES).find(([, v]) => v.includes(o))?.[0] ?? o;
   const userIds = [...new Set(rows.map((r) => r.userId).filter((x): x is number => x !== null))];
   const users = new Map((await prisma.ownerUser.findMany({ where: { id: { in: userIds } }, select: { id: true, username: true } })).map((u) => [u.id, u.username]));
+  const slugs = [...new Set(rows.map((r) => r.eventSlug).filter((x): x is string => !!x))];
+  const titles = new Map((await prisma.event.findMany({ where: { slug: { in: slugs } }, select: { slug: true, title: true } })).map((e) => [e.slug, e.title]));
   return {
     rows: rows.map((r) => ({
       at: r.at.toISOString(), type: typeOf(r.outcome),
@@ -200,7 +202,7 @@ export async function activityLog(type: string | undefined, pageIn: unknown) {
       user: r.userId ? users.get(r.userId) ?? r.username : r.username,
       known: r.userId !== null,
       ip: r.ip || null, // already truncated at write time; views have none
-      event: r.eventSlug ? { id: r.eventSlug } : null,
+      event: r.eventSlug ? { id: r.eventSlug, title: titles.get(r.eventSlug) ?? null } : null, // title null = poll deleted since
       ...(r.outcome === 'bad_csrf' ? { detail: 'csrf' } : {}),
     })),
     total, page, pageSize, retentionMonths: 12,
