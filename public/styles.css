@@ -460,5 +460,4 @@ h1,h2,h3,h4,.btn,.field__label,.vgrid th,.choose-btn,.tri,.st,.legend,.reminder_
 .se-btn{flex:0 0 auto;min-width:6.5rem;max-width:none;min-height:44px;white-space:nowrap;padding-left:var(--s-3);padding-right:var(--s-3)}
 .se-btn:disabled:not(.se-btn--done):not(.se-btn--bounced){opacity:1;background:var(--c-bg);color:var(--c-muted);border-color:var(--c-border-strong)}
 :where(button,.btn):focus-visible{outline:3px solid var(--c-focus);outline-offset:2px}
-.se-input{min-width:8rem}
 .se-input{min-width:6rem}

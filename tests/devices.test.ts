@@ -53,7 +53,7 @@ const AUDIT = () => {
     const kids = [...el.childNodes].filter((k) => k.nodeType === 1 || k.textContent!.trim());
     if (kids.length && s.display.includes('flex') && s.alignItems !== 'center') r.push('notcentered:' + el.textContent!.trim().slice(0, 20));
   });
-  document.querySelectorAll('.se-row__line,.seg,.card').forEach((e) => { if (e.scrollWidth > e.clientWidth + 1) r.push('container-overflow:' + e.className); });
+  document.querySelectorAll('.se-row__line,.seg,.card').forEach((e) => { if (e.scrollWidth > e.clientWidth + 1) r.push('container-overflow:' + e.className + ((e.parentElement as HTMLElement).dataset.status ? '@' + (e.parentElement as HTMLElement).dataset.status + ':' + e.textContent!.slice(0, 40) : '')); });
   if (document.documentElement.scrollWidth > innerWidth + 1) r.push('page-hscroll');
   // vote buttons: the icon+label block is vertically centred within the button (±3 px) – the iPhone bug put it at the top
   document.querySelectorAll('.seg button').forEach((btn) => {
@@ -69,7 +69,10 @@ describe.skipIf(!existsSync(CHROME))('device matrix (§0.1)', () => {
   let p: { id: string; token: string };
   beforeAll(async () => {
     p = await poll();
-    await call(`/api/events/${p.id}/votes`, { method: 'POST', json: { name: 'Ana', votes: [{ option_id: 0, value: 'yes' }] } }).catch(() => undefined);
+    // P3: real option ids, and fail loudly
+    const ev = await call(`/api/events/${p.id}`);
+    const v = await call(`/api/events/${p.id}/votes`, { method: 'POST', json: { name: 'Ana', votes: ev.body.options.map((o: { id: number }) => ({ option_id: o.id, value: 'yes' })) } });
+    expect(v.status, JSON.stringify(v.body)).toBeLessThan(300);
     const [a, b, c] = ['sent', 'failed', 'bounced'].map((k) => `${k}-${uniq()}@example.com`);
     for (const e of [a, b, c]) await send(p, { recipients: [e] });
     await prisma.invitation.updateMany({ where: { email: b }, data: { delivery: 'failed' } });
@@ -96,6 +99,25 @@ describe.skipIf(!existsSync(CHROME))('device matrix (§0.1)', () => {
           await pg.locator('#se-rows li[data-status="idle"] input').first().fill('ikke-en-mail'); await pg.locator('#se-rows li[data-status="idle"] input').nth(1).focus();
           await pg.waitForTimeout(300);
           issues.push(...(await pg.evaluate(AUDIT)).map((x) => `${lang} se ${x}`));
+          // P1: field ≥ 6rem (96 px) wide at every width incl. 320 px
+          const fw = await pg.locator('#se-rows li[data-status="idle"] input').first().evaluate((e) => e.getBoundingClientRect().width);
+          if (fw < 96) issues.push(`${lang} se field ${Math.round(fw)}px < 96`);
+          // P2: mode switch on one line
+          const tops = await pg.locator('.se-mode button').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)));
+          if (new Set(tops).size > 1 && (d.viewport?.width ?? 999) >= 375) issues.push(`${lang} mode switch wraps`);
+          // P4: Send button keeps its width while "Sender…"
+          const idle = pg.locator('#se-rows li[data-status="idle"]').nth(1);
+          await idle.locator('input').fill(`w-${lang}-${Date.now()}@example.com`);
+          const btn = idle.locator('.se-btn'); const w0 = await btn.evaluate((e) => e.getBoundingClientRect().width);
+          let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+          await pg.route('**/invitations', async (rt) => { if (rt.request().method() === 'POST') await gate; await rt.continue(); });
+          await btn.click();
+          const sending = pg.locator('#se-rows li[data-status="sending"] .se-btn'); await sending.waitFor();
+          const w1 = await sending.evaluate((e) => e.getBoundingClientRect().width);
+          if (Math.abs(w1 - w0) > 1) issues.push(`${lang} send width ${Math.round(w0)}→${Math.round(w1)}`);
+          issues.push(...(await pg.evaluate(AUDIT)).map((x) => `${lang} sending ${x}`));
+          await pg.screenshot({ path: `${OUT}${d.id}-se-sending-${lang}.png` });
+          release(); await pg.unroute('**/invitations');
           await (await pg.$('#se'))!.screenshot({ path: `${OUT}${d.id}-se-${lang}.png` });
           await ctx.close();
         }

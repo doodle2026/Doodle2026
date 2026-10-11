@@ -60,10 +60,14 @@ describe('API', () => {
     expect((await prisma.invitation.findFirstOrThrow({ where: { email: f, event: { slug: p.id } } })).delivery).toBe('sent');
     await prisma.invitation.updateMany({ where: { email: f, event: { slug: p.id } }, data: { delivery: 'failed' } });
     const many = await call(`/api/events/${p.id}/invitations/retry`, { method: 'POST', token: p.token, json: { emails: [f, `nope-${uniq()}@example.com`] } });
-    expect(many.status).toBe(200); expect(many.body.results).toEqual([{ email: f, status: 'sent' }, expect.objectContaining({ status: 'failed' })]); expect(many.body.remaining).toBeTruthy();
+    expect(many.status).toBe(200); expect(many.body.results).toEqual([{ email: f, status: 'sent' }, expect.objectContaining({ status: 'not_invited' })]); expect(many.body.remaining).toBeTruthy();
     // already sent → reported as not_failed, not re-sent
     const again = await call(`/api/events/${p.id}/invitations/retry`, { method: 'POST', token: p.token, json: { emails: [f] } });
     expect(again.body.results).toEqual([{ email: f, status: 'not_failed' }]);
+    // P5: never-invited address → not_invited (nothing sent)
+    const ni = `never-${uniq()}@example.com`;
+    const nv = await call(`/api/events/${p.id}/invitations/retry`, { method: 'POST', token: p.token, json: { emails: [ni, f] } });
+    expect(nv.body.results).toEqual([{ email: ni, status: 'not_invited' }, { email: f, status: 'not_failed' }]);
   });
 
   test('admin API never exposes unsub/bounced (neutral blocked); §46.8 remaining + invitations shape', async () => {

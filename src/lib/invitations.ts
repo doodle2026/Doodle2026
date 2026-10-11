@@ -370,7 +370,7 @@ export async function previewInvitation(eventId: number, body: { message?: unkno
 async function invitationFor(eventId: number, email: unknown) {
   if (typeof email !== 'string') throw new ApiError(400, ['Angiv en modtager.']);
   const i = await prisma.invitation.findUnique({ where: { eventId_email: { eventId, email: normEmail(email) } } });
-  if (!i) throw new ApiError(404, ['Modtageren er ikke inviteret.']);
+  if (!i) throw new ApiError(404, ['Modtageren er ikke inviteret.'], { code: 'not_invited' });
   return i;
 }
 
@@ -398,14 +398,14 @@ export async function retryInvite(eventId: number, email: unknown) {
 /** Retry several failed invitations in ONE call (bulk "Prøv de fejlede igen", §46.7): per-address results sent|failed|blocked. */
 export async function retryFailed(eventId: number, emails: unknown) {
   if (!Array.isArray(emails) || !emails.length || emails.length > MAX_PER_SEND) throw new ApiError(400, [`Angiv 1–${MAX_PER_SEND} adresser.`], { code: 'bad_recipients' });
-  const results: { email: string; status: 'sent' | 'failed' | 'blocked' | 'not_failed' }[] = [];
+  const results: { email: string; status: 'sent' | 'failed' | 'blocked' | 'not_failed' | 'not_invited' }[] = [];
   for (const e of emails) {
     const email = String(e).trim().toLowerCase();
     try { const r = await retryInvite(eventId, email); results.push({ email, status: r.sent ? 'sent' : 'failed' }); } catch (err) {
       if (err instanceof ApiError && err.status === 429) throw new ApiError(429, err.errors, { ...err.extra, results, remaining: await remainingNow(eventId) });
       const code = err instanceof ApiError ? err.extra.code : undefined;
       // tester (#25): an address that isn't in a failed state (e.g. already sent) is reported as not_failed – nothing is re-sent
-      results.push({ email, status: code === 'blocked' ? 'blocked' : code === 'not_failed' ? 'not_failed' : 'failed' });
+      results.push({ email, status: code === 'blocked' ? 'blocked' : code === 'not_failed' ? 'not_failed' : code === 'not_invited' ? 'not_invited' : 'failed' });
     }
   }
   return { results };
