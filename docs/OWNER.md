@@ -46,6 +46,7 @@ DATABASE_URL='<prod connection string>' npm run owner:create -- --username jan
 - **Anywhere else** those headers are client-controlled and are **ignored**:
   - `TRUSTED_PROXY_HOPS=N` is the number of reverse proxies *you* run in front of the app, each appending to `X-Forwarded-For`. The client IP is the N-th entry from the right, i.e. the one your outermost proxy appended. Example: nginx → app is `1`; Cloudflare → nginx → app is `2`.
   - With `TRUSTED_PROXY_HOPS` unset or `0`, no header is trusted: the socket address is used if the runtime exposes it, else `unknown`. That means one shared bucket, which fails closed.
+  - **With `TRUSTED_PROXY_HOPS` ≥ 1 the app must only be reachable through that proxy** (firewall / private network / bind to localhost). If clients can reach the app directly, they control the whole `X-Forwarded-For` header and can pick any IP for themselves, defeating every IP rate limit and the login lock.
   - Tests and `.env.test` use `1` (the test client plays the proxy).
 - The leftmost `X-Forwarded-For` entry is never used.
 
@@ -62,6 +63,7 @@ Lift a lock (e.g. the ceiling was hit):
 
 ```bash
 DATABASE_URL='<prod direct URL>' npm run owner:unlock -- jan
+# exit codes: 0 unlocked · 1 no such owner user · 2 usage (no username) · 3 database error (connection/URL/migrations)
 ```
 
 - The command writes an `unlock` row to the audit log (activity log type "Unlocked (CLI)", with the OS user in the user-agent field). After that, the username's earlier failures stop counting for the pair backoff and the ceiling.

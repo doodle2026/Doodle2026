@@ -38,7 +38,7 @@ describe.skipIf(!existsSync(CHROME))('invitations UI (headless Chrome)', () => {
     expect(await p.textContent('#pmsg-err')).toBe('Beskeden er 5 tegn for lang.');
     await p.fill('#pmsg', 'Hej alle');
     await p.fill('#orgname', 'Mette');
-    expect(await p.textContent('#mailprev')).toContain('Mette via GrabAday');
+    expect(await p.textContent('#mailprev')).toContain('Mette via grabAday');
     expect(await p.textContent('#inv-send')).toBe('Send 2 invitationer');
     await p.click('#inv-send');
     await p.waitForSelector('#rtable tbody tr:nth-child(2)');

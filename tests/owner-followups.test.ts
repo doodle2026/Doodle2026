@@ -109,7 +109,7 @@ describe('owner follow-ups', () => {
     const page = await req(jar(), '/en/owner/login?expired=idle');
     expect(page.text).toContain('after 2 hours without activity');
     expect((await req(jar(), '/en/owner/login?expired=absolute')).text).toContain('12 hours');
-    expect((await req(jar(), '/en/owner/login?expired=ended')).text).toContain('session has ended');
+    expect((await req(jar(), '/en/owner/login?expired=ended')).text).toContain('Please log in again.');
   });
 
   test('L4: out-of-range ?page is clamped to the last page (list and log)', async () => {

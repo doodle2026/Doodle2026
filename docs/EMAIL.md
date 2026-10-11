@@ -11,7 +11,7 @@ Status legend: ✅ enforced in code + tested (this PR) · ⏳ step 4 "Invitation
 - ✅ `EMAIL_MODE=send` without `RESEND_API_KEY`/`EMAIL_FROM` → config error logged once at startup, `send()` returns `{ok:false}`; never throws, never logs secrets.
 - ✅ One message per recipient (never a shared `To`); many recipients via Resend batch (≤ 100 per call).
 - ✅ Idempotency keys `invite:<poll>:<email>` / `reminder:<poll>:<email>`.
-- ✅ From = app address (`EMAIL_FROM`) with display name `"<organizer name> via GrabAday"`; organizer name is optional and sanitized (quotes, angle brackets, CR/LF/control/invisible chars, `@`, URLs/domains stripped; ≤ 50 graphemes).
+- ✅ From = app address (`EMAIL_FROM`) with display name `"<organizer name> via grabAday"`; organizer name is optional and sanitized (quotes, angle brackets, CR/LF/control/invisible chars, `@`, URLs/domains stripped; ≤ 50 graphemes).
 - ✅ No per-message Reply-To (organizer e-mail is unverified); only the optional global `EMAIL_REPLY_TO`.
 - ✅ Header values are single-line (no header injection); `List-Unsubscribe` + `List-Unsubscribe-Post: One-Click` when an unsubscribe URL is given.
 - ✅ Only the public `/p/<id>` link in mails – render throws on any admin/edit link (also in description/personal text).
@@ -25,7 +25,7 @@ API (all admin-token, JSON): `GET /api/events/:id/invitations` (status list, lim
 - ✅ Organizer only (admin token, constant-time). Addresses parsed (`Name <email>`, comma/semicolon/space/newline), validated, deduped, already-invited skipped (`src/lib/recipients.ts`).
 - ✅ ≤ 50 recipients per send, ≤ 200 per poll, ≤ 100 new recipients per poll per hour (DB), ≤ 10 sends per IP per hour (in-memory, best effort on serverless), global quota 100/day and 3 000/month reserved atomically (Postgres advisory lock, `email_quota`); failed sends give the quota back.
 - ✅ Personal message: plain text, ≤ 1 000 graphemes ("Beskeden er N tegn for lang."), control/bidi chars stripped, escaped by the template, rejected if it contains admin/edit/invite links.
-- ✅ From: `"<organizer> via GrabAday" <EMAIL_FROM address>`, sanitized name, **no Reply-To**; open/click tracking off (no pixels); one mail per recipient (batch API), idempotency key `invite:<pollId>:<email>`.
+- ✅ From: `"<organizer> via grabAday" <EMAIL_FROM address>`, sanitized name, **no Reply-To**; open/click tracking off (no pixels); one mail per recipient (batch API), idempotency key `invite:<pollId>:<email>`.
 - ✅ Only the public `/p/<id>` link (render guard throws on admin/edit links).
 - ✅ Per-recipient delivery status: queued → sent → delivered / failed / bounced / unsub internally. The admin view and API never say why an address can't receive mail: bounced and unsubscribed both show the neutral "⊘ Kan ikke sendes til denne adresse" (`blocked`, filter "Kan ikke sendes"). The text "Modtageren har frabedt sig mails" is not used anywhere.
 
@@ -76,9 +76,9 @@ without tracking we cannot know who answered, so step 4 sends to **all non-unsub
 - Resend DPA, sending region Ireland (eu-west-1) and note that Resend stores account data/logs in the US.
 - Privacy policy text covering invitee addresses, retention (90 days after close) and unsubscribe.
 
-## Rename to GrabAday
-- From display: `"<name> via GrabAday" <EMAIL_FROM address>`; address only from `EMAIL_FROM`. All mail links come from `APP_URL` at render time (templates contain only `{{appUrl}}`, `{{pollUrl}}`, `{{assetBaseUrl}}`, footer URL placeholders).
-- `.ics`: `PRODID:-//GrabAday//GrabAday//DA`, UID `<slug>@grabaday.com` (fixed domain, independent of APP_URL so UIDs stay stable across preview / vercel.app / custom domain; existing UIDs changed once – no real users yet).
+## Rename to grabAday
+- From display: `"<name> via grabAday" <EMAIL_FROM address>`; address only from `EMAIL_FROM`. All mail links come from `APP_URL` at render time (templates contain only `{{appUrl}}`, `{{pollUrl}}`, `{{assetBaseUrl}}`, footer URL placeholders).
+- `.ics`: `PRODID:-//grabAday//grabAday//DA`, UID `<slug>@grabaday.com` (fixed domain, independent of APP_URL so UIDs stay stable across preview / vercel.app / custom domain; existing UIDs changed once – no real users yet).
 - Internal crypto domain-separation labels (`moedetid-email-v1`, `moedetid-inv-link-v1`, `moedetid-invite-v1`, `moedetid-idem-v1`) are intentionally unchanged: renaming them would invalidate stored suppression hashes, sent unsubscribe/invite links and idempotency keys. They are never shown to users.
 - `scripts/sync-email-templates.mjs` rewrites any leftover `Mødetid`/`moedetid.dk` on sync as a safety net.
 

@@ -17,7 +17,7 @@ export default async function OwnerChrome({ locale, active, user, children }: { 
       <header className="app-header owner-header">
         <Link className="app-header__logo" href={active ? base : `${base}/login`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/favicon.svg" alt="" width={24} height={24} />{'GrabAday '}<span className="owner-badge">{t('owner.brand')}</span>
+          <img src="/brand/favicon.svg" alt="" width={24} height={24} />{'grabAday '}<span className="owner-badge">{t('owner.brand')}</span>
         </Link>
         {active && (
           <nav className="owner-nav" aria-label={t('owner.navAria')}>

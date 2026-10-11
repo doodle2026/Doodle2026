@@ -210,7 +210,7 @@ describe('slugs, pages, XSS', () => {
     expect(r.status).toBe(200);
     expect(r.text).not.toContain('<script>alert');
     expect(r.text).not.toContain('<img src=x');
-    expect(r.text).toContain('<title>&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt;&quot;&#x27;&amp; – GrabAday</title>');
+    expect(r.text).toContain('<title>&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt;&quot;&#x27;&amp; – grabAday</title>');
     expect(r.text).toMatch(/<meta property="og:title" content="&lt;\/title&gt;/);
     expect(r.text).toMatch(new RegExp(`<meta property="og:url" content="https?://[^"]+/p/${id}"`));
     expect(r.text).not.toContain('evil.example');
@@ -268,7 +268,7 @@ describe('slugs, pages, XSS', () => {
     const r = await call(`/da/p/${id}`);
     expect(r.text).toContain(`<link rel="canonical" href="${BASE}/da/p/${id}"`);
     expect(r.text).toContain('<meta property="og:locale" content="da_DK"');
-    expect(r.text).toContain('<meta property="og:site_name" content="GrabAday"');
+    expect(r.text).toContain('<meta property="og:site_name" content="grabAday"');
     expect(r.text).toContain('<meta property="og:title" content="Frokost &amp; &quot;kage&quot;"');
     expect(r.text).toContain(`<meta name="description" content="Vælg de datoer, der passer dig. 2 datoforslag, 14.–16. oktober ${Y}."`);
     expect(r.text).toContain('<meta name="twitter:title" content="Frokost &amp; &quot;kage&quot;"');
@@ -413,7 +413,7 @@ describe('OG image route + link preview', () => {
     expect(r.text).toContain(`<meta property="og:image" content="${img}"/>`);
     expect(r.text).toContain('<meta property="og:image:width" content="1200"/>');
     expect(r.text).toContain('<meta property="og:image:height" content="630"/>');
-    expect(r.text).toContain('<meta property="og:image:alt" content="GrabAday-afstemning: Møde &quot;A&quot; &amp; &lt;b&gt;B&lt;/b&gt;"/>');
+    expect(r.text).toContain('<meta property="og:image:alt" content="grabAday-afstemning: Møde &quot;A&quot; &amp; &lt;b&gt;B&lt;/b&gt;"/>');
     expect(r.text).toContain('<meta name="twitter:card" content="summary_large_image"/>');
     expect(r.text).toContain(`<meta name="twitter:image" content="${img}"/>`);
     expect(r.text).not.toContain(token);

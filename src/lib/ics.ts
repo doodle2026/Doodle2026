@@ -33,7 +33,7 @@ export type IcsEvent = { uid: string; stamp: Date; sequence?: number; lastModifi
 export function buildIcs(e: IcsEvent): string {
   const when = [`DTSTART;VALUE=DATE:${basicDate(e.date)}`, `DTEND;VALUE=DATE:${basicDate(addDays(e.date, 1))}`];
   const lines = [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', `PRODID:-//GrabAday//GrabAday//${(e.lang ?? 'en').toUpperCase()}`, 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VCALENDAR', 'VERSION:2.0', `PRODID:-//grabAday//grabAday//${(e.lang ?? 'en').toUpperCase()}`, 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT',
     `UID:${e.uid}`, `DTSTAMP:${icsDate(e.stamp)}`,
     ...(e.sequence !== undefined ? [`SEQUENCE:${e.sequence}`] : []),

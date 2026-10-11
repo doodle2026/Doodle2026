@@ -1,4 +1,4 @@
-# GrabAday – find en dag, der passer alle
+# grabAday – find en dag, der passer alle
 
 Next.js 15 (App Router, TypeScript) · Prisma 6 · PostgreSQL · design fra `/workspace/doodle-ui` (`public/styles.css` uændret).
 Deploy: Vercel `fra1` + Supabase Postgres (Frankfurt) via `.github/workflows` (se `/workspace/doodle-deploy`).
@@ -29,7 +29,7 @@ ethvert `?schema=` virker (PR-previews bruger `pr_<nr>`), ingen rå SQL med `pub
 
 ## API
 ### Kun datoer (fra okt. 2026)
-GrabAday bruger **kun hele datoer** – ingen klokkeslæt og ingen tidszoner. Datoer er rene strenge `YYYY-MM-DD` (DB: `time_options.date DATE`), formateres altid med `timeZone:'UTC'` (`fre. 16. okt. 2026`), så de vises ens i alle tidszoner.
+grabAday bruger **kun hele datoer** – ingen klokkeslæt og ingen tidszoner. Datoer er rene strenge `YYYY-MM-DD` (DB: `time_options.date DATE`), formateres altid med `timeZone:'UTC'` (`fre. 16. okt. 2026`), så de vises ens i alle tidszoner.
 
 ### `POST /api/events`
 Kræver `Content-Type: application/json` (ellers **415**). Valgfri `Idempotency-Key` (16–100 tegn `[A-Za-z0-9_-]`).

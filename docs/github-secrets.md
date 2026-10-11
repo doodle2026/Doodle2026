@@ -16,7 +16,7 @@ The workflows therefore use no `environment:` keys. If you upgrade to GitHub Pro
 Vercel project env – Production only (set in Vercel, not GitHub; the prod workflow does not pass them):
 - DATABASE_URL, DIRECT_URL – type Sensitive
 - RESEND_API_KEY – type Sensitive (Resend API key, permission "Sending access", restricted to the mail.<domain> domain)
-- EMAIL_MODE=send, EMAIL_FROM="GrabAday <noreply@mail.<domain>>", EMAIL_REPLY_TO (optional) – plain
+- EMAIL_MODE=send, EMAIL_FROM="grabAday <noreply@mail.<domain>>", EMAIL_REPLY_TO (optional) – plain
 - APP_URL is passed by the workflow (repo variable APP_URL or default https://doodle2026.vercel.app)
 Preview: nothing in Vercel; the preview workflow passes DATABASE_URL/DIRECT_URL (staging pr_<n>) and EMAIL_MODE=log. No RESEND_API_KEY in preview.
 No Resend secret is needed in GitHub.

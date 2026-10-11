@@ -41,13 +41,13 @@ describe('email adapter', () => {
   it('send mode: posts to Resend with bearer key, from, reply_to, idempotency key', async () => {
     const f = vi.fn(async () => new Response(JSON.stringify({ id: 'em_1' }), { status: 200 }));
     const { lines, log } = capture();
-    const m = createMailer({ env: { EMAIL_MODE: 'send', RESEND_API_KEY: KEY, EMAIL_FROM: 'GrabAday <noreply@grabaday.com>', EMAIL_REPLY_TO: 'hej@grabaday.com' }, fetch: f as never, log });
+    const m = createMailer({ env: { EMAIL_MODE: 'send', RESEND_API_KEY: KEY, EMAIL_FROM: 'grabAday <noreply@grabaday.com>', EMAIL_REPLY_TO: 'hej@grabaday.com' }, fetch: f as never, log });
     expect(await m.send({ ...msg, idempotencyKey: 'k1' })).toEqual({ ok: true, mode: 'send', id: 'em_1' });
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://api.resend.com/emails');
     expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${KEY}`);
     expect((init.headers as Record<string, string>)['Idempotency-Key']).toBe('k1');
-    expect(JSON.parse(String(init.body))).toMatchObject({ from: 'GrabAday <noreply@grabaday.com>', to: ['anna@example.com'], reply_to: 'hej@grabaday.com', text: msg.text });
+    expect(JSON.parse(String(init.body))).toMatchObject({ from: 'grabAday <noreply@grabaday.com>', to: ['anna@example.com'], reply_to: 'hej@grabaday.com', text: msg.text });
     expect(lines.join('\n')).not.toContain(KEY);
     expect(lines.join('\n')).not.toContain(TOKEN);
   });

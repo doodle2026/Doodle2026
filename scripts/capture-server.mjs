@@ -11,7 +11,7 @@ if (existsSync('.env.test')) for (const line of readFileSync('.env.test', 'utf8'
 process.env.EMAIL_MODE = 'capture';
 process.env.NEXT_DIST_DIR ||= '.next-capture';
 process.env.EMAIL_LINK_SECRET ||= 'capture-only-local-link-secret-0123456789abcdef';
-process.env.EMAIL_FROM ||= 'GrabAday <test@grabaday.invalid>';
+process.env.EMAIL_FROM ||= 'grabAday <test@grabaday.invalid>';
 process.env.EMAIL_DAILY_QUOTA ||= '100000';
 process.env.EMAIL_MONTHLY_QUOTA ||= '1000000';
 const port = Number(process.env.PORT || 3001);

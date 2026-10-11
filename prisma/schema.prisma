@@ -34,7 +34,7 @@ model Event {
   deletedParticipants DeletedParticipant[]
   participants    Participant[]
   invitations     Invitation[]
-  /// Organizer display name for invitation mails ("<name> via GrabAday"), sanitized. Optional.
+  /// Organizer display name for invitation mails ("<name> via grabAday"), sanitized. Optional.
   organizerName   String?          @map("organizer_name") @db.VarChar(100)
   /// Manual reminders: count (max 3) and last send (max one per 24 h).
   remindersSent   Int              @default(0) @map("reminders_sent")

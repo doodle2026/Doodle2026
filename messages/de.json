@@ -13,7 +13,7 @@
     "fixN": "{n, plural, one {Bitte Folgendes korrigieren:} other {Bitte diese # Punkte korrigieren:}}",
     "title": "Titel *",
     "description": "Beschreibung",
-    "home": "GrabAday – Startseite"
+    "home": "grabAday – Startseite"
   },
   "theme": {
     "auto": "Auto",
@@ -31,7 +31,7 @@
     "count": "{n, plural, one {# Terminvorschlag} other {# Terminvorschläge}}",
     "atTime": " um {time}",
     "legacyBadge": "Ältere Umfrage mit Uhrzeiten",
-    "legacyTip": "Erstellt, bevor GrabAday auf reine Termine umgestellt hat"
+    "legacyTip": "Erstellt, bevor grabAday auf reine Termine umgestellt hat"
   },
   "vote": {
     "yes": "Ja",
@@ -181,26 +181,26 @@
     "stillVote": "Sie können weiterhin über den Link in der Einladung abstimmen.",
     "undo": "Rückgängig – wieder anmelden",
     "goPoll": "Zur Umfrage",
-    "allHint": "Möchten Sie gar keine E-Mails von GrabAday? <a href=\"{href}\">Von allen E-Mails abmelden</a>.",
+    "allHint": "Möchten Sie gar keine E-Mails von grabAday? <a href=\"{href}\">Von allen E-Mails abmelden</a>.",
     "reH": "Sie sind wieder angemeldet",
     "reLead": "Sie erhalten wieder E-Mails zu <strong>{title}</strong>, z. B. Erinnerungen der Organisation.",
     "again": "Erneut abmelden",
     "allTitle": "Von allen E-Mails abmelden",
-    "allH": "Von allen GrabAday-E-Mails abmelden?",
+    "allH": "Von allen grabAday-E-Mails abmelden?",
     "allLead": "Wir senden keine Einladungen oder Erinnerungen mehr an <strong>{email}</strong> – von keiner Organisation, zu keiner Umfrage.",
     "allYes": "Ja, von allen E-Mails abmelden",
     "onlyThis": "Nur diese Umfrage",
     "whyConfirm": "Wir bitten um Bestätigung, damit eine automatische Linkprüfung Ihres Mailprogramms Sie nicht versehentlich abmeldet.",
     "working": "Wird abgemeldet …",
     "allDoneH": "Sie sind von allen E-Mails abgemeldet",
-    "allDoneLead": "GrabAday sendet keine E-Mails mehr an <strong>{email}</strong>. Die Organisation erfährt nicht, dass Sie sich abgemeldet haben.",
+    "allDoneLead": "grabAday sendet keine E-Mails mehr an <strong>{email}</strong>. Die Organisation erfährt nicht, dass Sie sich abgemeldet haben.",
     "allRegret": "Umentschieden? Wenn Sie später wieder Einladungen möchten, klicken Sie unten auf „Wieder anmelden“ oder bitten Sie die Organisation, Ihnen den Link direkt zu schicken.",
     "resub": "Wieder anmelden",
-    "resubLead": "Sie können wieder Einladungen über GrabAday erhalten."
+    "resubLead": "Sie können wieder Einladungen über grabAday erhalten."
   },
   "abuse": {
     "title": "Missbrauch melden",
-    "lead": "Haben Sie eine unerwartete E-Mail von GrabAday erhalten, die wie Spam wirkt? Sagen Sie es uns – wir prüfen das.",
+    "lead": "Haben Sie eine unerwartete E-Mail von grabAday erhalten, die wie Spam wirkt? Sagen Sie es uns – wir prüfen das.",
     "q": "Was ist das Problem?",
     "spam": "Spam oder unerwünschte Werbung",
     "unknown": "Ich kenne den Absender nicht",
@@ -213,7 +213,7 @@
     "doneH": "Danke – wir haben Ihre Meldung erhalten",
     "doneLead": "Wir prüfen sie so schnell wie möglich. Bei wiederholten Meldungen sperren wir den Mailversand der Organisation.",
     "doneUnsub": "Sie sind von E-Mails zu dieser Umfrage abgemeldet.",
-    "allLink": "Von allen GrabAday-E-Mails abmelden"
+    "allLink": "Von allen grabAday-E-Mails abmelden"
   },
   "admin": {
     "pageTitle": "Admin: {title}",
@@ -308,7 +308,7 @@
     "track": "Verfolgen, wer geantwortet hat",
     "trackDesc": "Jede*r Empfänger*in erhält einen <strong>eigenen Link</strong>. So sehen Sie, wer geantwortet hat, und Erinnerungen gehen nur an die Fehlenden. Aus: Alle erhalten denselben öffentlichen Link.",
     "from": "Von",
-    "fromVal": "{name} via GrabAday &lt;noreply@grabaday.com&gt;",
+    "fromVal": "{name} via grabAday &lt;noreply@grabaday.com&gt;",
     "replyTo": "Antwort an",
     "replyToVal": "Keine – Antworten auf die E-Mail kommen nicht an. Geben Sie ggf. Ihre Kontaktdaten in der Nachricht an.",
     "to": "An",
@@ -425,7 +425,7 @@
     "inviteIntro": "<strong>{{organizerName}}</strong> sucht einen Termin, der allen passt. Wählen Sie die Termine, die Ihnen passen.",
     "inviteTxtHead": "{{organizerName}} lädt Sie zur Abstimmung ein: {{eventTitle}}",
     "cta": "Passende Termine auswählen",
-    "inviteWhy": "Sie erhalten diese E-Mail, weil {{organizerName}} Sie über GrabAday eingeladen hat.",
+    "inviteWhy": "Sie erhalten diese E-Mail, weil {{organizerName}} Sie über grabAday eingeladen hat.",
     "remSubject": "Erinnerung: {{eventTitle}}",
     "remSubjectDeadline": "Erinnerung: {{eventTitle}} – endet am {{deadline}}",
     "remPreheaderAll": "Schon geantwortet? {{#deadline}}Die Umfrage endet am {{deadline}}. {{/deadline}}Wenn Sie bereits abgestimmt haben, ignorieren Sie diese E-Mail.",
@@ -436,7 +436,7 @@
     "remIntro": "<strong>{{organizerName}}</strong> erinnert an die Umfrage{{#respondedCount}} – bisher haben {{respondedCount}} geantwortet{{/respondedCount}}. Falls Sie noch nicht abgestimmt haben: Es dauert keine Minute.",
     "remAlready": "Schon geantwortet? Dann ignorieren Sie diese E-Mail – oder ändern Sie Ihre Antworten über den persönlichen Link, den Sie beim Abstimmen erhalten haben.",
     "remCta": "Zur Umfrage",
-    "remWhy": "Sie erhalten diese Erinnerung, weil {{organizerName}} Sie über GrabAday eingeladen hat.",
+    "remWhy": "Sie erhalten diese Erinnerung, weil {{organizerName}} Sie über grabAday eingeladen hat.",
     "remRuleAll": "Erinnerungen gehen an alle Eingeladenen, die sich nicht abgemeldet haben.",
     "remRuleTracking": "Erinnerungen gehen nur an Eingeladene, die noch nicht geantwortet haben.",
     "remTxtHeadAll": "Erinnerung: Schon geantwortet? – {{eventTitle}}",
@@ -451,10 +451,10 @@
     "unsubAll": "Von allen E-Mails abmelden",
     "reportAbuse": "Missbrauch melden",
     "privacy": "Ihre Adresse wird nur für diese Umfrage verwendet und 90 Tage nach dem Schließen automatisch gelöscht. Antworten auf diese E-Mail werden nicht gelesen.",
-    "footerText": "GrabAday · Termine finden ohne Anmeldung",
-    "fromName": "{{organizerName}} via GrabAday",
+    "footerText": "grabAday · Termine finden ohne Anmeldung",
+    "fromName": "{{organizerName}} via grabAday",
     "icsSummary": "{{eventTitle}}",
-    "icsDescription": "Endgültiger Termin in GrabAday gewählt: {{pollUrl}}"
+    "icsDescription": "Endgültiger Termin in grabAday gewählt: {{pollUrl}}"
   },
   "se": {
     "title": "An E-Mail-Adressen senden",
@@ -535,7 +535,7 @@
     "loadError": "Die Daten konnten nicht geladen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
     "loading": "Wird geladen…",
     "loginTitle": "Inhaber-Anmeldung",
-    "loginLead": "Nur für den Betrieb von GrabAday. Organisierende und Teilnehmende brauchen kein Konto.",
+    "loginLead": "Nur für den Betrieb von grabAday. Organisierende und Teilnehmende brauchen kein Konto.",
     "username": "Benutzername",
     "password": "Passwort",
     "showPw": "Anzeigen",
@@ -552,7 +552,7 @@
     "expired": "Ihre Sitzung ist abgelaufen (12 Stunden). Bitte erneut anmelden.",
     "loginNote": "Anmeldungen und Fehlversuche werden protokolliert. Keine öffentliche Registrierung – Konten legt der Betrieb an.",
     "dashTitle": "Dashboard",
-    "dashLead": "So wird GrabAday genutzt. Nur Gesamtzahlen – Tokens werden nie angezeigt.",
+    "dashLead": "So wird grabAday genutzt. Nur Gesamtzahlen – Tokens werden nie angezeigt.",
     "kPolls": "Umfragen",
     "kToday": "{n} heute",
     "k7": "{n} in den letzten 7 Tagen",
@@ -722,7 +722,6 @@
     "localTime": "Ihre Zeit",
     "deletedCounter": "Nur Zähler – gelöschte Umfragen werden vollständig entfernt (endgültige Löschung).",
     "deletedNotListed": "{n} gelöschte Umfragen werden nicht aufgeführt (endgültige Löschung).",
-    "softVariant": "Variante: Soft Delete (nur falls die Entwicklung Soft Delete bestätigt)",
     "searchHint": "Teiltreffer, Groß-/Kleinschreibung egal. Sucht in E-Mail-Adressen, wenn der Text ein @ enthält.",
     "limH": "Erreichte Limits",
     "limNote": "Summen pro Tag – keine IP oder E-Mail gespeichert.",
@@ -755,7 +754,7 @@
     "shareH": "Umfrage teilen",
     "pickHint": "Wähle die Termine, die dir passen.",
     "pageOnly": "Wird nur auf dieser Seite angezeigt, bis du sie schließt.",
-    "ogAlt": "GrabAday-Umfrage: {title}",
+    "ogAlt": "grabAday-Umfrage: {title}",
     "mailHello": "Hallo!",
     "hintCards": "Tippe bei jedem Termin auf Ja, Vielleicht oder Nein. Tippe erneut auf deine Wahl, um sie zurückzusetzen.",
     "savedReturning": "✓ Du hast als {name} geantwortet. Du kannst deine Antworten unten bearbeiten.",
@@ -823,7 +822,7 @@
     "orgNamePh": "z. B. Anna Schmidt",
     "organizer": "Die Organisatorin bzw. der Organisator",
     "trackOn": " Für diese Umfrage aktiviert (bereits gesendete Links bleiben gültig, bis du sie widerrufst).",
-    "fromVal": "{name} via GrabAday",
+    "fromVal": "{name} via grabAday",
     "replyNone": "<strong>Keine</strong> – Antworten auf die E-Mail kommen nicht an. Gib bei Bedarf deine Kontaktdaten in der Nachricht an.",
     "subjectVal": "{name} lädt dich ein: {title}",
     "linkPersonalVal": "Persönlicher Link pro Empfänger*in (<code>{path}</code>) – <strong>nie der Admin-Link</strong>.",
@@ -846,11 +845,11 @@
     "ownerNotConfigured": "Die Inhaber-Anmeldung ist auf dem Server nicht eingerichtet.",
     "ownerRetry": "Etwas ist schiefgelaufen. Lade die Seite neu und versuche es erneut.",
     "ownerSkip": "Zum Inhalt springen",
-    "ownerExpiredIdle": "Du wurdest nach 2 Stunden ohne Aktivität abgemeldet. Melde dich erneut an.",
-    "ownerSessionEnded": "Deine Sitzung wurde beendet (du wurdest abgemeldet). Melde dich erneut an.",
+    "ownerExpiredIdle": "Sie wurden nach 2 Stunden ohne Aktivität abgemeldet. Bitte melden Sie sich erneut an.",
+    "ownerSessionEnded": "Bitte melden Sie sich erneut an.",
     "ownerScrollHint": "Seitlich scrollen, um alle Spalten zu sehen →",
     "ownerTableAria": "Tabelle – seitlich scrollen für weitere Spalten",
-    "ownerTzNote": "Zeiten werden in deiner Ortszeit angezeigt ({zone}). „Heute“, die Tageszahlen und das E-Mail-Kontingent verwenden den UTC-Tag.",
+    "ownerTzNote": "Zeiten werden in Ihrer Ortszeit angezeigt ({zone}). „Heute“, die Tageszahlen und das E-Mail-Kontingent verwenden den UTC-Tag.",
     "ownerLtUnlock": "Entsperrt (CLI)"
   }
 }

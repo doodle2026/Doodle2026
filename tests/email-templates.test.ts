@@ -107,7 +107,7 @@ describe('email policy', () => {
 });
 
 describe('adapter: headers, replyTo override, batch', () => {
-  const env = { EMAIL_MODE: 'send', RESEND_API_KEY: 're_x_secret_key_123456', EMAIL_FROM: 'GrabAday <noreply@grabaday.com>', EMAIL_REPLY_TO: 'hej@grabaday.com' };
+  const env = { EMAIL_MODE: 'send', RESEND_API_KEY: 're_x_secret_key_123456', EMAIL_FROM: 'grabAday <noreply@grabaday.com>', EMAIL_REPLY_TO: 'hej@grabaday.com' };
   it('single send forwards headers/tags and organizer replyTo; drops header injection', async () => {
     const f = vi.fn(async () => new Response('{"id":"1"}'));
     const m = createMailer({ env, fetch: f as never, log: () => {} });
@@ -145,14 +145,14 @@ describe('From display name (organizer)', () => {
     expect(sanitizeDisplayName('A'.repeat(80))).toHaveLength(50);
     expect(sanitizeDisplayName('Ærø-Søren 😀')).toBe('Ærø-Søren 😀');
   });
-  it('From = "<name> via GrabAday" <EMAIL_FROM address>; app name only without organizer name', async () => {
+  it('From = "<name> via grabAday" <EMAIL_FROM address>; app name only without organizer name', async () => {
     const f = vi.fn(async () => new Response('{"id":"1"}'));
-    const m = createMailer({ env: { EMAIL_MODE: 'send', RESEND_API_KEY: 'k', EMAIL_FROM: 'GrabAday <noreply@grabaday.com>' }, fetch: f as never, log: () => {} });
+    const m = createMailer({ env: { EMAIL_MODE: 'send', RESEND_API_KEY: 'k', EMAIL_FROM: 'grabAday <noreply@grabaday.com>' }, fetch: f as never, log: () => {} });
     const [withName] = planInvitations({ ...poll, organizerFromName: 'Mette <x@y.z>' }, [{ email: 'a@b.dk', linkToken: 'T'.repeat(43) }], ctx).messages;
     const [noName] = planInvitations(poll, [{ email: 'a@b.dk', linkToken: 'T'.repeat(43) }], ctx).messages;
     await m.send(withName); await m.send(noName);
     const froms = (f.mock.calls as unknown as [string, RequestInit][]).map((c) => JSON.parse(String(c[1].body)).from);
-    expect(froms).toEqual(['"Mette via GrabAday" <noreply@grabaday.com>', '"GrabAday" <noreply@grabaday.com>']);
+    expect(froms).toEqual(['"Mette via grabAday" <noreply@grabaday.com>', '"grabAday" <noreply@grabaday.com>']);
   });
 });
 
@@ -168,10 +168,10 @@ describe('i18n phase 4: mails per language', () => {
     expect(pollEmailData({ ...poll, locale: undefined }, inv, ctx).pollUrl).toMatch(/\/en\/p\//);
   });
   it.each([
-    ['en', 'Mette Hansen invites you: ', 'Wed, Oct 14, 2026', 'lang="en"', 'Mette Hansen via GrabAday'],
-    ['da', 'Mette Hansen inviterer dig: ', 'ons. 14. okt. 2026', 'lang="da"', 'Mette Hansen via GrabAday'],
-    ['fr', 'Mette Hansen vous invite', 'mer. 14 oct. 2026', 'lang="fr"', 'Mette Hansen via GrabAday'],
-    ['de', 'Mette Hansen lädt Sie ein', 'Mi., 14. Okt. 2026', 'lang="de"', 'Mette Hansen via GrabAday'],
+    ['en', 'Mette Hansen invites you: ', 'Wed, Oct 14, 2026', 'lang="en"', 'Mette Hansen via grabAday'],
+    ['da', 'Mette Hansen inviterer dig: ', 'ons. 14. okt. 2026', 'lang="da"', 'Mette Hansen via grabAday'],
+    ['fr', 'Mette Hansen vous invite', 'mer. 14 oct. 2026', 'lang="fr"', 'Mette Hansen via grabAday'],
+    ['de', 'Mette Hansen lädt Sie ein', 'Mi., 14. Okt. 2026', 'lang="de"', 'Mette Hansen via grabAday'],
   ])('%s: subject, template, dates, From', (l, subj, date, lang, from) => {
     const plan = planInvitations({ ...poll, locale: l, organizerFromName: 'Mette Hansen' }, [inv], ctx);
     const m = plan.messages[0];
@@ -187,8 +187,8 @@ describe('i18n phase 4: mails per language', () => {
     expect(r.html).toContain('The organizer');
   });
   it('.ics texts per language', () => {
-    expect(icsTexts('Møde', 'https://grabaday.com/da/p/x', 'da').description).toBe('Endelig dato valgt i GrabAday: https://grabaday.com/da/p/x');
-    expect(icsTexts('Meet', 'u', 'de').description).toMatch(/GrabAday/);
-    expect(icsTexts('Meet', 'u', 'zz').description).toBe('Final date chosen in GrabAday: u');
+    expect(icsTexts('Møde', 'https://grabaday.com/da/p/x', 'da').description).toBe('Endelig dato valgt i grabAday: https://grabaday.com/da/p/x');
+    expect(icsTexts('Meet', 'u', 'de').description).toMatch(/grabAday/);
+    expect(icsTexts('Meet', 'u', 'zz').description).toBe('Final date chosen in grabAday: u');
   });
 });

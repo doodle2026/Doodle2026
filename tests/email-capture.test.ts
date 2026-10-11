@@ -9,7 +9,7 @@ const dir = mkdtempSync(join(tmpdir(), 'cap-'));
 const file = join(dir, 'mails.jsonl');
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 beforeEach(() => clearCaptured());
-const base = { EMAIL_MODE: 'capture', EMAIL_FROM: 'GrabAday <t@grabaday.invalid>', EMAIL_CAPTURE_FILE: file, NODE_ENV: 'test' };
+const base = { EMAIL_MODE: 'capture', EMAIL_FROM: 'grabAday <t@grabaday.invalid>', EMAIL_CAPTURE_FILE: file, NODE_ENV: 'test' };
 const msg = { to: 'anna@example.com', subject: 'Hej', text: 'Link https://x/p/abc#inv=' + 'T'.repeat(43), html: '<p>x</p>', headers: { 'List-Unsubscribe': '<https://x/u/p/tok>' } };
 
 describe('EMAIL_MODE=capture', () => {
