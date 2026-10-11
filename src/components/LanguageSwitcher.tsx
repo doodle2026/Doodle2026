@@ -5,6 +5,8 @@ import { useLocale } from 'next-intl';
 import { LOCALES, LOCALE_COOKIE, LOCALE_NAMES, swapLocale, type Locale } from '@/i18n/config';
 
 const LABEL: Record<Locale, string> = { en: 'Language', da: 'Sprog', fr: 'Langue', de: 'Sprache' };
+/** "Sprache: Deutsch"; French puts a space before the colon ("Langue : Français"). */
+export const langName = (l: Locale) => `${LABEL[l]}${l === 'fr' ? ' : ' : ': '}${LOCALE_NAMES[l]}`;
 
 /** Href for `to`: only the locale segment changes; query + #hash are kept (hash is client-only, added on click). */
 export function switchHref(loc: Pick<Location, 'pathname' | 'search' | 'hash'>, to: Locale) {
@@ -44,7 +46,7 @@ export default function LanguageSwitcher() {
   return (
     <div className="langsw">
       <button ref={btn} type="button" className="icon-btn langsw__btn" id="lang-btn" aria-expanded={open} aria-controls="lang-menu"
-        aria-label={`${LABEL[current]}: ${LOCALE_NAMES[current]}`}
+        aria-label={langName(current)} title={langName(current)}
         onClick={() => setOpen(!open)} onKeyDown={(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); } }}>
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M1.5 8h13M8 1.5c2 2 2 11 0 13M8 1.5c-2 2-2 11 0 13" fill="none" stroke="currentColor" strokeWidth="1.2" /></svg>
         <span className="langsw__cur">{current.toUpperCase()}</span><span className="langsw__name">{LOCALE_NAMES[current]}</span>

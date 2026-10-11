@@ -86,7 +86,7 @@ describe('§49 compact header + §50', () => {
         });
         const tag = `${L}@${width}`;
         expect(r.sw, tag).toBeLessThanOrEqual(r.cw);
-        if (width < 400) {
+        if (width < 480) {
           expect(r.hh, tag).toBeLessThan(70);
           expect(new Set(r.btns.map((x) => Math.round(x.top))).size, tag).toBe(1);
           for (const x of r.btns) { expect(x.w, tag).toBeGreaterThanOrEqual(44); expect(x.name, tag).toBeTruthy(); }
@@ -97,5 +97,56 @@ describe('§49 compact header + §50', () => {
         await ctx.close();
       }
     } finally { await b.close(); }
+  });
+});
+
+describe('§49 regression (PR #37 review): header never wraps, 320–480 px, all languages', () => {
+  test('poll/confirmation + home: one header row at every width (2–3 px steps), icon-only below 480, created line never beside ▴', async () => {
+    if (!existsSync(pwc.webkit.executablePath())) return;
+    const widths = [...new Set([...Array.from({ length: 55 }, (_, i) => 320 + i * 3), 500, 560, 600, 639, 640, 700, 398, 399, 400, 401, 402, 410, 412, 414, 428, 430, 440, 478, 479, 480])].sort((a, b) => a - b);
+    const b = await pwc.webkit.launch();
+    const bad: string[] = [];
+    try {
+      for (const L of ['da', 'de', 'en', 'fr']) {
+        const ev = await (await post('/api/events', { title: 'Kopfzeile', locale: L, options: [{ date: `${Y}-07-03` }] })).json();
+        const ctx = await b.newContext({ ...pwc.devices['iPhone SE'], viewport: { width: 480, height: 800 } });
+        const pg = await ctx.newPage();
+        await pg.goto(`${BASE}/${L}`);
+        await pg.evaluate(([id, tok]) => sessionStorage.setItem(`mt-admin-${id}`, `/p/${id}/admin#${tok}`), [ev.id, ev.admin_token]);
+        for (const page of [`/${L}/p/${ev.id}?created=1`, `/${L}`]) {
+          await pg.goto(BASE + page); await pg.waitForSelector('#theme-toggle');
+          for (const w of widths) {
+            await pg.setViewportSize({ width: w, height: 800 });
+            const r = await pg.evaluate(() => {
+              const h = document.querySelector('.app-header')!, hb = h.getBoundingClientRect();
+              const items = [h.querySelector('.app-header__logo')!, ...h.querySelectorAll('.icon-btn')].map((x) => x.getBoundingClientRect());
+              const lbl = document.querySelector('.app-header .hdr-lbl'); const lblHidden = lbl ? lbl.getBoundingClientRect().width <= 1 : true;
+              const conf = document.querySelector('.share__confirm'), close = document.querySelector('#share-close');
+              let beside = false, confLines = 1;
+              if (conf && close && (conf as HTMLElement).offsetParent) {
+                const cr = conf.getBoundingClientRect(), cl = close.getBoundingClientRect();
+                beside = cl.top < cr.bottom - 1 && cl.left < cr.right; confLines = Math.round(cr.height / (parseFloat(getComputedStyle(conf).lineHeight) || 24));
+              }
+              return { hh: hb.height, rows: new Set(items.map((x) => Math.round(x.top + x.height / 2) >> 3)).size, sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, lblHidden, beside, confLines, wrapped: confLines > 1 && beside };
+            });
+            const tag = `${page}@${w}`;
+            if (r.rows !== 1 || r.hh > 70) bad.push(`${tag} header rows=${r.rows} h=${r.hh}`);
+            if (r.sw > r.cw) bad.push(`${tag} h-scroll`);
+            if (w < 480 && !r.lblHidden) bad.push(`${tag} labels visible`);
+            if (r.wrapped) bad.push(`${tag} confirmation wraps beside Ausblenden`);
+            if (w < 480 && page.includes('created') && r.confLines > 1) bad.push(`${tag} created line ${r.confLines} lines`);
+          }
+        }
+        await ctx.close();
+      }
+    } finally { await b.close(); }
+    expect(bad).toEqual([]);
+  }, 300_000);
+  test('language button: accessible name + title; French uses "Langue : Français"', async () => {
+    for (const [L, name] of [['fr', 'Langue : Français'], ['de', 'Sprache: Deutsch'], ['en', 'Language: English'], ['da', 'Sprog: Dansk']]) {
+      const html = await (await fetch(`${BASE}/${L}`)).text();
+      const btn = /<button[^>]*id="lang-btn"[^>]*>/.exec(html)![0];
+      expect(btn, L).toContain(`aria-label="${name}"`); expect(btn, L).toContain(`title="${name}"`);
+    }
   });
 });
