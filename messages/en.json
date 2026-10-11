@@ -850,6 +850,7 @@
     "ownerScrollHint": "Scroll sideways to see all columns →",
     "ownerTableAria": "Table – scroll sideways for more columns",
     "ownerTzNote": "Times are shown in your local time ({zone}). “Today”, the per-day counts and the email quota use the UTC day.",
-    "ownerLtUnlock": "Unlocked (CLI)"
+    "ownerLtUnlock": "Unlocked (CLI)",
+    "homeDesc": "Find a date that works for everyone. Create a poll, share the link – no sign-up."
   }
 }

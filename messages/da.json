@@ -850,6 +850,7 @@
     "ownerScrollHint": "Rul til siden for at se alle kolonner →",
     "ownerTableAria": "Tabel – rul til siden for flere kolonner",
     "ownerTzNote": "Tidspunkter vises i din lokale tid ({zone}). “I dag”, tal pr. dag og mailkvoten bruger UTC-døgnet.",
-    "ownerLtUnlock": "Låst op (CLI)"
+    "ownerLtUnlock": "Låst op (CLI)",
+    "homeDesc": "Find en dato, der passer alle. Opret en afstemning, del linket – uden login."
   }
 }
