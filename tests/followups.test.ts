@@ -43,6 +43,18 @@ test('L4/H3: splitBulkNamed keeps display names; server stores the name', async 
   expect((await prisma.invitation.findFirstOrThrow({ where: { email: e, event: { slug: p.id } } })).name).toBe('Lund, Jan');
 });
 
+test('escaped quotes in quoted display names (server + bulk, round trip)', async () => {
+  const { parseRecipients } = await import('../src/lib/recipients');
+  const { splitBulkNamed } = await import('../src/components/SendToEmails');
+  const txt = '"Say \\"hi\\", Bo" <bo@x.dk>; "Back\\\\slash" <bs@x.dk>, ok@x.dk';
+  expect(parseRecipients(txt).valid).toEqual([{ email: 'bo@x.dk', name: 'Say "hi", Bo' }, { email: 'bs@x.dk', name: 'Back\\slash' }, { email: 'ok@x.dk' }]);
+  expect(splitBulkNamed(txt).map((x) => [x.email, x.name])).toEqual([['bo@x.dk', 'Say "hi", Bo'], ['bs@x.dk', 'Back\\slash'], ['ok@x.dk', undefined]]);
+  // what the bulk field sends back to the server (re-escaped) parses to the same name
+  const p = await poll(); const e = `q-${uniq()}@example.com`;
+  await send(p, { recipients: [`"${'Say "hi", Bo'.replace(/[\\"]/g, '\\$&')}" <${e}>`] });
+  expect((await prisma.invitation.findFirstOrThrow({ where: { email: e, event: { slug: p.id } } })).name).toBe('Say "hi", Bo');
+});
+
 test('L2: overlapping concurrent sends → per-address already_invited, the rest sent', async () => {
   const p = await poll(); const s = `shared-${uniq()}@example.com`, a = `a-${uniq()}@example.com`, b = `b-${uniq()}@example.com`;
   const [r1, r2] = await Promise.all([send(p, { recipients: [s, a] }), send(p, { recipients: [s, b] })]);

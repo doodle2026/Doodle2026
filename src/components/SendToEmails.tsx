@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '@/i18n/use';
 import { useLp } from '@/i18n/link';
-import { graphemes, MESSAGE_MAX, NAME_ADDR_RE, validEmail } from '@/lib/recipients';
+import { graphemes, MESSAGE_MAX, NAME_ADDR_RE, unquote, validEmail } from '@/lib/recipients';
 
 type Invitee = { email: string; status: string }; // §46.8 invitations[] (sent|failed|bounced; opt-outs never shown as such)
 type Quota = { poll: number; hour: number; day: number }; // §46.8 QuotaRemaining
@@ -30,7 +30,7 @@ const MODE_KEY = 'ga-se-mode';
 export function splitBulkNamed(text: string): { raw: string; email: string; name?: string }[] {
   const out: { raw: string; email: string; name?: string; at: number }[] = [];
   const rest = text.replace(NAME_ADDR_RE, (m: string, n: string, e: string, at: number) => {
-    const name = n.trim().replace(/^"(.*)"$/s, '$1').trim();
+    const name = unquote(n);
     out.push({ raw: m.trim(), email: e.trim(), ...(name ? { name } : {}), at }); return ' '.repeat(m.length);
   });
   let pos = 0;
@@ -238,7 +238,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
     setBusy(true); setB((bs) => bs.map((x) => (ids.has(x.id) ? { ...x, status: 'sending' } : x))); say(t('se.sendingN', { n: list.length }));
     let res: Response | null = null; let data: Record<string, unknown> = {};
     try {
-      ({ res, data } = await api(retry ? '/retry' : '', { method: 'POST', body: JSON.stringify(retry ? { emails: list.map((x) => key(x.email)) } : { recipients: list.map((x) => (x.name ? `"${x.name.replace(/"/g, '')}" <${x.email}>` : x.email)), message: message.trim() || undefined, locale }) }));
+      ({ res, data } = await api(retry ? '/retry' : '', { method: 'POST', body: JSON.stringify(retry ? { emails: list.map((x) => key(x.email)) } : { recipients: list.map((x) => (x.name ? `"${x.name.replace(/[\\"]/g, '\\$&')}" <${x.email}>` : x.email)), message: message.trim() || undefined, locale }) }));
     } catch { /* network → all failed */ }
     const results = (data.results as { email: string; status: string }[] | undefined) ?? [];
     const by = new Map(results.map((r) => [r.email, r.status]));
