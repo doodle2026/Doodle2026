@@ -13,7 +13,7 @@ export const LIMITS = {
   // Defaults: burst 20, then 1 request / 3 s (20/min) per IP for writes.
   write: { capacity: num(process.env.RATE_LIMIT_CAPACITY, 20), refillPerSec: num(process.env.RATE_LIMIT_REFILL_PER_SEC, 1 / 3) },
   // Mail sends (invitations + reminders) per IP: 10 per hour.
-  mail: { capacity: num(process.env.RATE_LIMIT_MAIL_PER_HOUR, 10), refillPerSec: num(process.env.RATE_LIMIT_MAIL_PER_HOUR, 10) / 3600 },
+  mail: { capacity: num(process.env.RATE_LIMIT_MAIL_PER_HOUR, 150), refillPerSec: num(process.env.RATE_LIMIT_MAIL_PER_HOUR, 150) / 3600 },
   // Public unsubscribe / abuse endpoints.
   public: { capacity: 30, refillPerSec: 0.5 },
 } satisfies Record<string, Limit>;
@@ -52,7 +52,7 @@ export function rateLimit(req: Request, name: keyof typeof LIMITS = 'write'): Re
   const r = take(`${name}:${clientIp(req)}`, LIMITS[name]);
   if (r.ok) return null;
   return Response.json(
-    { errors: ['For mange forespørgsler. Vent lidt, og prøv igen.'] },
+    { errors: ['For mange forespørgsler. Vent lidt, og prøv igen.'], code: 'ip_limit', retry_after: r.retryAfterSec },
     { status: 429, headers: { 'Retry-After': String(r.retryAfterSec), 'Cache-Control': 'no-store' } },
   );
 }

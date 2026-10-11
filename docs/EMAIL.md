@@ -101,3 +101,17 @@ Shows the FULL rendered mails (incl. personal invite tokens and unsubscribe link
   code is not a production build (`next build` output is always refused, even if started with `NODE_ENV=test`).
   Otherwise: config error logged, mailer falls back to `log` mode (redacted), nothing is sent or captured.
   The test suite runs its production test server with `EMAIL_MODE=capture` to prove this.
+
+## "Send til e-mails" on the confirmation page (phase 1)
+- Same endpoint/model/limits/suppression: `POST /api/events/:id/invitations` (admin Bearer) with one recipient per click; `locale` = creator's UI language.
+- Response adds `results: [{ email, status }]` (`sent` | `failed` | `unsub` | `already_invited` | `duplicate`); `GET` adds `quota: { poll_remaining, hour_remaining, day_remaining }`.
+- `POST /api/events/:id/invitations/retry { email }`: re-send a **failed** invitation unchanged (same link, tracking unchanged).
+- The box shows only in the organizer's tab: the admin token from the creation hand-over is kept in the tab's sessionStorage (same key the admin page uses). Status re-polls every 20 s while visible. UI is a placeholder until Doodle UI's design.
+
+### PM decisions (Send til e-mails)
+- Opted-out addresses are never revealed: per-address result `blocked` (UI: `se.blocked` "Kan ikke sendes til denne adresse"), same HTTP 201 and response shape as a normal send, minimum response time 400 ms + jitter, and the address is **not stored** (so the admin list can't reveal it either). No pre-check endpoint reports opt-outs. Retry of a now-suppressed address answers 409 `blocked`.
+- Duplicates in the form are marked with their line number; quota (poll/hour/day) is returned by GET and every POST; one combined response per call.
+- Tracking: the box doesn't send `track`; the server uses the poll's `inviteTracking` (changed only in admin).
+- Data shape per design §46.8: GET and every POST return `remaining: {poll, hour, day}` and `invitations: [{email, status: sent|failed|bounced}]`; POST adds `results: [{email, status: sent|failed|blocked}]`; 429s carry `remaining` too. (Legacy `quota.*_remaining` kept for the admin view.)
+- Admin never shows 'Afmeldt': the admin API maps unsub and bounced to the neutral `blocked` ('⊘ Kan ikke sendes til denne adresse', filter 'Kan ikke sendes'); the DB keeps the distinction.
+- Per-IP mail limit: `RATE_LIMIT_MAIL_PER_HOUR` default **150 calls/hour/IP** (was 10; one call per address in the box). Every 429 carries `Retry-After` (+ `retry_after`, `code`: ip_limit | poll_hourly_limit | quota). UI shows `se.limitIp` with a local minute countdown, no auto-resend (§46.9).

@@ -392,3 +392,63 @@ h1,h2,h3,h4,.btn,.field__label,.vgrid th,.choose-btn,.tri,.st,.legend,.reminder_
 .result-banner__actions,.linkbox__actions,.form-actions,.landing__actions,.notfound__actions,.row-actions,.opt-edit__actions{flex-wrap:wrap}
 .seg button{flex-direction:column;gap:0;line-height:1.15}
 .rlist li{grid-template-columns:minmax(0,1fr)}.rlist .addr{word-break:normal;overflow-wrap:anywhere}.rlist .badges{justify-content:flex-start}
+
+/* ===== §46 Send til e-mails (bekræftelsessiden) – bevidst sekundær under admin-linket ===== */
+.se{margin-top:var(--s-3);border:1px solid var(--c-border);border-radius:var(--r-md);background:var(--c-surface);padding:0}
+.se-toggle{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:var(--s-3);width:100%;min-height:44px;padding:var(--s-3) var(--s-4);cursor:pointer;border-radius:var(--r-md)}
+.se-toggle:focus-visible{outline:3px solid var(--c-focus);outline-offset:-3px}
+.se-toggle__icon{color:var(--c-muted)}
+.se-title{display:block;font-weight:600;font-size:var(--fs-sm);color:var(--c-text)}
+.se-sub{display:block;font-size:var(--fs-xs);color:var(--c-muted)}
+.se-caret{margin-left:auto;color:var(--c-muted);transition:transform var(--dur)}
+.se-toggle[aria-expanded="false"] .se-caret{transform:rotate(-90deg)}
+#se-body{padding:0 var(--s-4) var(--s-4);border-top:1px solid var(--c-border)}
+.se-note{font-size:var(--fs-xs);color:var(--c-muted);margin:var(--s-3) 0 var(--s-2);display:flex;flex-wrap:wrap;gap:4px var(--s-2)}
+.se-note .meta{margin-left:auto}
+.se-limit{margin:0 0 var(--s-2);padding:var(--s-2) var(--s-3);border-radius:var(--r-md);background:var(--c-warn-50);border:1px solid var(--c-warn);color:var(--c-text);font-size:var(--fs-sm);font-weight:600}
+.se-pm-toggle{font-size:var(--fs-sm);margin:0 0 var(--s-2)}
+.se-pm{margin-bottom:var(--s-3)}
+.se-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--s-2)}
+.se-row__line{display:flex;gap:var(--s-2);align-items:stretch}
+.se-input{flex:1 1 auto;min-width:0;font-size:var(--fs-sm)}
+.se-input[readonly]{background:var(--c-bg);color:var(--c-muted)}
+.se-row.is-bad .se-input{border-color:var(--c-error)}
+.se-btn{flex:0 0 auto;min-width:6.5rem;white-space:nowrap}
+.se-btn--done{background:var(--c-surface);color:var(--c-success);border:1px solid var(--c-success);opacity:1!important;cursor:default}
+.se-row__st:empty{display:none}
+.se-st{display:block;font-size:var(--fs-xs);margin-top:2px;font-weight:600}
+.se-st--err{color:var(--c-error)}.se-st--warn{color:var(--c-warn)}.se-st--sent{color:var(--c-success)}
+#se-more{margin-top:var(--s-2)}
+.se-privacy{margin-top:var(--s-3)}
+.se-adminlink{margin:var(--s-2) 0 0;font-size:var(--fs-sm)}
+[hidden]{display:none!important} /* fix: komponenter med display:flex overstyrede hidden (fx "Admin-link gemt" vist samtidig med admin-boksen) */
+.share__confirm{padding-right:min(9rem,42%)}
+.se-row.is-warn .se-input{border-color:var(--c-warn)}
+.se-btn{white-space:normal;max-width:45%;min-width:5.5rem;line-height:1.2}
+.se-btn--bounced{background:var(--c-surface);color:var(--c-error);border:1px solid var(--c-error);opacity:1!important;cursor:default}
+.se-btn{flex:0 0 8rem;min-width:0}
+/* §46 fase 2 */
+.se-mode{display:inline-flex;border:1px solid var(--c-border-strong);border-radius:var(--r-full);padding:2px;margin:0 0 var(--s-3);flex-wrap:wrap}
+.se-mode button{font:inherit;font-size:var(--fs-sm);font-weight:600;min-height:36px;padding:0 var(--s-3);border:0;border-radius:var(--r-full);background:transparent;color:var(--c-text);cursor:pointer}
+.se-mode button[aria-pressed="true"]{background:var(--c-primary);color:var(--c-on-primary)}
+.se-mode button:focus-visible{outline:3px solid var(--c-focus);outline-offset:1px}
+.se-bulk{font-size:var(--fs-sm);min-height:5rem}
+.se-sum{font-size:var(--fs-sm);margin:var(--s-1) 0;display:flex;flex-wrap:wrap;gap:2px 6px}
+.se-sum .err{color:var(--c-error);font-weight:600}.se-sum .warn{color:var(--c-warn);font-weight:600}.se-sum .ok{color:var(--c-success);font-weight:600}
+.se-blist{list-style:none;margin:var(--s-2) 0;padding:0;display:flex;flex-wrap:wrap;gap:6px;max-height:22rem;overflow:auto;padding-bottom:2px}
+.se-bitem{display:inline-flex;align-items:center;gap:6px;max-width:100%;min-height:32px;padding:2px 4px 2px 10px;border-radius:var(--r-full);border:1px solid var(--c-border-strong);background:var(--c-surface);font-size:var(--fs-sm)}
+.se-bitem__addr{overflow-wrap:anywhere}
+.se-bitem--invalid,.se-bitem--unsub,.se-bitem--failed,.se-bitem--bounced{border-color:var(--c-error);background:var(--c-error-50)}
+.se-bitem--dup,.se-bitem--already{border-color:var(--c-warn);background:var(--c-warn-50)}
+.se-bitem--sent{border-color:var(--c-success)}
+.se-badge{font-size:var(--fs-xs);font-weight:700;display:inline-flex;align-items:center;gap:4px}
+.se-badge--err{color:var(--c-error)}.se-badge--warn{color:var(--c-warn)}.se-badge--ok{color:var(--c-success)}
+.se-badge--ok::before{content:"✓"}
+.se-x{all:unset;box-sizing:border-box;width:28px;height:28px;display:inline-grid;place-items:center;border-radius:50%;cursor:pointer;color:var(--c-muted)}
+.se-x:hover{background:var(--c-bg)}.se-x:focus-visible{outline:3px solid var(--c-focus)}
+.se-prog{display:flex;align-items:center;gap:var(--s-2);font-size:var(--fs-sm);margin:var(--s-2) 0}
+.se-prog progress{flex:1;height:8px;accent-color:var(--c-primary)}
+.se-bulk-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2) var(--s-3);margin-top:var(--s-2)}
+.se-mode{display:flex;width:max-content;max-width:100%}.se-pm-toggle{display:block}
+.se-quota{font-size:var(--fs-xs);margin:0 0 var(--s-2)}
+.se-notice{margin:0 0 var(--s-2);padding:var(--s-2) var(--s-3);border-radius:var(--r-md);background:var(--c-primary-50);color:var(--c-text);font-size:var(--fs-sm)}

@@ -4,6 +4,7 @@ import { ApiError } from '@/lib/events';
 import { listInvitations, sendInvitations } from '@/lib/invitations';
 import { rateLimit } from '@/lib/ratelimit';
 
+const MIN_MS = 400;
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -15,6 +16,10 @@ export const POST = adminRoute(async ({ req, eventId, body }) => {
   const limited = rateLimit(req, 'mail'); if (limited) return limited;
   const b = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
   if (!b) throw new ApiError(400, ['Forespørgslen skal være et JSON-objekt.']);
-  const r = await sendInvitations(eventId, { recipients: b.recipients, message: b.message, organizer_name: b.organizer_name, track: b.track });
-  return NextResponse.json({ ...r, ...(await listInvitations(eventId)) }, { status: 201 });
+  const started = Date.now();
+  const r = await sendInvitations(eventId, { locale: b.locale, recipients: b.recipients, message: b.message, organizer_name: b.organizer_name, track: b.track });
+  const out = { ...r, ...(await listInvitations(eventId)) };
+  // Same minimum response time whether or not anything was actually sent (rejected addresses aren't distinguishable by timing).
+  const wait = MIN_MS - (Date.now() - started); if (wait > 0) await new Promise((res) => setTimeout(res, wait + Math.random() * 100));
+  return NextResponse.json(out, { status: 201 });
 });

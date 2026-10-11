@@ -69,6 +69,21 @@ export async function reserveQuota(n: number, now = new Date(), limits = { day: 
     return true;
   });
 }
+const secsToUtcMidnight = () => { const n = new Date(); return Math.max(60, Math.ceil((Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1) - n.getTime()) / 1000)); };
+/** §46.8 QuotaRemaining for 429 responses. */
+async function remainingNow(eventId: number) {
+  const rows = await prisma.invitation.findMany({ where: { eventId }, select: { createdAt: true } });
+  const hourAgo = new Date(Date.now() - 3600_000);
+  return { poll: Math.max(0, MAX_PER_POLL - rows.length), hour: Math.max(0, POLL_HOURLY_MAX - rows.filter((r) => r.createdAt > hourAgo).length), day: await quotaLeft() };
+}
+
+/** Mails left in the global daily/monthly quota (min of both). */
+export async function quotaLeft(now = new Date(), limits = { day: DAILY_QUOTA(), month: MONTHLY_QUOTA() }) {
+  const day = utcDay(now), month = day.slice(0, 7);
+  const [d] = await prisma.$queryRaw<{ c: number }[]>`SELECT COALESCE(SUM(count),0)::int AS c FROM email_quota WHERE day = ${day}`;
+  const [m] = await prisma.$queryRaw<{ c: number }[]>`SELECT COALESCE(SUM(count),0)::int AS c FROM email_quota WHERE day LIKE ${month + '-%'}`;
+  return Math.max(0, Math.min(limits.day - d.c, limits.month - m.c));
+}
 export async function releaseQuota(n: number, now = new Date()) {
   if (n > 0) await prisma.$executeRaw`UPDATE email_quota SET count = GREATEST(0, count - ${n}) WHERE day = ${utcDay(now)}`;
 }
@@ -133,15 +148,15 @@ export async function sendInvitations(eventId: number, body: InviteInput) {
   if (parsed.valid.length > MAX_PER_SEND) throw new ApiError(400, [`Højst ${MAX_PER_SEND} modtagere pr. afsendelse.`], { code: 'too_many_per_send' });
   if (existing.length + parsed.valid.length > MAX_PER_POLL) throw new ApiError(400, [`Højst ${MAX_PER_POLL} inviterede pr. afstemning (${MAX_PER_POLL - existing.length} tilbage).`], { code: 'too_many_per_poll' });
   const lastHour = await prisma.invitation.count({ where: { eventId, createdAt: { gt: new Date(Date.now() - 3600_000) } } });
-  if (lastHour + parsed.valid.length > POLL_HOURLY_MAX) throw new ApiError(429, ['For mange invitationer på kort tid. Prøv igen om en time.'], { code: 'poll_hourly_limit' });
+  if (lastHour + parsed.valid.length > POLL_HOURLY_MAX) throw new ApiError(429, ['For mange invitationer på kort tid. Prøv igen om en time.'], { code: 'poll_hourly_limit', retry_after: 3600, remaining: await remainingNow(eventId) });
 
   const suppressed = await suppressedSet(eventId, parsed.valid.map((r) => r.email));
   const toSend = parsed.valid.filter((r) => !suppressed.has(r.email));
-  if (!(await reserveQuota(toSend.length))) throw new ApiError(429, ['Dagens mailkvote er brugt op. Prøv igen i morgen.'], { code: 'quota' });
+  if (!(await reserveQuota(toSend.length))) throw new ApiError(429, ['Dagens mailkvote er brugt op. Prøv igen i morgen.'], { code: 'quota', retry_after: secsToUtcMidnight(), remaining: await remainingNow(eventId) });
 
-  // Persist first (status "queued"), with a fresh footer token per recipient; suppressed ones are stored as "unsub".
+  // Persist first (status "queued"), with a fresh footer token per recipient; suppressed ones are not stored at all.
   const tokens = new Map<string, string>(), invTokens = new Map<string, string>();
-  const track = body.track === true;
+  const track = body.track === true || ev.inviteTracking; // follows the poll's tracking setting (changed only in admin)
   const invLocale = isLocale(body.locale) ? body.locale : ev.locale; // organizer may pick; default = poll language
   linkSecret(); // fail early (503) when send mode lacks EMAIL_LINK_SECRET
   try {
@@ -149,8 +164,8 @@ export async function sendInvitations(eventId: number, body: InviteInput) {
       if (organizerName !== (ev.organizerName ?? '') || (track && !ev.inviteTracking)) {
         await tx.event.update({ where: { id: eventId }, data: { organizerName: organizerName || null, ...(track ? { inviteTracking: true } : {}) } });
       }
-      for (const r of parsed.valid) {
-        const row = await tx.invitation.create({ data: { eventId, locale: invLocale, email: r.email, name: r.name ?? null, linkTokenHash: sha256Hex(`pending:${eventId}:${r.email}:${Math.random()}`), delivery: suppressed.has(r.email) ? 'unsub' : 'queued' } });
+      for (const r of toSend) {
+        const row = await tx.invitation.create({ data: { eventId, locale: invLocale, email: r.email, name: r.name ?? null, linkTokenHash: sha256Hex(`pending:${eventId}:${r.email}:${Math.random()}`), delivery: 'queued' } });
         const t = linkTokenFor(row.id); tokens.set(r.email, t);
         const it = track ? inviteTokenFor(row.id, 1) : null;
         if (it) invTokens.set(r.email, it);
@@ -164,7 +179,16 @@ export async function sendInvitations(eventId: number, body: InviteInput) {
   const plan = planInvitations(p, toSend.map((r) => ({ email: r.email, name: r.name, locale: invLocale, linkToken: tokens.get(r.email)!, inviteToken: invTokens.get(r.email) })), { appUrl: appUrl(), personalMessage: message || undefined });
   const ids = new Map((await prisma.invitation.findMany({ where: { eventId, email: { in: toSend.map((r) => r.email) } }, select: { id: true, email: true } })).map((r) => [r.email, r.id]));
   const res = await deliver(eventId, plan.messages, ids);
-  return { ...res, suppressed: suppressed.size, duplicates: parsed.duplicates, already_invited: parsed.alreadyInvited };
+  // Per-recipient outcome (Send til e-mails: one row per address). Suppressed → "unsub" (Modtageren har frabedt sig mails).
+  // PM: opted-out addresses are never revealed – they get the same neutral "rejected" as any address we can't send to,
+  // and are not stored (so the admin list can't reveal them either).
+  const after = new Map((await prisma.invitation.findMany({ where: { eventId, email: { in: toSend.map((r) => r.email) } }, select: { email: true, delivery: true } })).map((r) => [r.email, r.delivery]));
+  const results = [
+    ...parsed.valid.map((r) => ({ email: r.email, status: suppressed.has(r.email) ? 'blocked' : after.get(r.email) === 'failed' ? 'failed' : 'sent' })),
+    ...parsed.alreadyInvited.map((e) => ({ email: e, status: 'already_invited' })),
+    ...parsed.duplicates.map((e) => ({ email: e, status: 'duplicate' })),
+  ];
+  return { ...res, results, blocked: suppressed.size, duplicates: parsed.duplicates, already_invited: parsed.alreadyInvited };
 }
 
 export async function sendReminder(eventId: number) {
@@ -201,7 +225,7 @@ export async function listInvitations(eventId: number) {
   const ev = await prisma.event.findUnique({ where: { id: eventId }, select: { closedAt: true, remindersSent: true, lastReminderAt: true, organizerName: true, mailBlockedAt: true, inviteTracking: true } });
   if (!ev) throw new ApiError(404, ['Afstemningen findes ikke.']);
   const rows = await prisma.invitation.findMany({ where: { eventId }, orderBy: { createdAt: 'asc' }, select: {
-    email: true, name: true, delivery: true, reason: true, lastEventAt: true, inviteGen: true, revokedAt: true, participantId: true, linkedManually: true,
+    email: true, name: true, delivery: true, reason: true, lastEventAt: true, createdAt: true, inviteGen: true, revokedAt: true, participantId: true, linkedManually: true,
     participant: { select: { name: true } } } });
   const remindable = (r: typeof rows[number]) => r.delivery !== 'unsub' && r.delivery !== 'bounced' && (r.inviteGen === null || (r.participantId === null && r.revokedAt === null));
   const recipients = rows.filter(remindable).length;
@@ -209,10 +233,14 @@ export async function listInvitations(eventId: number) {
   const publicAnswers = ev.inviteTracking
     ? (await prisma.participant.findMany({ where: { eventId }, orderBy: { createdAt: 'asc' }, select: { id: true, name: true } })).filter((p) => !linked.has(p.id))
     : [];
+  const hourAgo = new Date(Date.now() - 3600_000);
+  const lastHour = rows.filter((r) => r.createdAt > hourAgo).length;
+  const quota = { poll_remaining: Math.max(0, MAX_PER_POLL - rows.length), hour_remaining: Math.max(0, POLL_HOURLY_MAX - lastHour), day_remaining: await quotaLeft() };
   const next = ev.lastReminderAt ? new Date(ev.lastReminderAt.getTime() + REMINDER_GAP_MS) : null;
   return {
     invitees: rows.map((r) => ({
-      email: r.email, name: r.name, delivery: r.delivery, reason: r.reason, updated_at: r.lastEventAt.toISOString(),
+      // PM §46.8: opt-outs are never revealed – shown as the neutral 'blocked' (same as other undeliverable addresses).
+      email: r.email, name: r.name, delivery: r.delivery === 'unsub' || r.delivery === 'bounced' ? 'blocked' : r.delivery, reason: null, updated_at: r.lastEventAt.toISOString(),
       // Step 5 "Svar" axis (only for personal links): invited | answered | revoked.
       response: r.inviteGen === null ? null : r.participantId !== null ? 'answered' : r.revokedAt ? 'revoked' : 'invited',
       linked_from: r.linkedManually && r.participant ? r.participant.name : null,
@@ -221,6 +249,11 @@ export async function listInvitations(eventId: number) {
     public_answers: publicAnswers,
     organizer_name: ev.organizerName ?? '',
     limits: { per_send: MAX_PER_SEND, per_poll: MAX_PER_POLL, used: rows.length, message_max: MESSAGE_MAX },
+    /** Send til e-mails: what can still be sent now (UI disables Send at 0). */
+    quota,
+    /** §46.8 data shape: QuotaRemaining + SendToEmailsInitial.invitations. */
+    remaining: { poll: quota.poll_remaining, hour: quota.hour_remaining, day: quota.day_remaining },
+    invitations: rows.map((r) => ({ email: r.email, status: r.delivery === 'bounced' ? 'bounced' : r.delivery === 'unsub' ? 'blocked' : r.delivery === 'failed' ? 'failed' : 'sent' })),
     reminder: { used: ev.remindersSent, max: REMINDER_MAX, next_allowed_at: next && next > new Date() ? next.toISOString() : null, recipient_count: recipients, answered_count: rows.filter((r) => r.participantId !== null).length, closed: ev.closedAt !== null },
     mail_blocked: ev.mailBlockedAt !== null,
   };
@@ -332,13 +365,43 @@ async function invitationFor(eventId: number, email: unknown) {
  * counter, so a resend ISSUES A NEW TOKEN (old link stops working) – deliberate deviation from "same token".
  * Counts against the mail quota, not as a reminder.
  */
+/** Send til e-mails "Prøv igen": re-send a FAILED invitation as it was (same link; tracking unchanged). */
+export async function retryInvite(eventId: number, email: unknown) {
+  const i = await invitationFor(eventId, email);
+  const { ev, p } = await pollForEmail(eventId);
+  if (p.isClosed) throw new ApiError(409, ['Afstemningen er lukket.'], { code: 'closed' });
+  if (ev.mailBlockedAt) throw new ApiError(403, ['Mails er stoppet for denne afstemning efter rapporter om misbrug.'], { code: 'mail_blocked' });
+  if (i.delivery !== 'failed') throw new ApiError(409, ['Kun fejlede invitationer kan sendes igen herfra.'], { code: 'not_failed' });
+  if ((await suppressedSet(eventId, [i.email])).size) throw new ApiError(409, ['Kan ikke sendes til denne adresse.'], { code: 'blocked' });
+  if (!(await reserveQuota(1))) throw new ApiError(429, ['Dagens mailkvote er brugt op. Prøv igen i morgen.'], { code: 'quota' });
+  await prisma.invitation.update({ where: { id: i.id }, data: { delivery: 'queued' } });
+  const it = i.inviteGen && !i.revokedAt ? inviteTokenFor(i.id, i.inviteGen) : undefined;
+  const plan = planInvitations(p, [{ email: i.email, name: i.name ?? undefined, locale: i.locale, linkToken: linkTokenFor(i.id), inviteToken: it }], { appUrl: appUrl() });
+  const m = plan.messages.map((x) => ({ ...x, idempotencyKey: `${x.idempotencyKey}:retry${Date.now()}` }));
+  return deliver(eventId, m, new Map([[i.email, i.id]]));
+}
+
+/** Retry several failed invitations in ONE call (bulk "Prøv de fejlede igen", §46.7): per-address results sent|failed|blocked. */
+export async function retryFailed(eventId: number, emails: unknown) {
+  if (!Array.isArray(emails) || !emails.length || emails.length > MAX_PER_SEND) throw new ApiError(400, [`Angiv 1–${MAX_PER_SEND} adresser.`], { code: 'bad_recipients' });
+  const results: { email: string; status: 'sent' | 'failed' | 'blocked' }[] = [];
+  for (const e of emails) {
+    const email = String(e).trim().toLowerCase();
+    try { const r = await retryInvite(eventId, email); results.push({ email, status: r.sent ? 'sent' : 'failed' }); } catch (err) {
+      if (err instanceof ApiError && err.status === 429) throw new ApiError(429, err.errors, { ...err.extra, results, remaining: await remainingNow(eventId) });
+      results.push({ email, status: err instanceof ApiError && err.extra.code === 'blocked' ? 'blocked' : 'failed' });
+    }
+  }
+  return { results };
+}
+
 export async function resendInvite(eventId: number, email: unknown) {
   const i = await invitationFor(eventId, email);
   const { ev, p } = await pollForEmail(eventId);
   if (p.isClosed) throw new ApiError(409, ['Afstemningen er lukket.'], { code: 'closed' });
   if (ev.mailBlockedAt) throw new ApiError(403, ['Mails er stoppet for denne afstemning efter rapporter om misbrug.'], { code: 'mail_blocked' });
-  if (i.delivery === 'bounced' || i.delivery === 'unsub') throw new ApiError(409, ['Modtageren kan ikke få mails (afvist eller afmeldt).'], { code: 'not_mailable' });
-  if ((await suppressedSet(eventId, [i.email])).size) throw new ApiError(409, ['Modtageren har afmeldt sig.'], { code: 'not_mailable' });
+  // PM §46.8: never say why (opt-out vs. bounce) – one neutral answer.
+  if (i.delivery === 'bounced' || i.delivery === 'unsub' || (await suppressedSet(eventId, [i.email])).size) throw new ApiError(409, ['Kan ikke sendes til denne adresse.'], { code: 'not_mailable' });
   if (!(await reserveQuota(1))) throw new ApiError(429, ['Dagens mailkvote er brugt op. Prøv igen i morgen.'], { code: 'quota' });
   const gen = (i.inviteGen ?? 0) + 1;
   const it = inviteTokenFor(i.id, gen);
