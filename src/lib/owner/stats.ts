@@ -61,13 +61,16 @@ export async function ownerStats() {
       polls: evByLang.find((x) => x.locale === l)?._count._all ?? 0,
       participants: n(partByLang.find((x) => x.locale === l)?.c),
     }])) as Record<Locale, { polls: number; participants: number }>;
-    const [quotaToday, deliveries, unsubscribes, limitsRows] = await Promise.all([
+    const [quotaToday, deliveries, unsubscribes, limitsRows, splitRows, selfAll] = await Promise.all([
       prisma.emailQuota.findUnique({ where: { day: utcDay() } }),
       prisma.invitation.groupBy({ by: ['delivery'], _count: { _all: true } }),
       prisma.emailSuppression.count(),
       prisma.dailyStat.findMany({ where: { key: { startsWith: 'limit_' }, day: { gte: utcDay(dayStart(29)) } } }),
+      prisma.dailyStat.findMany({ where: { key: { in: ['mail_inv', 'mail_rem', 'self_sent'] }, day: utcDay() } }),
+      prisma.dailyStat.aggregate({ where: { key: 'self_sent' }, _sum: { count: true } }),
     ]);
     const dc = (ks: string[]) => deliveries.filter((d) => ks.includes(d.delivery)).reduce((a, d) => a + d._count._all, 0);
+    const sp = (key: string) => splitRows.find((r) => r.key === key)?.count ?? 0;
     const lim = (key: string) => {
       const rows = limitsRows.filter((r) => r.key === key);
       const since = (k: number) => rows.filter((r) => r.day >= utcDay(dayStart(k))).reduce((a, r) => a + r.count, 0);
@@ -86,7 +89,9 @@ export async function ownerStats() {
       participation: { participants, votes, avgPerPoll: existing ? participants / existing : 0, shareWithParticipant: existing ? n(withPart?.c) / existing : 0 },
       dates: { avgPerPoll: existing ? optionCount / existing : 0, timeToClose: { ...bucket, medianDays: Math.round(median * 10) / 10 } },
       languages,
-      email: { sentToday: quotaToday?.count ?? 0, dailyLimit: dailyLimit(), sent: dc(SENT), failed: dc(['failed']), rejected: dc(['bounced']), unsubscribes },
+      email: { sentToday: quotaToday?.count ?? 0, dailyLimit: dailyLimit(), sent: dc(SENT), failed: dc(['failed']), rejected: dc(['bounced']), unsubscribes,
+        // §47.9: main number = ALL mails today (every type reserves the shared Resend quota); split + all-time self count (no addresses)
+        split: { inv: sp('mail_inv'), rem: sp('mail_rem'), self: sp('self_sent') }, selfTotal: selfAll._sum.count ?? 0 },
       limits: { poll: lim('limit_poll'), hour: lim('limit_hour'), ip: lim('limit_ip'), day: lim('limit_day') },
       daily: dailyRaw.map((r) => ({ date: r.day, polls: n(r.polls), votes: n(r.votes) })),
       newest,

@@ -453,22 +453,22 @@
     "fromName": "{{organizerName}} via grabAday",
     "icsSummary": "{{eventTitle}}",
     "icsDescription": "Date retenue dans grabAday : {{pollUrl}}",
-    "selfSubject": "Votre lien admin grabAday : {{eventTitle}}",
-    "selfPreheader": "Conservez cet e-mail – le lien admin donne le contrôle total du sondage.",
+    "selfSubject": "Votre sondage est prêt : {{eventTitle}}",
+    "selfPreheader": "Conservez cet e-mail – il contient votre lien admin et le lien pour vos participants.",
     "selfEyebrow": "Votre nouveau sondage",
-    "selfHeading": "Bravo – votre sondage est prêt ! 🙌",
-    "selfIntro": "Merci d’utiliser grabAday pour trouver une date pour <strong>{{eventTitle}}</strong>. Voici vos deux liens : un à garder, un à partager.",
-    "selfAdminH": "🔑 Votre lien admin",
+    "selfHeading": "Votre sondage est prêt",
+    "selfIntro": "Merci d’utiliser grabAday pour trouver une date pour <strong>{{eventTitle}}</strong>. Vous trouverez ci-dessous vos deux liens : l’un pour vous, l’autre à partager avec vos participants.",
+    "selfAdminH": "Votre lien admin",
     "selfSave": "Conservez cet e-mail – le lien admin donne le contrôle total du sondage.",
     "selfNoShare": "Ne le partagez pas : toute personne disposant du lien peut modifier, clôturer et choisir la date.",
     "selfAdminCta": "Ouvrir la page admin",
-    "selfShareH": "Partagez avec vos participants",
+    "selfShareH": "Lien pour vos participants",
     "selfShareP": "Envoyez ce lien à tous ceux qui doivent voter – sans connexion.",
     "selfShareCta": "Ouvrir le sondage",
-    "selfOutro": "Bonne recherche de date ! ✨<br>– L’équipe grabAday",
+    "selfOutro": "Cordialement,<br>grabAday",
     "selfNotYou": "Vous n’avez pas créé ce sondage ? Ignorez simplement cet e-mail.",
     "selfWhy": "Vous recevez cet e-mail car cette adresse a été saisie sur grabAday pour recevoir le lien admin. Nous ne la conservons pas.",
-    "selfTxtHead": "Votre lien admin grabAday – {{eventTitle}}",
+    "selfTxtHead": "Votre sondage est prêt – {{eventTitle}}",
     "selfFallback": "Le bouton ne fonctionne pas ? Copiez ce lien :"
   },
   "se": {
@@ -602,7 +602,7 @@
     "langPolls": "Sondages",
     "langParts": "Participants",
     "kMail": "E-mail",
-    "mailToday": "Invitations envoyées aujourd’hui",
+    "mailToday": "E-mails envoyés aujourd’hui",
     "mailOf": "{n} sur {max}",
     "mailBarAria": "{n} de la limite quotidienne de {max} utilisés ({pct})",
     "mailSent": "Envoyées",
@@ -749,7 +749,10 @@
       "ip": "Par IP/réseau",
       "day": "Quota quotidien (100)"
     },
-    "limTodayCol": "Aujourd’hui"
+    "limTodayCol": "Aujourd’hui",
+    "mailSplit": "Invitations {inv} · rappels {rem} · aux organisateurs {self}",
+    "mailSelf": "À l’organisateur (lien admin)",
+    "mailSelfHint": "Nombre uniquement – adresses non conservées."
   },
   "self": {
     "title": "Envoyez-vous le lien admin",
@@ -763,7 +766,7 @@
     "close": "Fermer",
     "done": "Terminé",
     "another": "Envoyer à une autre adresse",
-    "sentH": "C’est parti ! 🎉",
+    "sentH": "E-mail envoyé",
     "sentP": "Envoyé à {email}.",
     "spam": "Vérifiez vos spams si vous ne trouvez pas l’e-mail.",
     "errRequired": "Saisissez votre adresse e-mail.",
@@ -779,6 +782,14 @@
     "copyInstead": "Copier plutôt le lien admin",
     "copied": "Copié ✓",
     "left": "{n, plural, =0 {Plus d’envoi possible pour ce sondage} one {Vous pouvez encore en envoyer # pour ce sondage} other {Vous pouvez encore en envoyer # pour ce sondage}}"
+  },
+  "og": {
+    "count": "{n, plural, one {# date proposée} other {# dates proposées}}",
+    "cta": "Choisir des dates →",
+    "sampleTitle": "Réunion d’équipe : planification T4",
+    "homeTitle": "Trouvez le jour qui convient à tous",
+    "homePill": "Gratuit · sans compte",
+    "homeAlt": "grabAday – trouvez le jour qui convient à tous"
   },
   "app": {
     "nfPage": "Oups, nous ne trouvons pas cette page",

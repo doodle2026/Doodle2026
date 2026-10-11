@@ -453,22 +453,22 @@
     "fromName": "{{organizerName}} via grabAday",
     "icsSummary": "{{eventTitle}}",
     "icsDescription": "Final date chosen in grabAday: {{pollUrl}}",
-    "selfSubject": "Your grabAday admin link: {{eventTitle}}",
-    "selfPreheader": "Save this email – the admin link gives full control over your poll.",
+    "selfSubject": "Your poll is ready: {{eventTitle}}",
+    "selfPreheader": "Keep this email – it contains your admin link and the link for your participants.",
     "selfEyebrow": "Your new poll",
-    "selfHeading": "High five – your poll is ready! 🙌",
-    "selfIntro": "Thanks for using grabAday to find a date for <strong>{{eventTitle}}</strong>. Here are your two links: one to keep for yourself, one to share.",
-    "selfAdminH": "🔑 Your admin link",
+    "selfHeading": "Your poll is ready",
+    "selfIntro": "Thank you for using grabAday to find a date for <strong>{{eventTitle}}</strong>. Below are your two links: one to keep for yourself and one to share with your participants.",
+    "selfAdminH": "Your admin link",
     "selfSave": "Save this email – the admin link gives full control over the poll.",
     "selfNoShare": "Don’t share it: anyone with this link can edit, close and choose the final date.",
     "selfAdminCta": "Open admin page",
-    "selfShareH": "Share with your participants",
+    "selfShareH": "Link for your participants",
     "selfShareP": "Send this link to everyone who should vote – no login needed.",
     "selfShareCta": "Open the poll",
-    "selfOutro": "Happy date-grabbing! ✨<br>– The grabAday team",
+    "selfOutro": "Kind regards,<br>grabAday",
     "selfNotYou": "Didn’t create this poll? Then you can ignore this email.",
     "selfWhy": "You’re getting this email because this address was entered on grabAday to receive the admin link. We don’t store it.",
-    "selfTxtHead": "Your grabAday admin link – {{eventTitle}}",
+    "selfTxtHead": "Your poll is ready – {{eventTitle}}",
     "selfFallback": "Button not working? Copy this link:"
   },
   "se": {
@@ -602,7 +602,7 @@
     "langPolls": "Polls",
     "langParts": "Participants",
     "kMail": "Email",
-    "mailToday": "Invitations sent today",
+    "mailToday": "Emails sent today",
     "mailOf": "{n} of {max}",
     "mailBarAria": "{n} of the daily limit of {max} used ({pct})",
     "mailSent": "Sent",
@@ -749,7 +749,10 @@
       "ip": "Per IP / network",
       "day": "Daily quota (100)"
     },
-    "limTodayCol": "Today"
+    "limTodayCol": "Today",
+    "mailSplit": "Invitations {inv} · reminders {rem} · to organizers {self}",
+    "mailSelf": "Sent to organizer (admin link)",
+    "mailSelfHint": "Count only – addresses aren’t stored."
   },
   "self": {
     "title": "Send the admin link to yourself",
@@ -763,7 +766,7 @@
     "close": "Close",
     "done": "Done",
     "another": "Send to another address",
-    "sentH": "On its way! 🎉",
+    "sentH": "Email sent",
     "sentP": "Sent to {email}.",
     "spam": "Check your spam folder if you can’t find the email.",
     "errRequired": "Enter your email address.",
@@ -779,6 +782,14 @@
     "copyInstead": "Copy admin link instead",
     "copied": "Copied ✓",
     "left": "{n, plural, =0 {You can’t send more for this poll} one {You can send # more for this poll} other {You can send # more for this poll}}"
+  },
+  "og": {
+    "count": "{n, plural, one {# date option} other {# date options}}",
+    "cta": "Pick dates →",
+    "sampleTitle": "Team meeting on Q4 planning",
+    "homeTitle": "Find the day that works for everyone",
+    "homePill": "Free · no login",
+    "homeAlt": "grabAday – find the day that works for everyone"
   },
   "app": {
     "nfPage": "Oops, we can’t find that page",

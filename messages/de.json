@@ -453,22 +453,22 @@
     "fromName": "{{organizerName}} via grabAday",
     "icsSummary": "{{eventTitle}}",
     "icsDescription": "Endgültiger Termin in grabAday gewählt: {{pollUrl}}",
-    "selfSubject": "Ihr grabAday-Admin-Link: {{eventTitle}}",
-    "selfPreheader": "Bewahren Sie diese E-Mail auf – der Admin-Link gibt volle Kontrolle über die Umfrage.",
+    "selfSubject": "Ihre Umfrage ist bereit: {{eventTitle}}",
+    "selfPreheader": "Bewahren Sie diese E-Mail auf – sie enthält Ihren Admin-Link und den Link für die Teilnehmenden.",
     "selfEyebrow": "Ihre neue Umfrage",
-    "selfHeading": "Super – Ihre Umfrage ist startklar! 🙌",
-    "selfIntro": "Danke, dass Sie grabAday nutzen, um einen Termin für <strong>{{eventTitle}}</strong> zu finden. Hier sind Ihre zwei Links: einer für Sie, einer zum Teilen.",
-    "selfAdminH": "🔑 Ihr Admin-Link",
+    "selfHeading": "Ihre Umfrage ist bereit",
+    "selfIntro": "Vielen Dank, dass Sie grabAday nutzen, um einen Termin für <strong>{{eventTitle}}</strong> zu finden. Unten finden Sie Ihre zwei Links: einen für Sie und einen für die Teilnehmenden.",
+    "selfAdminH": "Ihr Admin-Link",
     "selfSave": "Bewahren Sie diese E-Mail auf – der Admin-Link gibt volle Kontrolle über die Umfrage.",
     "selfNoShare": "Nicht weitergeben: Wer den Link hat, kann bearbeiten, schließen und den Termin festlegen.",
     "selfAdminCta": "Admin-Seite öffnen",
-    "selfShareH": "Mit den Teilnehmenden teilen",
+    "selfShareH": "Link für die Teilnehmenden",
     "selfShareP": "Senden Sie diesen Link an alle, die abstimmen sollen – ohne Anmeldung.",
     "selfShareCta": "Umfrage öffnen",
-    "selfOutro": "Viel Erfolg bei der Terminsuche! ✨<br>– Ihr grabAday-Team",
+    "selfOutro": "Mit freundlichen Grüßen<br>grabAday",
     "selfNotYou": "Sie haben diese Umfrage nicht erstellt? Dann ignorieren Sie diese E-Mail einfach.",
     "selfWhy": "Sie erhalten diese E-Mail, weil diese Adresse auf grabAday eingegeben wurde, um den Admin-Link zu erhalten. Wir speichern sie nicht.",
-    "selfTxtHead": "Ihr grabAday-Admin-Link – {{eventTitle}}",
+    "selfTxtHead": "Ihre Umfrage ist bereit – {{eventTitle}}",
     "selfFallback": "Button funktioniert nicht? Kopieren Sie diesen Link:"
   },
   "se": {
@@ -602,7 +602,7 @@
     "langPolls": "Umfragen",
     "langParts": "Teilnehmende",
     "kMail": "E-Mail",
-    "mailToday": "Heute gesendete Einladungen",
+    "mailToday": "Heute gesendete E-Mails",
     "mailOf": "{n} von {max}",
     "mailBarAria": "{n} des Tageslimits von {max} verbraucht ({pct})",
     "mailSent": "Gesendet",
@@ -749,7 +749,10 @@
       "ip": "Pro IP/Netzwerk",
       "day": "Tageskontingent (100)"
     },
-    "limTodayCol": "Heute"
+    "limTodayCol": "Heute",
+    "mailSplit": "Einladungen {inv} · Erinnerungen {rem} · an Organisierende {self}",
+    "mailSelf": "An Organisierende (Admin-Link)",
+    "mailSelfHint": "Nur Anzahl – Adressen werden nicht gespeichert."
   },
   "self": {
     "title": "Admin-Link an sich selbst senden",
@@ -763,7 +766,7 @@
     "close": "Schließen",
     "done": "Fertig",
     "another": "An eine andere Adresse senden",
-    "sentH": "Ist unterwegs! 🎉",
+    "sentH": "E-Mail gesendet",
     "sentP": "Gesendet an {email}.",
     "spam": "Schauen Sie im Spam-Ordner nach, falls Sie die E-Mail nicht finden.",
     "errRequired": "Geben Sie Ihre E-Mail-Adresse ein.",
@@ -779,6 +782,14 @@
     "copyInstead": "Stattdessen Admin-Link kopieren",
     "copied": "Kopiert ✓",
     "left": "{n, plural, =0 {Für diese Umfrage sind keine weiteren Sendungen möglich} one {Sie können noch # für diese Umfrage senden} other {Sie können noch # für diese Umfrage senden}}"
+  },
+  "og": {
+    "count": "{n, plural, one {# Terminvorschlag} other {# Terminvorschläge}}",
+    "cta": "Termine wählen →",
+    "sampleTitle": "Teammeeting zur Q4-Planung",
+    "homeTitle": "Finden Sie den Tag, der allen passt",
+    "homePill": "Kostenlos · ohne Anmeldung",
+    "homeAlt": "grabAday – finden Sie den Tag, der allen passt"
   },
   "app": {
     "nfPage": "Hoppla, diese Seite finden wir nicht",

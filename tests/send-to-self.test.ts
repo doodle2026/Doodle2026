@@ -250,3 +250,25 @@ describe('no open/click tracking in ANY grabAday mail', () => {
     }
   });
 });
+
+describe('owner dashboard §47.9 + manifest', () => {
+  test('selfSent: split line counts today\'s self mails, all-time total row; main number = all mails (quota)', async () => {
+    const st = await import('../src/lib/owner/stats');
+    st.clearStatsCache(); const before = (await st.ownerStats()).email;
+    const p = await poll();
+    await lib.sendToSelf(p.eventId, p.token, reqFrom(ip()), { email: `dash-${uniq()}@example.com` }, null);
+    st.clearStatsCache(); const after = (await st.ownerStats()).email;
+    expect(after.split.self).toBe(before.split.self + 1);
+    expect(after.selfTotal).toBe(before.selfTotal + 1);
+    expect(after.sentToday).toBe(before.sentToday + 1);
+    expect(JSON.stringify(after)).not.toMatch(/@/);
+  });
+  test('manifest: brand-blue theme_color and a 192×192 icon', async () => {
+    const m = await (await fetch(`${BASE}/manifest.webmanifest`)).json();
+    expect(m.theme_color).toBe('#2B6CB0');
+    const i = m.icons.find((x: { sizes: string }) => x.sizes === '192x192');
+    expect(i.src).toBe('/brand/icon-192.png');
+    const png = Buffer.from(await (await fetch(BASE + i.src)).arrayBuffer());
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([192, 192]);
+  });
+});

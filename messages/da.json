@@ -453,22 +453,22 @@
     "fromName": "{{organizerName}} via grabAday",
     "icsSummary": "{{eventTitle}}",
     "icsDescription": "Endelig dato valgt i grabAday: {{pollUrl}}",
-    "selfSubject": "Dit admin-link fra grabAday: {{eventTitle}}",
-    "selfPreheader": "Gem denne mail – admin-linket giver fuld kontrol over afstemningen.",
+    "selfSubject": "Din afstemning er klar: {{eventTitle}}",
+    "selfPreheader": "Gem denne mail – den indeholder dit admin-link og linket til deltagerne.",
     "selfEyebrow": "Din nye afstemning",
-    "selfHeading": "High five – din afstemning er klar! 🙌",
-    "selfIntro": "Tak, fordi du bruger grabAday til at finde en dato for <strong>{{eventTitle}}</strong>. Her er dine to links: ét til dig selv og ét til at dele.",
-    "selfAdminH": "🔑 Dit admin-link",
+    "selfHeading": "Din afstemning er klar",
+    "selfIntro": "Tak, fordi du bruger grabAday til at finde en dato for <strong>{{eventTitle}}</strong>. Herunder finder du dine to links: ét til dig selv og ét til deltagerne.",
+    "selfAdminH": "Dit admin-link",
     "selfSave": "Gem denne mail – admin-linket giver fuld kontrol over afstemningen.",
     "selfNoShare": "Del det ikke: alle med linket kan redigere, lukke og vælge den endelige dato.",
     "selfAdminCta": "Åbn admin-siden",
-    "selfShareH": "Del med deltagerne",
+    "selfShareH": "Link til deltagerne",
     "selfShareP": "Send dette link til alle, der skal stemme – ingen login.",
     "selfShareCta": "Åbn afstemningen",
-    "selfOutro": "God fornøjelse med at finde datoen! ✨<br>– grabAday",
+    "selfOutro": "Venlig hilsen<br>grabAday",
     "selfNotYou": "Har du ikke oprettet denne afstemning? Så kan du se bort fra mailen.",
     "selfWhy": "Du får denne mail, fordi adressen blev indtastet på grabAday for at modtage admin-linket. Vi gemmer den ikke.",
-    "selfTxtHead": "Dit admin-link fra grabAday – {{eventTitle}}",
+    "selfTxtHead": "Din afstemning er klar – {{eventTitle}}",
     "selfFallback": "Virker knappen ikke? Kopiér dette link:"
   },
   "se": {
@@ -602,7 +602,7 @@
     "langPolls": "Afstemninger",
     "langParts": "Deltagere",
     "kMail": "E-mail",
-    "mailToday": "Invitationer sendt i dag",
+    "mailToday": "E-mails sendt i dag",
     "mailOf": "{n} af {max}",
     "mailBarAria": "{n} af dagsgrænsen på {max} brugt ({pct})",
     "mailSent": "Sendt",
@@ -749,7 +749,10 @@
       "ip": "Pr. IP/netværk",
       "day": "Dagskvote (100)"
     },
-    "limTodayCol": "I dag"
+    "limTodayCol": "I dag",
+    "mailSplit": "Invitationer {inv} · påmindelser {rem} · til arrangøren selv {self}",
+    "mailSelf": "Til arrangøren selv (admin-link)",
+    "mailSelfHint": "Kun antal – adresser gemmes ikke."
   },
   "self": {
     "title": "Send admin-linket til dig selv",
@@ -763,7 +766,7 @@
     "close": "Luk",
     "done": "Færdig",
     "another": "Send til en anden adresse",
-    "sentH": "Den er på vej! 🎉",
+    "sentH": "Mailen er sendt",
     "sentP": "Sendt til {email}.",
     "spam": "Tjek din spam-mappe, hvis du ikke kan finde mailen.",
     "errRequired": "Skriv din e-mailadresse.",
@@ -779,6 +782,14 @@
     "copyInstead": "Kopiér admin-linket i stedet",
     "copied": "Kopieret ✓",
     "left": "{n, plural, =0 {Du kan ikke sende flere til denne afstemning} one {Du kan sende # mere til denne afstemning} other {Du kan sende # mere til denne afstemning}}"
+  },
+  "og": {
+    "count": "{n, plural, one {# datoforslag} other {# datoforslag}}",
+    "cta": "Vælg datoer →",
+    "sampleTitle": "Teammøde om Q4-planlægning",
+    "homeTitle": "Find den dag, der passer alle",
+    "homePill": "Gratis · uden login",
+    "homeAlt": "grabAday – find den dag, der passer alle"
   },
   "app": {
     "nfPage": "Hov, den side kan vi ikke finde",

@@ -116,7 +116,7 @@ async function pollForEmail(eventId: number) {
 
 type Planned = { to: string; idempotencyKey?: string } & Parameters<ReturnType<typeof mailer>['send']>[0];
 /** Send planned messages (batch), record provider ids/status per invitation; releases quota for failures. */
-async function deliver(eventId: number, msgs: Planned[], byEmail: Map<string, number>) {
+async function deliver(eventId: number, msgs: Planned[], byEmail: Map<string, number>, kind: 'mail_inv' | 'mail_rem' = 'mail_inv') {
   const results = await mailer().sendBatch(msgs);
   let failed = 0;
   await prisma.$transaction(results.map((r, i) => {
@@ -130,6 +130,7 @@ async function deliver(eventId: number, msgs: Planned[], byEmail: Map<string, nu
     });
   }));
   await releaseQuota(failed);
+  if (results.length - failed) await bumpStat(kind, results.length - failed); // §47.9 split of today's mails
   return { sent: results.length - failed, failed };
 }
 
@@ -229,7 +230,7 @@ export async function sendReminder(eventId: number) {
     }
     return { plan, ids: new Map(inv.map((i) => [i.email, i.id])) };
   }).then(async ({ plan, ids }) => {
-    const r = await deliver(eventId, plan.messages.map((m) => ({ ...m, idempotencyKey: `${m.idempotencyKey}:${Date.now() >> 20}` })), ids);
+    const r = await deliver(eventId, plan.messages.map((m) => ({ ...m, idempotencyKey: `${m.idempotencyKey}:${Date.now() >> 20}` })), ids, 'mail_rem');
     return { ...r, recipients: plan.messages.length };
   });
 }

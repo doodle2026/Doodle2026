@@ -117,9 +117,11 @@ export default async function OwnerDashboard({ params }: Props) {
             <p className="okpi__num" id="o-mail">{t('owner.mailOf', { n: f.n(E.sentToday), max: f.n(E.dailyLimit) })}</p>
             <div className={`oquota oquota--${lvl}`} role="meter" aria-valuemin={0} aria-valuemax={E.dailyLimit} aria-valuenow={E.sentToday} aria-label={t('owner.mailBarAria', { n: E.sentToday, max: E.dailyLimit, pct: f.pct(pct) })}>
               <span style={{ ['--w' as string]: `${Math.min(1, pct) * 100}%` }} /><i style={{ left: '80%' }} aria-hidden="true" /></div>
+            <p className="okpi__note" id="o-mail-split">{t('owner.mailSplit', { inv: f.n(E.split.inv), rem: f.n(E.split.rem), self: f.n(E.split.self) })}</p>
             <dl className="omail">
               <div><dt>{t('owner.mailSent')}</dt><dd>{f.n(E.sent)}</dd></div><div><dt>{t('owner.mailFailed')}</dt><dd>{f.n(E.failed)}</dd></div>
               <div><dt>{t('owner.mailRejected')}</dt><dd>{f.n(E.rejected)}</dd></div><div><dt>{t('owner.mailUnsub')}</dt><dd>{f.n(E.unsubscribes)}</dd></div>
+              <div id="o-mail-self"><dt>{t('owner.mailSelf')}</dt><dd>{f.n(E.selfTotal)} <span className="meta">{t('owner.mailSelfHint')}</span></dd></div>
             </dl></section>
           <section className="card okpi okpi--lim" aria-labelledby="k7"><h2 id="k7">{t('owner.limH')}</h2>
             <table className="olim" id="o-limits"><thead><tr><th scope="col">{t('owner.limType')}</th><th scope="col" className="num">{t('owner.limTodayCol')} <span className="meta">{`(${tz})`}</span></th><th scope="col" className="num">{t('owner.lim7')}</th><th scope="col" className="num">{t('owner.lim30')}</th></tr></thead>
