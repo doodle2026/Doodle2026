@@ -1,0 +1,42 @@
+name: Owner – unlock (prod)
+# Clears login lockout for an owner in the PRODUCTION DB: gh workflow run owner-unlock.yml -f username=jan
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: Owner username
+        type: string
+        default: jan
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: owner-ops
+  cancel-in-progress: false
+jobs:
+  unlock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check that owner:unlock script exists
+        run: |
+          if ! node -e 'process.exit(require("./package.json").scripts?.["owner:unlock"] ? 0 : 1)'; then
+            echo "::error::package.json has no 'owner:unlock' script on this ref yet – add scripts/owner-unlock.mjs + npm script first"
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: owner:unlock
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+          U: ${{ inputs.username }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then echo "::error::Repo secret PROD_DIRECT_URL is not set"; exit 1; fi
+          if ! [[ "$U" =~ ^[A-Za-z0-9._-]{1,64}$ ]]; then echo "::error::Invalid username"; exit 1; fi
+          npm run --silent owner:unlock -- "$U"
