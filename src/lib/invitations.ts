@@ -381,13 +381,27 @@ export async function retryInvite(eventId: number, email: unknown) {
   return deliver(eventId, m, new Map([[i.email, i.id]]));
 }
 
+/** Retry several failed invitations in ONE call (bulk "Prøv de fejlede igen", §46.7): per-address results sent|failed|blocked. */
+export async function retryFailed(eventId: number, emails: unknown) {
+  if (!Array.isArray(emails) || !emails.length || emails.length > MAX_PER_SEND) throw new ApiError(400, [`Angiv 1–${MAX_PER_SEND} adresser.`], { code: 'bad_recipients' });
+  const results: { email: string; status: 'sent' | 'failed' | 'blocked' }[] = [];
+  for (const e of emails) {
+    const email = String(e).trim().toLowerCase();
+    try { const r = await retryInvite(eventId, email); results.push({ email, status: r.sent ? 'sent' : 'failed' }); } catch (err) {
+      if (err instanceof ApiError && err.status === 429) throw new ApiError(429, err.errors, { ...err.extra, results, remaining: await remainingNow(eventId) });
+      results.push({ email, status: err instanceof ApiError && err.extra.code === 'blocked' ? 'blocked' : 'failed' });
+    }
+  }
+  return { results };
+}
+
 export async function resendInvite(eventId: number, email: unknown) {
   const i = await invitationFor(eventId, email);
   const { ev, p } = await pollForEmail(eventId);
   if (p.isClosed) throw new ApiError(409, ['Afstemningen er lukket.'], { code: 'closed' });
   if (ev.mailBlockedAt) throw new ApiError(403, ['Mails er stoppet for denne afstemning efter rapporter om misbrug.'], { code: 'mail_blocked' });
-  if (i.delivery === 'bounced' || i.delivery === 'unsub') throw new ApiError(409, ['Modtageren kan ikke få mails (afvist eller afmeldt).'], { code: 'not_mailable' });
-  if ((await suppressedSet(eventId, [i.email])).size) throw new ApiError(409, ['Modtageren har afmeldt sig.'], { code: 'not_mailable' });
+  // PM §46.8: never say why (opt-out vs. bounce) – one neutral answer.
+  if (i.delivery === 'bounced' || i.delivery === 'unsub' || (await suppressedSet(eventId, [i.email])).size) throw new ApiError(409, ['Kan ikke sendes til denne adresse.'], { code: 'not_mailable' });
   if (!(await reserveQuota(1))) throw new ApiError(429, ['Dagens mailkvote er brugt op. Prøv igen i morgen.'], { code: 'quota' });
   const gen = (i.inviteGen ?? 0) + 1;
   const it = inviteTokenFor(i.id, gen);

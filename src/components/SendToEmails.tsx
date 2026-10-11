@@ -113,6 +113,18 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
   async function send(r: Row) {
     const i = rows.findIndex((x) => x.id === r.id);
     const value = normSe(r.value);
+    if (r.status === 'failed' && invited.has(key(value))) { // stored but failed → retry (no new token), one call
+      upd(r.id, { status: 'sending' });
+      try {
+        const { res, data } = await api('/retry', { method: 'POST', body: JSON.stringify({ emails: [value] }) });
+        if (data.remaining) setQuota(data.remaining); if (res.ok) apply(data);
+        const st = (data.results as { status: string }[] | undefined)?.[0]?.status;
+        if (res.status === 429 && data.code === 'ip_limit') startIpWait(Number(res.headers.get('Retry-After') || 3600));
+        upd(r.id, { status: st === 'sent' ? 'sent' : st === 'blocked' ? 'rejected' : 'failed' });
+        say(st === 'sent' ? t('se.liveSent', { email: value }) : st === 'blocked' ? `${t('se.blocked')}: ${value}` : t('se.liveFailed', { email: value }));
+      } catch { upd(r.id, { status: 'failed' }); say(t('se.liveFailed', { email: value })); }
+      return;
+    }
     const c = check({ ...r, value, touched: true }, i, rows);
     if (r.status === 'sending' || limitMsg || !validEmail(value) || (c && c.kind !== 'pending')) { upd(r.id, { touched: true, value }); return; }
     upd(r.id, { status: 'sending', value, touched: true });

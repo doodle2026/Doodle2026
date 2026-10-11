@@ -58,6 +58,9 @@ describe('API', () => {
     const rt = await call(`/api/events/${p.id}/invitations/retry`, { method: 'POST', token: p.token, json: { email: f } });
     expect(rt.status).toBe(200); expect(rt.body.sent).toBe(1); expect(rt.body.quota).toBeTruthy();
     expect((await prisma.invitation.findFirstOrThrow({ where: { email: f, event: { slug: p.id } } })).delivery).toBe('sent');
+    await prisma.invitation.updateMany({ where: { email: f, event: { slug: p.id } }, data: { delivery: 'failed' } });
+    const many = await call(`/api/events/${p.id}/invitations/retry`, { method: 'POST', token: p.token, json: { emails: [f, `nope-${uniq()}@example.com`] } });
+    expect(many.status).toBe(200); expect(many.body.results).toEqual([{ email: f, status: 'sent' }, expect.objectContaining({ status: 'failed' })]); expect(many.body.remaining).toBeTruthy();
   });
 
   test('admin API never exposes unsub/bounced (neutral blocked); §46.8 remaining + invitations shape', async () => {
