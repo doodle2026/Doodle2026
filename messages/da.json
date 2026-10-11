@@ -193,7 +193,7 @@
     "whyConfirm": "Vi beder dig bekræfte, så et automatisk link-tjek i dit mailprogram ikke afmelder dig ved en fejl.",
     "working": "Afmelder …",
     "allDoneH": "Du er afmeldt alle mails",
-    "allDoneLead": "GrabAday sender ikke flere mails til <strong>{email}</strong>. Arrangører kan se, at du er afmeldt, men ikke hvorfor.",
+    "allDoneLead": "GrabAday sender ikke flere mails til <strong>{email}</strong>. Arrangører får ikke at vide, at du har afmeldt dig.",
     "allRegret": "Fortrudt? Hvis du senere vil have invitationer igen, så klik på \"Tilmeld igen\" herunder, eller bed en arrangør om at sende dig linket direkte.",
     "resub": "Tilmeld igen",
     "resubLead": "Du kan igen modtage invitationer via GrabAday."
@@ -357,7 +357,6 @@
     "fWaiting": "Ikke svaret",
     "fFailed": "Fejlet",
     "fBounced": "Afvist",
-    "fUnsub": "Afmeldt",
     "fPublic": "Ikke inviteret",
     "fSent": "Leveret",
     "fQueued": "Sendes",
@@ -369,7 +368,9 @@
     "revoke": "Tilbagekald",
     "none": "Ingen modtagere med denne status.",
     "showing": "Viser {shown} af {total}.",
-    "showAll": "Vis alle"
+    "showAll": "Vis alle",
+    "fBlocked": "Kan ikke sendes",
+    "blocked": "Kan ikke sendes til denne adresse"
   },
   "pub": {
     "h": "Svar via offentligt link",
@@ -406,7 +407,7 @@
   "rem": {
     "h": "Påmindelse",
     "used": "{used} af 3 brugt",
-    "toOpen": "Sendes til <strong>dem, der ikke har svaret ({n})</strong>. Afmeldte og afviste springes over.",
+    "toOpen": "Sendes til <strong>dem, der ikke har svaret ({n})</strong>. Adresser, der ikke kan sendes til, springes over.",
     "toAll": "Sendes til <strong>alle inviterede ({n})</strong>, der ikke har afmeldt sig – også dem, der har svaret, fordi vi ikke ved hvem. Slå \"Spor hvem der har svaret\" til, så går den kun til dem, der mangler.",
     "btn": "🔔 Send påmindelse til {n}",
     "maxed": "Du har brugt alle 3 påmindelser til denne afstemning.",
@@ -525,7 +526,8 @@
     "quotaHint": "Tilbage: {poll} til afstemningen · {day} i dag · {hour} denne time",
     "linkNote": "Modtagerne får det offentlige link – eller deres eget personlige link, hvis \"Spor hvem der har svaret\" er slået til for afstemningen.",
     "dupsRemoved": "{n, plural, one {# dublet fjernet} other {# dubletter fjernet}}",
-    "sendingN": "Sender til {n}…"
+    "sendingN": "Sender til {n}…",
+    "limitIp": "Der er sendt mange invitationer fra dit netværk den seneste time. Prøv igen om {min, plural, =0 {under 1 min} one {ca. # min} other {ca. # min}}."
   },
   "app": {
     "nfPage": "Hov, den side kan vi ikke finde",
@@ -633,9 +635,6 @@
     "wrongH": "Noget gik galt",
     "wrongP": "Prøv igen om lidt.",
     "abusePrivacy": "Rapporten er anonym over for arrangøren. Vi gemmer kun afstemningen og din vurdering.",
-    "answerDeleted": "Dit svar er slettet af arrangøren. Du kan svare igen som ny deltager.",
-    "seRejected": "Kan ikke sendes til denne adresse",
-    "seWhyRejected": "kan ikke sendes",
-    "seDupRemoved": "{n, plural, one {# dublet fjernet} other {# dubletter fjernet}}"
+    "answerDeleted": "Dit svar er slettet af arrangøren. Du kan svare igen som ny deltager."
   }
 }

@@ -11,7 +11,7 @@ import { useLp } from '@/i18n/link';
 import { graphemes, MESSAGE_MAX, validEmail } from '@/lib/recipients';
 
 type Invitee = { email: string; delivery: string };
-type Quota = { poll_remaining: number; hour_remaining: number; day_remaining: number };
+type Quota = { poll: number; hour: number; day: number }; // §46.8 QuotaRemaining
 type St = 'idle' | 'sending' | 'sent' | 'failed' | 'bounced' | 'rejected';
 type Row = { id: number; value: string; status: St; touched: boolean; earlier?: boolean };
 const POLL_MS = 20_000;
@@ -33,10 +33,18 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
   const [pmOpen, setPmOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [live, setLive] = useState('');
+  const [ipWait, setIpWait] = useState<number | null>(null);
   const rootRef = useRef<HTMLElement>(null);
   const loaded = useRef(false);
   const sentHere = useRef(0);
 
+  const ipTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const startIpWait = (sec: number) => {
+    const until = Date.now() + sec * 1000; clearInterval(ipTimer.current);
+    const tick = () => { const left = until - Date.now(); if (left <= 0) { clearInterval(ipTimer.current); setIpWait(null); } else setIpWait(Math.floor(left / 60_000)); };
+    tick(); ipTimer.current = setInterval(tick, 15_000);
+  };
+  useEffect(() => () => clearInterval(ipTimer.current), []);
   const say = (m: string) => { setLive(''); setTimeout(() => setLive(m), 30); };
   const api = useCallback(async (path: string, init?: RequestInit) => {
     const res = await fetch(`/api/events/${encodeURIComponent(slug)}/invitations${path}`, {
@@ -44,8 +52,8 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
     return { res, data: await res.json().catch(() => ({})) };
   }, [slug, token]);
 
-  const apply = useCallback((d: { invitees?: Invitee[]; quota?: Quota }) => {
-    if (d.quota) setQuota(d.quota);
+  const apply = useCallback((d: { invitees?: Invitee[]; remaining?: Quota }) => {
+    if (d.remaining) setQuota(d.remaining);
     if (!d.invitees) return;
     const inv = d.invitees;
     setInvitees(inv);
@@ -78,8 +86,8 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
     return () => clearInterval(id);
   }, [refresh, invitees]);
 
-  const left = quota ? Math.min(quota.poll_remaining, quota.day_remaining, quota.hour_remaining) : Infinity;
-  const limitMsg = !quota ? '' : quota.day_remaining <= 0 ? t('se.limitDay') : quota.hour_remaining <= 0 ? t('se.limitHour') : quota.poll_remaining <= 0 ? t('se.limitPoll') : '';
+  const left = quota ? Math.min(quota.poll, quota.day, quota.hour) : Infinity;
+  const limitMsg = !quota && ipWait === null ? '' : ipWait !== null ? t('se.limitIp', { min: ipWait }) : !quota ? '' : quota.day <= 0 ? t('se.limitDay') : quota.hour <= 0 ? t('se.limitHour') : quota.poll <= 0 ? t('se.limitPoll') : '';
   const invited = new Set(invitees.map((i) => i.email));
 
   function check(r: Row, i: number, all: Row[]): { kind: 'invalid' | 'already' | 'pending'; msg?: string } | null {
@@ -105,7 +113,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
       if (res.ok) {
         apply(data);
         const st = (data.results as { email: string; status: string }[] | undefined)?.find((x) => x.email === key(value))?.status;
-        if (st === 'rejected') { upd(r.id, { status: 'rejected' }); say(`${t('app.seRejected')}: ${value}`); focus(`#se-i${r.id}`); return; }
+        if (st === 'blocked') { upd(r.id, { status: 'rejected' }); say(`${t('se.blocked')}: ${value}`); focus(`#se-i${r.id}`); return; }
         if (st === 'failed') { upd(r.id, { status: 'failed' }); say(t('se.liveFailed', { email: value })); return; }
         sentHere.current++;
         setRows((rs) => {
@@ -116,7 +124,8 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
         });
         say(t('se.liveSent', { email: value }));
       } else {
-        if (data.quota) setQuota(data.quota); else void refresh();
+        if (data.remaining) setQuota(data.remaining); else void refresh();
+        if (res.status === 429 && data.code === 'ip_limit') startIpWait(Number(res.headers.get('Retry-After') || data.retry_after || 3600)); // §46.9: local countdown, no auto-resend
         upd(r.id, { status: data.code === 'already_invited' || data.code === 'no_new_recipients' ? 'idle' : 'failed' });
         if (data.code === 'no_new_recipients') void refresh();
         say(t('se.liveFailed', { email: value }));
@@ -147,7 +156,9 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
         </button>
       </div>
       <div id="se-body" hidden={!open}>
-        <p className="se-note"><span aria-hidden="true">🔒</span> {t('se.neverAdmin')} {quota && <span className="meta" id="se-left">{t('se.remaining', { n: quota.poll_remaining })}</span>}</p>
+        <p className="se-note"><span aria-hidden="true">🔒</span> {t('se.neverAdmin')} {quota && <span className="meta" id="se-left">{t('se.remaining', { n: quota.poll })}</span>}</p>
+        <p className="se-note" id="se-linknote">{t('se.linkNote')}</p>
+        {quota && <p className="se-note" id="se-quota" aria-live="polite">{t('se.quotaHint', { poll: quota.poll, day: quota.day, hour: quota.hour })}</p>}
         <div id="se-limit">{limitMsg && <p className="se-limit" role="alert"><span aria-hidden="true">{'⛔'}</span> {limitMsg}</p>}</div>
         <button type="button" className="link-btn se-pm-toggle" id="se-pm-toggle" aria-expanded={pmOpen} aria-controls="se-pm"
           onClick={() => { setPmOpen(!pmOpen); if (!pmOpen) focus('#se-pmsg'); }}>{'+ '}{t('se.pmsgToggle')}</button>
@@ -189,7 +200,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
                     {r.earlier && r.status === 'sent' ? <span className="se-st se-st--sent">✓ {t('se.sentEarlier')}</span>
                       : r.status === 'failed' ? <span className="se-st se-st--err"><strong>{t('se.failed')}</strong> – {t('se.failedWhy')}</span>
                       : r.status === 'bounced' ? <span className="se-st se-st--err">{'⊘ '}{t('se.bounced')}</span>
-                      : r.status === 'rejected' ? <span className="se-st se-st--err">– {t('app.seRejected')}</span>
+                      : r.status === 'rejected' ? <span className="se-st se-st--err">– {t('se.blocked')}</span>
                       : c?.msg ? <span className={`se-st ${c.kind === 'invalid' ? 'se-st--err' : 'se-st--warn'}`}>{c.kind === 'invalid' ? '!' : '↺'} {c.msg}</span> : null}
                   </div>
                 </li>

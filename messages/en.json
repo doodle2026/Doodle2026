@@ -193,7 +193,7 @@
     "whyConfirm": "We ask you to confirm so that an automatic link checker in your mail app doesn’t unsubscribe you by mistake.",
     "working": "Unsubscribing …",
     "allDoneH": "You’re unsubscribed from all emails",
-    "allDoneLead": "GrabAday won’t send any more emails to <strong>{email}</strong>. Organizers can see that you’ve unsubscribed, but not why.",
+    "allDoneLead": "GrabAday won’t send any more emails to <strong>{email}</strong>. Organizers aren’t told that you unsubscribed.",
     "allRegret": "Changed your mind? If you want invitations again later, click “Subscribe again” below, or ask an organizer to send you the link directly.",
     "resub": "Subscribe again",
     "resubLead": "You can receive invitations via GrabAday again."
@@ -357,7 +357,6 @@
     "fWaiting": "Not answered",
     "fFailed": "Failed",
     "fBounced": "Rejected",
-    "fUnsub": "Unsubscribed",
     "fPublic": "Not invited",
     "fSent": "Delivered",
     "fQueued": "Sending",
@@ -369,7 +368,9 @@
     "revoke": "Revoke",
     "none": "No recipients with this status.",
     "showing": "Showing {shown} of {total}.",
-    "showAll": "Show all"
+    "showAll": "Show all",
+    "fBlocked": "Can’t be sent",
+    "blocked": "Can’t be sent to this address"
   },
   "pub": {
     "h": "Answers via public link",
@@ -406,7 +407,7 @@
   "rem": {
     "h": "Reminder",
     "used": "{used} of 3 used",
-    "toOpen": "Sent to <strong>those who haven’t answered ({n})</strong>. Unsubscribed and rejected addresses are skipped.",
+    "toOpen": "Sent to <strong>those who haven’t answered ({n})</strong>. Addresses we can’t send to are skipped.",
     "toAll": "Sent to <strong>all invitees ({n})</strong> who haven’t unsubscribed – including those who have answered, because we don’t know who. Turn on “Track who has answered” to send it only to those who haven’t.",
     "btn": "🔔 Send reminder to {n}",
     "maxed": "You’ve used all 3 reminders for this poll.",
@@ -525,7 +526,8 @@
     "quotaHint": "Left: {poll} for this poll · {day} today · {hour} this hour",
     "linkNote": "Recipients get the public link – or their own personal link if “Track who has responded” is on for this poll.",
     "dupsRemoved": "{n, plural, one {# duplicate removed} other {# duplicates removed}}",
-    "sendingN": "Sending to {n}…"
+    "sendingN": "Sending to {n}…",
+    "limitIp": "Many invitations have been sent from your network in the last hour. Try again in {min, plural, =0 {less than 1 min} one {about # min} other {about # min}}."
   },
   "app": {
     "nfPage": "Oops, we can’t find that page",
@@ -633,9 +635,6 @@
     "wrongH": "Something went wrong",
     "wrongP": "Please try again in a moment.",
     "abusePrivacy": "The report is anonymous to the organizer. We only store the poll and your assessment.",
-    "answerDeleted": "Your answer was deleted by the organizer. You can answer again as a new participant.",
-    "seRejected": "Can’t send to this address",
-    "seWhyRejected": "cannot be sent",
-    "seDupRemoved": "{n, plural, one {# duplicate removed} other {# duplicates removed}}"
+    "answerDeleted": "Your answer was deleted by the organizer. You can answer again as a new participant."
   }
 }

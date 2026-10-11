@@ -43,11 +43,11 @@ describe('API', () => {
     expect(again.status).toBe(400); expect(again.body.code).toBe('no_new_recipients');
   });
 
-  test('opted-out address → neutral "rejected", not stored, same status code + shape as a normal send; retry only for failed', async () => {
+  test('opted-out address → neutral "blocked", not stored, same status code + shape as a normal send; retry only for failed', async () => {
     const p = await poll(); const s = `s-${uniq()}@example.com`, f = `f-${uniq()}@example.com`;
     await prisma.emailSuppression.create({ data: { emailHash: emailHash(s), scope: 'all' } });
     const t0 = Date.now(); const r = await send(p, { recipients: [s] }); const dt = Date.now() - t0;
-    expect(r.status).toBe(201); expect(r.body.results).toEqual([{ email: s, status: 'rejected' }]);
+    expect(r.status).toBe(201); expect(r.body.results).toEqual([{ email: s, status: 'blocked' }]);
     expect(dt).toBeGreaterThanOrEqual(390); // minimum response time – rejected isn't faster than a send
     expect(r.text).not.toMatch(/unsub|suppress|afmeld|frabedt/i);
     expect(await prisma.invitation.count({ where: { email: s, event: { slug: p.id } } })).toBe(0);
@@ -58,6 +58,17 @@ describe('API', () => {
     const rt = await call(`/api/events/${p.id}/invitations/retry`, { method: 'POST', token: p.token, json: { email: f } });
     expect(rt.status).toBe(200); expect(rt.body.sent).toBe(1); expect(rt.body.quota).toBeTruthy();
     expect((await prisma.invitation.findFirstOrThrow({ where: { email: f, event: { slug: p.id } } })).delivery).toBe('sent');
+  });
+
+  test('admin API never exposes unsub/bounced (neutral blocked); §46.8 remaining + invitations shape', async () => {
+    const p = await poll(); const a = `a-${uniq()}@example.com`, b = `b-${uniq()}@example.com`;
+    await send(p, { recipients: [a] }); await send(p, { recipients: [b] });
+    await prisma.invitation.updateMany({ where: { email: a, event: { slug: p.id } }, data: { delivery: 'unsub' } });
+    await prisma.invitation.updateMany({ where: { email: b, event: { slug: p.id } }, data: { delivery: 'bounced' } });
+    const g = await call(`/api/events/${p.id}/invitations`, { token: p.token });
+    expect(g.body.invitees.map((i: { delivery: string }) => i.delivery)).toEqual(['blocked', 'blocked']);
+    expect(g.body.remaining).toMatchObject({ poll: 198 }); expect(g.body.remaining.hour).toBeGreaterThan(0); expect(g.body.remaining.day).toBeGreaterThan(0);
+    expect(g.text).not.toMatch(/unsub/);
   });
 
   test('box follows the poll tracking setting (personal link when tracking is on)', async () => {

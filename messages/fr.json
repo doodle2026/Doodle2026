@@ -193,7 +193,7 @@
     "whyConfirm": "Nous vous demandons de confirmer afin qu’un vérificateur de liens automatique de votre messagerie ne vous désabonne pas par erreur.",
     "working": "Désabonnement …",
     "allDoneH": "Vous êtes désabonné(e) de tous les e-mails",
-    "allDoneLead": "GrabAday n’enverra plus d’e-mails à <strong>{email}</strong>. Les organisateurs voient que vous êtes désabonné(e), mais pas pourquoi.",
+    "allDoneLead": "GrabAday n’enverra plus d’e-mails à <strong>{email}</strong>. Les organisateurs ne sont pas informés de votre désabonnement.",
     "allRegret": "Vous avez changé d’avis ? Pour recevoir à nouveau des invitations, cliquez sur « Me réabonner » ci-dessous ou demandez le lien directement à l’organisateur.",
     "resub": "Me réabonner",
     "resubLead": "Vous pouvez à nouveau recevoir des invitations via GrabAday."
@@ -357,7 +357,6 @@
     "fWaiting": "Sans réponse",
     "fFailed": "Échec",
     "fBounced": "Rejeté",
-    "fUnsub": "Désabonné",
     "fPublic": "Non invité",
     "fSent": "Distribué",
     "fQueued": "En cours",
@@ -369,7 +368,9 @@
     "revoke": "Révoquer",
     "none": "Aucun destinataire avec ce statut.",
     "showing": "{shown} sur {total} affichés.",
-    "showAll": "Tout afficher"
+    "showAll": "Tout afficher",
+    "fBlocked": "Envoi impossible",
+    "blocked": "Impossible d’envoyer à cette adresse"
   },
   "pub": {
     "h": "Réponses via le lien public",
@@ -406,7 +407,7 @@
   "rem": {
     "h": "Rappel",
     "used": "{used} sur 3 utilisés",
-    "toOpen": "Envoyé à <strong>ceux qui n’ont pas répondu ({n})</strong>. Les adresses désabonnées ou rejetées sont ignorées.",
+    "toOpen": "Envoyé à <strong>ceux qui n’ont pas répondu ({n})</strong>. Les adresses auxquelles l’envoi est impossible sont ignorées.",
     "toAll": "Envoyé à <strong>tous les invités ({n})</strong> non désabonnés – y compris ceux qui ont répondu, car nous ne savons pas qui. Activez « Suivre qui a répondu » pour ne l’envoyer qu’aux personnes manquantes.",
     "btn": "🔔 Envoyer un rappel à {n}",
     "maxed": "Vous avez utilisé les 3 rappels de ce sondage.",
@@ -525,7 +526,8 @@
     "quotaHint": "Restant : {poll} pour ce sondage · {day} aujourd’hui · {hour} cette heure",
     "linkNote": "Les destinataires reçoivent le lien public – ou leur lien personnel si « Suivre qui a répondu » est activé pour ce sondage.",
     "dupsRemoved": "{n, plural, one {# doublon retiré} other {# doublons retirés}}",
-    "sendingN": "Envoi à {n}…"
+    "sendingN": "Envoi à {n}…",
+    "limitIp": "Beaucoup d’invitations ont été envoyées depuis votre réseau au cours de la dernière heure. Réessayez dans {min, plural, =0 {moins d’1 min} one {environ # min} other {environ # min}}."
   },
   "app": {
     "nfPage": "Oups, nous ne trouvons pas cette page",
@@ -633,9 +635,6 @@
     "wrongH": "Une erreur s’est produite",
     "wrongP": "Veuillez réessayer dans un instant.",
     "abusePrivacy": "Le signalement est anonyme pour l’organisateur. Nous ne conservons que le sondage et votre évaluation.",
-    "answerDeleted": "Votre réponse a été supprimée par l’organisateur. Vous pouvez répondre à nouveau comme nouveau participant.",
-    "seRejected": "Impossible d’envoyer à cette adresse",
-    "seWhyRejected": "envoi impossible",
-    "seDupRemoved": "{n, plural, one {# doublon retiré} other {# doublons retirés}}"
+    "answerDeleted": "Votre réponse a été supprimée par l’organisateur. Vous pouvez répondre à nouveau comme nouveau participant."
   }
 }

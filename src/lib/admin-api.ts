@@ -40,7 +40,7 @@ export function adminRoute(handler: Handler, opts: { write?: boolean; json?: boo
         }
         return await handler({ req, slug, eventId, body, params });
       } catch (e) {
-        if (e instanceof ApiError) return NextResponse.json({ errors: e.errors, ...e.extra }, { status: e.status });
+        if (e instanceof ApiError) return NextResponse.json({ errors: e.errors, ...e.extra }, { status: e.status, headers: e.status === 429 ? { 'Retry-After': String(e.extra.retry_after ?? 3600) } : undefined });
         logError('admin API', e);
         return jsonError(500, ['Serverfejl.']);
       }

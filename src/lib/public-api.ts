@@ -10,7 +10,7 @@ export function publicRoute<C>(h: (req: Request, ctx: C) => Promise<Response>) {
     try {
       res = rateLimit(req, 'public') ?? (await h(req, ctx));
     } catch (e) {
-      if (e instanceof ApiError) res = NextResponse.json({ errors: e.errors, ...e.extra }, { status: e.status });
+      if (e instanceof ApiError) res = NextResponse.json({ errors: e.errors, ...e.extra }, { status: e.status, headers: e.status === 429 ? { 'Retry-After': String(e.extra.retry_after ?? 3600) } : undefined });
       else { logError('public API', e); res = jsonError(500, ['Serverfejl.']); }
     }
     for (const [k, v] of Object.entries(NO_STORE)) res.headers.set(k, v);

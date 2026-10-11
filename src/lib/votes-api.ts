@@ -7,7 +7,7 @@ import { jsonError, logError, NO_STORE } from './http';
 export async function guarded(where: string, fn: () => Promise<Response>): Promise<Response> {
   let res: Response;
   try { res = await fn(); } catch (e) {
-    if (e instanceof ApiError) res = NextResponse.json({ errors: e.errors, ...e.extra }, { status: e.status });
+    if (e instanceof ApiError) res = NextResponse.json({ errors: e.errors, ...e.extra }, { status: e.status, headers: e.status === 429 ? { 'Retry-After': String(e.extra.retry_after ?? 3600) } : undefined });
     else { logError(where, e); res = jsonError(500, ['Serverfejl.']); }
   }
   for (const [k, v] of Object.entries(NO_STORE)) res.headers.set(k, v);

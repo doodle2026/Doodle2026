@@ -125,7 +125,7 @@ describe('invitations API (step 4)', () => {
     expect(sup.map((s) => s.scope)).toEqual(['all']);
     expect(JSON.stringify(await prisma.emailSuppression.findMany({ take: 1000 }))).not.toContain(a);
     const r = await invite(q, { recipients: a });
-    expect(r.body).toMatchObject({ sent: 0, rejected: 1, results: [{ email: a, status: 'rejected' }] }); // PM: never revealed as unsubscribed
+    expect(r.body).toMatchObject({ sent: 0, blocked: 1, results: [{ email: a, status: 'blocked' }] }); // PM: never revealed as unsubscribed
     expect(r.body.invitees).toEqual([]); // not stored
     expect((await call(`/api/u/p/${'A'.repeat(43)}`)).status).toBe(404);
     const h = (await call(`/da/u/p/${t}`)).headers;

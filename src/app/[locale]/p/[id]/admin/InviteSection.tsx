@@ -5,7 +5,7 @@ import { useI18n } from '@/i18n/use';
 import { BCP } from '@/lib/dates';
 
 type Api = (path: string, init?: RequestInit) => Promise<{ res: Response; data: any }>; // eslint-disable-line @typescript-eslint/no-explicit-any
-type Delivery = 'queued' | 'sent' | 'delivered' | 'failed' | 'bounced' | 'unsub';
+type Delivery = 'queued' | 'sent' | 'delivered' | 'failed' | 'bounced' | 'blocked';
 interface Row { email: string; name: string | null; delivery: Delivery; reason: string | null; updated_at: string; response: 'invited' | 'answered' | 'revoked' | null; linked_from: string | null }
 interface State {
   invitees: Row[]; organizer_name: string; mail_blocked: boolean; tracking: boolean; public_answers: { id: number; name: string }[];
@@ -15,10 +15,10 @@ interface State {
 /** Delivery badges (design §30.3 "Levering"; §38 colours). sent and delivered both read "Leveret"/"Sendt". */
 const DLV: Record<Delivery, [string, string, string]> = {
   queued: ['st.queued', '…', 'queued'], sent: ['app.dlvSent', '✉', 'sent'], delivered: ['st.fSent', '✉', 'sent'],
-  failed: ['st.fFailed', '!', 'failed'], bounced: ['st.fBounced', '⊘', 'bounced'], unsub: ['st.fUnsub', '–', 'unsub'],
+  failed: ['st.fFailed', '!', 'failed'], bounced: ['st.fBounced', '⊘', 'bounced'], blocked: ['st.blocked', '⊘', 'blocked'],
 };
-type Filter = 'all' | 'queued' | 'sent' | 'failed' | 'bounced' | 'unsub' | 'answered' | 'waiting' | 'public';
-const mailable = (r: Row) => r.delivery !== 'bounced' && r.delivery !== 'unsub';
+type Filter = 'all' | 'queued' | 'sent' | 'failed' | 'bounced' | 'blocked' | 'answered' | 'waiting' | 'public';
+const mailable = (r: Row) => r.delivery !== 'bounced' && r.delivery !== 'blocked';
 const inFilter = (r: Row, f: Filter) => f === 'all' || (f === 'sent' ? r.delivery === 'sent' || r.delivery === 'delivered'
   : f === 'answered' ? r.response === 'answered' : f === 'waiting' ? r.response === 'invited' && mailable(r) : f === 'public' ? false : r.delivery === f);
 const ANS = { invited: ['st.invited', '○', 'st st--invited'], answered: ['st.fAnswered', '✓', 'st st--answered'], revoked: ['st.revoked', '⊗', 'st st--unsub'] } as const;
@@ -133,11 +133,11 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
   if (!st) return null;
   const R = st.invitees;
   const T = st.tracking;
-  const counts: Record<Filter, number> = { all: R.length, queued: 0, sent: 0, failed: 0, bounced: 0, unsub: 0, answered: 0, waiting: 0, public: st.public_answers.length };
-  for (const r of R) for (const f of ['queued', 'sent', 'failed', 'bounced', 'unsub', 'answered', 'waiting'] as const) if (inFilter(r, f)) counts[f]++;
+  const counts: Record<Filter, number> = { all: R.length, queued: 0, sent: 0, failed: 0, bounced: 0, blocked: 0, answered: 0, waiting: 0, public: st.public_answers.length };
+  for (const r of R) for (const f of ['queued', 'sent', 'failed', 'bounced', 'blocked', 'answered', 'waiting'] as const) if (inFilter(r, f)) counts[f]++;
   const F: [Filter, string][] = T
-    ? [['all', t('st.fAll')], ['answered', t('st.fAnswered')], ['waiting', t('st.fWaiting')], ['failed', t('st.fFailed')], ['bounced', t('st.fBounced')], ['unsub', t('st.fUnsub')], ['public', t('st.fPublic')]]
-    : [['all', t('st.fAll')], ['sent', t('st.fSent')], ['failed', t('st.fFailed')], ['bounced', t('st.fBounced')], ['unsub', t('st.fUnsub')]];
+    ? [['all', t('st.fAll')], ['answered', t('st.fAnswered')], ['waiting', t('st.fWaiting')], ['failed', t('st.fFailed')], ['blocked', t('st.fBlocked')], ['public', t('st.fPublic')]]
+    : [['all', t('st.fAll')], ['sent', t('st.fSent')], ['failed', t('st.fFailed')], ['blocked', t('st.fBlocked')]];
   if (counts.queued) F.splice(1, 0, ['queued', t('st.fQueued')]);
   const openInvitees = R.filter((r) => r.response === 'invited' && mailable(r));
   const ans = (r: Row) => r.response && (<>
@@ -249,13 +249,13 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
             <thead>{T ? <tr><th scope="col">{t('st.colRecipient')}</th><th scope="col">{t('st.colDelivery')}</th><th scope="col">{t('st.colResponse')}</th><th scope="col"><span className="sr-only">{t('st.colActions')}</span></th></tr>
               : <tr><th scope="col">{t('st.colRecipient')}</th><th scope="col">{t('st.colDelivery')}</th><th scope="col">{t('st.colLatest')}</th></tr>}</thead>
             <tbody>{filter === 'public' ? null : show.length ? show.map((r) => T ? (
-              <tr key={r.email}><td className="addr">{r.email}<div className="meta">{when(r.updated_at, locale)}</div></td><td>{badge(r)}{r.reason && r.delivery !== 'unsub' && <div className="meta">{r.reason}</div>}</td><td>{ans(r)}</td><td>{act(r)}</td></tr>
+              <tr key={r.email}><td className="addr">{r.email}<div className="meta">{when(r.updated_at, locale)}</div></td><td>{badge(r)}{r.reason && r.delivery !== 'blocked' && <div className="meta">{r.reason}</div>}</td><td>{ans(r)}</td><td>{act(r)}</td></tr>
             ) : (
-              <tr key={r.email}><td className="addr">{r.email}</td><td>{badge(r)}{r.reason && r.delivery !== 'unsub' && <div className="meta">{r.reason}</div>}</td><td className="meta">{when(r.updated_at, locale)}</td></tr>
+              <tr key={r.email}><td className="addr">{r.email}</td><td>{badge(r)}{r.reason && r.delivery !== 'blocked' && <div className="meta">{r.reason}</div>}</td><td className="meta">{when(r.updated_at, locale)}</td></tr>
             )) : <tr><td colSpan={T ? 4 : 3} className="meta">{t('st.none')}</td></tr>}</tbody>
           </table>
           <ul className="rlist" id="rlist">{filter === 'public' ? null : show.length ? show.map((r) => (
-            <li key={r.email}><span className="addr">{r.email}</span><span className="badges">{badge(r)}{T && ans(r)}</span><span className="meta">{when(r.updated_at, locale)}{r.reason && r.delivery !== 'unsub' ? ` · ${r.reason}` : ''}</span>
+            <li key={r.email}><span className="addr">{r.email}</span><span className="badges">{badge(r)}{T && ans(r)}</span><span className="meta">{when(r.updated_at, locale)}{r.reason && r.delivery !== 'blocked' ? ` · ${r.reason}` : ''}</span>
               {T && <span style={{ gridColumn: '1/-1' }}>{act(r)}</span>}</li>
           )) : <li className="meta">{t('st.none')}</li>}</ul>
           {T && (filter === 'all' || filter === 'public') && st.public_answers.length > 0 && (
