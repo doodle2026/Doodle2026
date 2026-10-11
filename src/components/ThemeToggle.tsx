@@ -22,13 +22,13 @@ export default function ThemeToggle() {
   }, []);
   return (
     <button type="button" className="icon-btn" id="theme-toggle"
-      aria-label={t('aria', { name: t(theme) })}
+      aria-label={t('aria', { name: t(theme) })} title={t(theme)}
       onClick={() => {
         const n = NEXT[theme];
         try { localStorage.setItem(KEY, n); } catch { /* private mode */ }
         applyTheme(n); setTheme(n);
       }}>
-      {`${ICON[theme]} ${t(theme)}`}
+      <span className="hdr-ico" aria-hidden="true">{ICON[theme]}</span> <span className="hdr-lbl">{t(theme)}</span>
     </button>
   );
 }

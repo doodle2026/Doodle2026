@@ -647,3 +647,14 @@ html.sts-open{overflow:hidden}
  @media (prefers-reduced-motion:no-preference){.sts[open]{animation:sts-up .22s ease-out}@keyframes sts-up{from{transform:translateY(100%)}to{transform:translateY(calc(-1 * var(--kb,0px)))}}}
 }
 .sts__left{font-size:var(--fs-sm);color:var(--c-muted);margin:0}
+/* ===== Header – kompakt variant <400px (§49; 360 brød også) – én række, kun ikoner, 44px mål ===== */
+.app-header__logo{white-space:nowrap}
+@media (max-width:399px){
+ .app-header{padding:var(--s-2) var(--s-3);gap:var(--s-1)}
+ .app-header__logo{font-size:var(--fs-md,1rem)}
+ .app-header__actions{flex-wrap:nowrap;gap:2px}
+ .app-header .hdr-lbl,.app-header .langsw__caret{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+ .app-header .icon-btn{padding:0 6px;min-width:44px;gap:3px}
+ .app-header .hdr-ico{font-size:1.15rem;line-height:1}
+ .langsw__cur{font-size:.75rem}
+}

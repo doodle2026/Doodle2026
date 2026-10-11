@@ -71,7 +71,7 @@ describe('pages render in the URL locale', () => {
     expect(de).toContain('Julefrokost');
     expect(en).toMatch(/Choose the dates that suit you\. 2 date proposals, October 14\s–\s22, \d{4}\./);
     expect(da).toContain(`Vælg de datoer, der passer dig. 2 datoforslag, 14.–22. oktober ${y}.`);
-    expect(en).toContain('og:locale" content="en_US"');
+    expect(en).toContain('og:locale" content="en_GB"');
     expect(de).toContain('og:locale" content="de_DE"');
     expect(en).toContain('Which dates work for you?');
     expect(de).toContain(T.de('vote.h'));

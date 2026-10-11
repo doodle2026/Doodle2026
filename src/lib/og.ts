@@ -24,3 +24,6 @@ export function ogTitle(raw: string): { text: string; long: boolean } {
 }
 
 export const ogImagePath = (slug: string, locale = 'en') => `/${locale}/p/${slug}/opengraph-image`;
+
+/** og:locale per UI locale (§50). */
+export const OG_LOCALE = { en: 'en_GB', da: 'da_DK', fr: 'fr_FR', de: 'de_DE' } as const;

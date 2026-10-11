@@ -97,7 +97,7 @@ export default function PollView({ event, shareUrl, justCreated }:
     <>
       <Header>
         <button type="button" className="icon-btn" id="share-open" ref={shareOpenRef} aria-controls="share"
-          aria-expanded={open} aria-label={t('share.btnAria')} onClick={() => openPanel()}>{`↗ ${t('share.btn')}`}</button>
+          aria-expanded={open} aria-label={t('share.btnAria')} title={t('share.btn')} onClick={() => openPanel()}><span className="hdr-ico" aria-hidden="true">{'↗'}</span> <span className="hdr-lbl">{t('share.btn')}</span></button>
       </Header>
       <main className="container">
         <article className="card poll-view">
@@ -112,7 +112,7 @@ export default function PollView({ event, shareUrl, justCreated }:
             {justCreated
               ? <p className="share__confirm" id="share-h" tabIndex={-1}><span aria-hidden="true">✓</span> {t('share.created')}</p>
               : <p className="share__confirm" id="share-h" tabIndex={-1}>{t('app.shareH')}</p>}
-            <button type="button" className="btn btn--ghost btn--sm share__close" id="share-close" aria-controls="share" onClick={hidePanel}>{t('share.hide')} <span aria-hidden="true">▴</span></button>
+            <button type="button" className="btn btn--ghost btn--sm share__close" id="share-close" aria-controls="share" title={t('share.hide')} onClick={hidePanel}><span className="share__close-lbl">{t('share.hide')}</span> <span aria-hidden="true">▴</span></button>
             <div className="linkbox" id="pub">
               <p className="linkbox__label"><span aria-hidden="true">🔗</span> {t('share.pubLabel')}</p>
               <p className="linkbox__desc">{t('share.pubDesc')}</p>

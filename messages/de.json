@@ -907,5 +907,13 @@
     "ownerTzNote": "Zeiten werden in Ihrer Ortszeit angezeigt ({zone}). „Heute“, die Tageszahlen und das E-Mail-Kontingent verwenden den UTC-Tag.",
     "ownerLtUnlock": "Entsperrt (CLI)",
     "homeDesc": "Finden Sie einen Termin, der allen passt. Umfrage erstellen, Link teilen – ohne Anmeldung."
+  },
+  "og": {
+    "count": "{n, plural, one {# Terminvorschlag} other {# Terminvorschläge}}",
+    "cta": "Termine wählen →",
+    "sampleTitle": "Teammeeting zur Q4-Planung",
+    "homeTitle": "Finden Sie den Tag, der allen passt",
+    "homePill": "Kostenlos · ohne Anmeldung",
+    "homeAlt": "grabAday – finden Sie den Tag, der allen passt"
   }
 }

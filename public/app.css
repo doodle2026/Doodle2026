@@ -56,3 +56,9 @@
 /* Send til mig selv – receipt is exactly two block lines (destination, spam hint) */
 .sts__receipt .sts__line{display:block}
 .sts__receipt .sts__spam{margin:var(--s-1) 0 0;font-weight:600;color:var(--c-text)}
+/* §49 follow-up: at < 400 px the de line "✓ Ihre Umfrage wurde erstellt" (236 px) can't share a row with "Ausblenden ▴"
+   at 320 px, so the confirmation gets the full width and the hide button drops to its own right-aligned row below it. */
+@media (max-width:399px){
+ .share__confirm{padding-right:0}
+ .share__close{position:static;display:flex;margin:var(--s-1) 0 var(--s-2) auto;min-height:44px}
+}

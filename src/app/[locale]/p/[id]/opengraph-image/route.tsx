@@ -45,7 +45,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const art = await brandArt();
   const title = ogTitle(ev.title);
-  const count = t('date.count', { n: ev.time_options.length });
+  const count = t('og.count', { n: ev.time_options.length });
   const dates = formatSpan(ev.time_options.map((o) => o.date), locale);
   const el = (
     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
@@ -66,7 +66,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 20 }}>
           <span style={{ background: '#EBF4FC', color: '#1F5690', fontSize: 30, fontWeight: 700, padding: '14px 28px', borderRadius: 999 }}>{count}</span>
           <span style={{ fontSize: 28, color: '#5A6B7D', maxWidth: 520, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dates}</span>
-          <span style={{ marginLeft: 'auto', fontSize: 28, fontWeight: 700, color: '#2B6CB0' }}>{t('poll.voteNow')}</span>
+          <span style={{ marginLeft: 'auto', fontSize: 28, fontWeight: 700, color: '#2B6CB0' }}>{t('og.cta')}</span>
         </div>
       </div>
     </div>
