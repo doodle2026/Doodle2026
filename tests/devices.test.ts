@@ -129,4 +129,39 @@ describe.skipIf(!existsSync(CHROME))('device matrix (§0.1)', () => {
       expect(issues).toEqual([]);
     }, 90_000);
   }
+
+  for (const d of DEVICES) {
+    test.skipIf(!avail(d.browser))(`${d.id}: admin invitation list – one markup (no layout flash), one "Send nyt link" per row, no overflow`, async () => {
+      const b = await pwc[d.browser].launch(d.browser === 'chromium' ? { executablePath: CHROME } : {});
+      try {
+        const q = await poll();
+        await prisma.event.update({ where: { slug: q.id }, data: { inviteTracking: true } });
+        const emails = ['a', 'b'].map((k) => `${k}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}@example.com`);
+        for (const e of emails) await send(q, { recipients: [e] });
+        await prisma.invitation.updateMany({ where: { email: emails[1] }, data: { delivery: 'bounced' } });
+        const dev = d.device ? { ...pwc.devices[d.device] } : {};
+        if (d.browser === 'firefox') delete (dev as { isMobile?: boolean }).isMobile;
+        const ctx = await b.newContext({ ...dev, ...(d.viewport ? { viewport: d.viewport } : {}), locale: 'da-DK' });
+        const pg = await ctx.newPage();
+        // record whether the list markup is ever replaced after first render (the old JS switch did that → flash)
+        await pg.addInitScript(() => {
+          const w = window as unknown as { swaps: number }; w.swaps = 0; let seen: Element | null = null;
+          new MutationObserver(() => { const t = document.getElementById('rtable'); if (t && seen && t !== seen) w.swaps++; if (t) seen = t; if (document.getElementById('rlist')) w.swaps++; })
+            .observe(document, { subtree: true, childList: true });
+        });
+        await pg.goto(`${BASE}/da/p/${q.id}/admin#${q.token}`);
+        await pg.locator(`[data-resend="${emails[0]}"]`).waitFor();
+        await pg.waitForTimeout(400);
+        const issues = (await pg.evaluate(AUDIT)).filter((x) => !x.startsWith('seg'));
+        expect(await pg.locator(`[data-resend="${emails[0]}"]`).count()).toBe(1);
+        expect(await pg.locator(`[data-resend="${emails[1]}"]`).count()).toBe(0); // blocked: no actions
+        expect(await pg.locator(`[data-resend="${emails[0]}"]`).isVisible()).toBe(true);
+        expect(await pg.evaluate(() => (window as unknown as { swaps: number }).swaps)).toBe(0);
+        expect(await pg.textContent('#rtable')).not.toMatch(/afvist/i);
+        await (await pg.$('#rtable'))!.screenshot({ path: `${OUT}${d.id}-admin-list.png` });
+        expect(issues).toEqual([]);
+        await ctx.close();
+      } finally { await b.close(); }
+    }, 90_000);
+  }
 });

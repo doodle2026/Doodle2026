@@ -267,7 +267,7 @@ export async function listInvitations(eventId: number) {
     /** §46.8 data shape: QuotaRemaining + SendToEmailsInitial.invitations. */
     remaining: { poll: quota.poll_remaining, hour: quota.hour_remaining, day: quota.day_remaining },
     // §46.8 + audit #3: 'delivered' is final, so the box can stop polling (admin still maps bounced/unsub → neutral 'blocked').
-    invitations: rows.map((r) => ({ email: r.email, status: r.delivery === 'bounced' ? 'bounced' : r.delivery === 'unsub' ? 'blocked' : r.delivery === 'failed' ? 'failed' : r.delivery === 'delivered' ? 'delivered' : 'sent' })),
+    invitations: rows.map((r) => ({ email: r.email, status: r.delivery === 'bounced' || r.delivery === 'unsub' ? 'blocked' /* PM: bounced and opt-out are both neutral everywhere */ : r.delivery === 'failed' ? 'failed' : r.delivery === 'delivered' ? 'delivered' : 'sent' })),
     reminder: { used: ev.remindersSent, max: REMINDER_MAX, next_allowed_at: next && next > new Date() ? next.toISOString() : null, recipient_count: recipients, answered_count: rows.filter((r) => r.participantId !== null).length, closed: ev.closedAt !== null },
     mail_blocked: ev.mailBlockedAt !== null,
   };

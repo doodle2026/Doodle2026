@@ -12,8 +12,8 @@ describe('token bucket', () => {
     expect(take('k1', lim, t0 + 2000).ok).toBe(false);
     expect(take('other', lim, t0).ok).toBe(true); // buckets are per key
   });
-  test('client IP from x-forwarded-for (first hop), x-real-ip, else unknown', () => {
-    expect(clientIp(new Request('http://x', { headers: { 'x-forwarded-for': '1.2.3.4, 10.0.0.1' } }))).toBe('1.2.3.4');
+  test('client IP: never the (spoofable) leftmost x-forwarded-for entry', () => {
+    expect(clientIp(new Request('http://x', { headers: { 'x-forwarded-for': '1.2.3.4, 10.0.0.1' } }))).toBe('10.0.0.1');
     expect(clientIp(new Request('http://x', { headers: { 'x-real-ip': '5.6.7.8' } }))).toBe('5.6.7.8');
     expect(clientIp(new Request('http://x'))).toBe('unknown');
   });

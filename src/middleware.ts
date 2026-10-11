@@ -61,14 +61,14 @@ export async function middleware(req: NextRequest) {
   return res;
 }
 
-/** Admin pages, ?edit= and mail-token pages (unsubscribe / report abuse / old /e), with or without a locale prefix. */
+/** Owner dashboard, admin pages, ?edit= and mail-token pages (unsubscribe / report abuse / old /e), with or without a locale prefix. */
 const isSecretUrl = (req: NextRequest) => {
   const p = req.nextUrl.pathname.replace(/^\/(en|da|fr|de)(?=\/|$)/, '');
-  return /^\/p\/[^/]+\/admin(\/|$)/.test(p) || req.nextUrl.searchParams.has('edit') || /^\/(u\/(p|all)|abuse|e)\//.test(p);
+  return /^\/owner(\/|$)/.test(p) || /^\/p\/[^/]+\/admin(\/|$)/.test(p) || req.nextUrl.searchParams.has('edit') || /^\/(u\/(p|all)|abuse|e)\//.test(p);
 };
 
 /** Page routes that exist under /<locale>; anything else → 404 page. */
-const knownPage = (p: string) => p === '/' || /^\/p\/[^/]+(\/admin)?$/.test(p) || /^\/(u\/(p|all)|abuse)\/[^/]+$/.test(p);
+const knownPage = (p: string) => p === '/' || /^\/owner(\/login|\/events(\/[A-Za-z0-9_-]{1,64})?)?$/.test(p) || /^\/p\/[^/]+(\/admin)?$/.test(p) || /^\/(u\/(p|all)|abuse)\/[^/]+$/.test(p);
 
 /** Location built on APP_URL (not the Host header); Next emits same-origin redirects as relative paths. */
 const redirect = (req: NextRequest, location: string, status: 301 | 302 | 308) =>

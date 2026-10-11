@@ -13,7 +13,7 @@ import { useI18n } from '@/i18n/use';
 import { useLp } from '@/i18n/link';
 import { graphemes, MESSAGE_MAX, NAME_ADDR_RE, unquote, validEmail } from '@/lib/recipients';
 
-type Invitee = { email: string; status: string }; // §46.8 invitations[] (sent|failed|bounced; opt-outs never shown as such)
+type Invitee = { email: string; status: string }; // §46.8 invitations[] (sent|delivered|failed|blocked – bounced and opt-outs are both neutral 'blocked')
 type Quota = { poll: number; hour: number; day: number }; // §46.8 QuotaRemaining
 type St = 'idle' | 'sending' | 'sent' | 'failed' | 'bounced' | 'rejected';
 type Row = { id: number; value: string; status: St; touched: boolean; earlier?: boolean };
@@ -46,7 +46,10 @@ const newRow = (value = '', status: St = 'idle', earlier = false): Row => ({ id:
 /** trim, drop mailto:, lower-case the domain (§46.3). */
 export const normSe = (v: string) => { v = v.trim().replace(/^mailto:/i, ''); const i = v.lastIndexOf('@'); return i < 0 ? v : v.slice(0, i) + '@' + v.slice(i + 1).toLowerCase(); };
 const key = (v: string) => normSe(v).toLowerCase();
-const fromDelivery = (d: string): St => (d === 'bounced' ? 'bounced' : d === 'failed' ? 'failed' : 'sent'); // 'delivered' shows as Sendt ✓
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const isBlk = (d: string | undefined) => d === 'blocked' || d === 'bounced';
+/** Internal row state 'bounced' = "can't be sent" after sending; it is always rendered neutrally (PM decision). */
+const fromDelivery = (d: string): St => (isBlk(d) ? 'bounced' : d === 'failed' ? 'failed' : 'sent'); // 'delivered' shows as Sendt ✓
 const FINAL = new Set(['delivered', 'bounced', 'failed', 'blocked']);
 /** §46.9: Retry-After as delta-seconds or HTTP date → seconds; null when missing/unparseable. */
 export function parseRetryAfter(h: string | null, now = Date.now()): number | null {
@@ -124,7 +127,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
     invRef.current = inv;
     setInvitees(inv);
     const by = new Map(inv.map((i) => [i.email, i.status]));
-    for (const i of inv) if (i.status === 'bounced' && prev.has(i.email) && prev.get(i.email) !== 'bounced') say(tRef.current('se.liveBounced', { email: i.email }));
+    for (const i of inv) if (isBlk(i.status) && prev.has(i.email) && !isBlk(prev.get(i.email))) say(`${i.email}: ${tRef.current('se.blocked')}`);
     const first = !loaded.current;
     loaded.current = true;
     const earlier = first ? inv.map((i) => newRow(i.email, fromDelivery(i.status), true)) : [];
@@ -140,7 +143,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
       const have = new Set(next.filter((r) => r.earlier).map((r) => key(r.value)));
       return [...earlier.filter((r) => !have.has(key(r.value))), ...next];
     });
-    setB((bs) => bs.map((x) => (x.status === 'sent' && by.get(key(x.email)) === 'bounced' ? { ...x, status: 'bounced' as BSt } : x)));
+    setB((bs) => bs.map((x) => (x.status === 'sent' && isBlk(by.get(key(x.email))) ? { ...x, status: 'bounced' as BSt } : x)));
   }, []);
 
   const refresh = useCallback(async () => { const { res, data } = await api(''); if (res.ok) apply(data); }, [api, apply]);
@@ -375,7 +378,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (r.status !== 'sent' && !ro) void send(r); } }} />
                     <span className="se-btnwrap">
                       {r.status === 'sending' ? <button type="button" className="btn btn--secondary btn--sm se-btn" disabled aria-busy="true"><Stack g={[t('se.send'), t('se.sending'), t('se.retry'), t('se.sent')]} cur={<><span className="spinner" aria-hidden="true" /> {t('se.sending')}</>} /></button>
-                        : r.status === 'bounced' ? <button type="button" className="btn btn--sm se-btn se-btn--bounced" disabled>{'⊘ '}{t('se.bouncedBtn')}</button>
+                        : r.status === 'bounced' ? <button type="button" className="btn btn--sm se-btn se-btn--bounced" disabled aria-label={cap(t('se.why.blocked'))}><Stack g={[t('se.send'), t('se.sending'), t('se.retry'), t('se.sent')]} cur={<span aria-hidden="true">{'⊘'}</span>} /></button>
                         : r.status === 'failed' ? <button type="button" className="btn btn--secondary btn--sm se-btn" data-send={r.id} disabled={lim} onClick={() => send(r)}><Stack g={[t('se.send'), t('se.sending'), t('se.retry'), t('se.sent')]} cur={t('se.retry')} /></button>
                         : r.status === 'sent' || r.earlier ? <button type="button" className="btn btn--sm se-btn se-btn--done" disabled><Stack g={[t('se.send'), t('se.sending'), t('se.retry'), t('se.sent')]} cur={t('se.sent')} /></button>
                         : <button type="button" className="btn btn--secondary btn--sm se-btn" data-send={r.id} disabled={dis} aria-label={t('se.sendAria', { n })} onClick={() => send(r)}><Stack g={[t('se.send'), t('se.sending'), t('se.retry'), t('se.sent')]} cur={t('se.send')} /></button>}
@@ -384,7 +387,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
                   <div className="se-row__st" id={`se-s${r.id}`} aria-live="off">
                     {r.earlier && r.status === 'sent' ? <span className="se-st se-st--sent">✓ {t('se.sentEarlier')}</span>
                       : r.status === 'failed' ? <span className="se-st se-st--err"><strong>{t('se.failed')}</strong> – {t('se.failedWhy')}</span>
-                      : r.status === 'bounced' ? <span className="se-st se-st--err">{'⊘ '}{t('se.bounced')}</span>
+                      : r.status === 'bounced' ? <span className="se-st se-st--err">{'⊘ '}{t('se.blocked')}</span>
                       : r.status === 'rejected' ? <span className="se-st se-st--err">– {t('se.blocked')}</span>
                       : c?.msg ? <span className={`se-st ${c.kind === 'invalid' ? 'se-st--err' : 'se-st--warn'}`}>{c.kind === 'invalid' ? '!' : '↺'} {c.msg}</span> : null}
                   </div>
@@ -433,7 +436,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
               return (
                 <li key={x.id} className={`se-bitem se-bitem--${k}`} data-kind={k}>
                   <span className="se-bitem__addr">{x.name ? <><span className="se-bitem__name">{x.name}</span>{' '}<span className="meta">{x.email}</span></> : (x.email || x.raw)}</span>
-                  {k !== 'valid' && <span className={`se-badge se-badge--${cls}`}>{k === 'sending' && <span className="spinner" aria-hidden="true" />}{k === 'sending' ? ' ' : ''}{t(`se.why.${k}` as 'se.why.invalid')}</span>}
+                  {k !== 'valid' && <span className={`se-badge se-badge--${cls}`}>{k === 'sending' && <span className="spinner" aria-hidden="true" />}{k === 'sending' ? ' ' : ''}{t(`se.why.${k === 'bounced' ? 'blocked' : k}` as 'se.why.invalid')}</span>}
                   {!(x.status === 'sent' || x.status === 'sending' || x.status === 'bounced' || busy) &&
                     <button type="button" className="se-x" data-brm={x.id} aria-label={t('se.remove', { email: x.email || x.raw })}
                       onClick={() => removeChip(x.id)}>{'✕'}</button>}

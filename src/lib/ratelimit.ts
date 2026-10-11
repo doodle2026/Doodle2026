@@ -1,3 +1,4 @@
+import { clientIp } from './client-ip';
 /**
  * Simple in-memory token bucket per (client IP, bucket name).
  *
@@ -37,15 +38,7 @@ export function take(key: string, limit: Limit, now = Date.now()): { ok: true } 
 
 export const resetRateLimits = () => buckets.clear();
 
-/**
- * Client IP. On Vercel the platform sets x-forwarded-for / x-real-ip (client values are overwritten),
- * so the first entry is trustworthy there. Self-hosted behind another proxy: make sure it does the same.
- */
-export function clientIp(req: Request): string {
-  const xff = req.headers.get('x-forwarded-for');
-  if (xff) return xff.split(',')[0].trim().slice(0, 64);
-  return (req.headers.get('x-real-ip') ?? 'unknown').slice(0, 64);
-}
+export { clientIp } from './client-ip';
 
 /** Returns a 429 Response if limited, else null. */
 export function rateLimit(req: Request, name: keyof typeof LIMITS = 'write'): Response | null {

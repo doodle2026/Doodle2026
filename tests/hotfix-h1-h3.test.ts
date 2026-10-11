@@ -82,7 +82,7 @@ describe.skipIf(!HAS)('H1 polling (headless, fake clock)', () => {
     const { pg, count } = await open(p);
     await pg.waitForSelector('#se-rows li[data-status="earlier"]');
     const txt = await pg.textContent('#se-rows');
-    expect(txt).toContain('Sendt tidligere'); expect(txt).toContain('Afvist – tjek adressen');
+    expect(txt).toContain('Sendt tidligere'); expect(txt).toContain('Kan ikke sendes til denne adresse'); expect(txt).not.toMatch(/afvist/i);
     expect(await pg.locator(`#se-rows li:has(input[value="${c}"])`).locator('button', { hasText: 'Prøv igen' }).count()).toBe(1);
     await pg.waitForTimeout(1500); const base = count(); expect(base).toBe(1);
     await pg.clock.runFor(61_000); await pg.waitForTimeout(800);
