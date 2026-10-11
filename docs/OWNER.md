@@ -38,3 +38,6 @@ DATABASE_URL='<prod connection string>' npm run owner:create -- --username jan
 - **Audit:** `owner_login_log` records every success, failure, lockout, CSRF rejection and logout with **truncated** IP (PM: IPv4 /24 → `a.b.c.xxx`, IPv6 /48; truncated before storage, so the full IP is never stored), user agent and time. It never records the password.
 - **Headers:** `/{locale}/owner*` and `/api/owner/*` send `Cache-Control: no-store, private`, `X-Robots-Tag: noindex, nofollow` and `Referrer-Policy: no-referrer`. No admin, edit or invite tokens and no session ids are ever shown or returned.
 - **Later (spec, phase 2):** TOTP 2FA.
+
+## Client IP (all rate limits, login lock, audit log)
+`src/lib/client-ip.ts` is the only place the IP is read: `x-vercel-forwarded-for` → `x-real-ip` → the **rightmost** `x-forwarded-for` entry (after skipping `TRUSTED_PROXY_HOPS` own proxies, default 0). The leftmost XFF entry is client-controlled and is never used.

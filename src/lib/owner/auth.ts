@@ -15,7 +15,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { hash as argonHash, verify as argonVerify } from '@node-rs/argon2';
 import { prisma } from '@/lib/db';
-import { clientIp } from '@/lib/ratelimit';
+import { clientIp } from '@/lib/client-ip';
 
 export const ARGON2_OPTS = { algorithm: 2 /* Argon2id */, memoryCost: 19456, timeCost: 2, parallelism: 1 } as const;
 export const MIN_PASSWORD = 12;
