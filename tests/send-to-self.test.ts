@@ -183,7 +183,7 @@ describe('admin page', () => {
       await pg.goto(`${BASE}/en/p/${p.slug}/admin#${p.token}`);
       await pg.click('#mailme');
       await pg.fill('#sts-email', `adm-${uniq()}@example.com`); await pg.click('#sts-send');
-      await expect.poll(() => pg.locator('.sts__done').textContent(), { timeout: 10_000 }).toContain('a***@e***.com');
+      await expect.poll(() => pg.locator('.sts__done').textContent(), { timeout: 10_000 }).toContain('a***@example.com');
       expect(await pg.locator('a[href^="mailto:"]', { hasText: /send to myself/i }).count()).toBe(0);
     } finally { await b.close(); }
   });
@@ -218,8 +218,9 @@ describe('modal (confirmation page)', () => {
           await expect.poll(() => pg.locator('#sts-err').textContent()).toBeTruthy();
           expect(await pg.getAttribute('#sts-email', 'aria-invalid')).toBe('true');
           await pg.fill('#sts-email', `modal-${uniq()}@example.com`); await pg.keyboard.press('Enter');
-          await expect.poll(() => pg.locator('.sts__done').textContent(), { timeout: 10_000 }).toContain('m***@e***.com');
-          expect(await pg.locator('.sts__done .sts__lead').count()).toBe(1); expect(await pg.locator('.sts__spam').count()).toBe(1); // two-line receipt
+          await expect.poll(() => pg.locator('.sts__done').textContent(), { timeout: 10_000 }).toContain('m***@example.com');
+          expect(await pg.locator('.sts__done .sts__receipt .sts__line').count()).toBe(2); // exactly two receipt lines
+          expect(await pg.locator('.sts__done p').count()).toBe(2); // receipt paragraph + the conditional 'N more' line (remaining 2 ≤ 2)
           expect(await pg.locator('.sts__left').count()).toBe(1); // remaining 2 ≤ 2 → shown
           await expect.poll(() => pg.evaluate(() => document.activeElement?.id)).toBe('sts-done');
           expect(await pg.locator('#sts-live').getAttribute('aria-live')).toBe('polite');
@@ -270,5 +271,92 @@ describe('owner dashboard §47.9 + manifest', () => {
     expect(i.src).toBe('/brand/icon-192.png');
     const png = Buffer.from(await (await fetch(BASE + i.src)).arrayBuffer());
     expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([192, 192]);
+  });
+});
+
+describe('PR #36 blocker: bare recipient addresses only (all mail paths)', () => {
+  const REPRO = ['Evil <evil@example.com>', '"Your account is locked – verify at evil.example" <victim@example.com>'];
+  test('sendToSelf rejects display-name forms with 400; nothing hashed, stored or captured', async () => {
+    const p = await poll('en');
+    const before = await prisma.selfSend.count({ where: { eventId: p.eventId } });
+    cap.clearCaptured();
+    for (const e of [...REPRO, 'victim@example.com\r\nBcc: x@example.com', ' <a@example.com>', 'a@example.com>', '"a"@example.com']) {
+      expect(await fail(lib.sendToSelf(p.eventId, p.token, reqFrom(ip()), { email: e }, null)), e).toMatchObject({ status: 400 });
+      const r = await call(`/api/polls/${p.slug}/send-to-self`, { method: 'POST', token: p.token, json: { email: e } });
+      expect(r.status, e).toBe(400); expect(r.body.error ?? r.body.reason ?? r.body.code).toBe('invalid');
+    }
+    expect(cap.capturedMails()).toHaveLength(0);
+    expect(await prisma.selfSend.count({ where: { eventId: p.eventId } })).toBe(before);
+  });
+  test('an unsubscribed address cannot be reached by wrapping it in a display name', async () => {
+    const p = await poll('en'); const v = `victim-${uniq()}@example.com`;
+    await prisma.emailSuppression.create({ data: { emailHash: (await import('../src/lib/invitations')).emailHash(v), scope: 'all' } });
+    expect(await fail(lib.sendToSelf(p.eventId, p.token, reqFrom(ip()), { email: v }, null))).toMatchObject({ status: 409 });
+    expect(await fail(lib.sendToSelf(p.eventId, p.token, reqFrom(ip()), { email: `Friend <${v}>` }, null))).toMatchObject({ status: 400 });
+  });
+  test('normalized bare address is what is hashed and sent (To header = bare address)', async () => {
+    const p = await poll('en'); cap.clearCaptured();
+    await lib.sendToSelf(p.eventId, p.token, reqFrom(ip()), { email: `  Bare-${'X'}@Example.COM ` }, null);
+    const m = cap.capturedMails().at(-1)!;
+    expect(m.to).toEqual(['bare-x@example.com']);
+  });
+  test('adapter + invitation planner refuse non-bare recipients; isBareEmail is strict', async () => {
+    const { isBareEmail, mailer } = await import('../src/lib/email/send');
+    for (const e of REPRO) expect(isBareEmail(e), e).toBe(false);
+    for (const e of ['a..b@example.com', '.a@example.com', 'a@example', 'a b@example.com', 'a@example.com\n']) expect(isBareEmail(e), e).toBe(false);
+    expect(isBareEmail('jan.lund+x@example.co.uk')).toBe(true);
+    cap.clearCaptured();
+    const r = await mailer().send({ to: REPRO[1], subject: 's', text: 't', html: '<p>t</p>' });
+    expect(r.ok).toBe(false); expect(cap.capturedMails()).toHaveLength(0);
+    const rb = await mailer().sendBatch([{ to: REPRO[0], subject: 's', text: 't', html: '<p>t</p>' }]);
+    expect(rb[0].ok).toBe(false); expect(cap.capturedMails()).toHaveLength(0);
+    const { planInvitations } = await import('../src/lib/email/policy');
+    const p = planInvitations({ id: 'x', title: 'T', organizerName: '', locale: 'en', options: [{ date: `${Y}-11-03` }], remindersSent: 0, lastReminderAt: null, trackingEnabled: false } as Json,
+      REPRO.map((email) => ({ email, linkToken: 't' })) as Json, { appUrl: 'https://grabaday.test' } as Json);
+    expect(p.messages).toHaveLength(0); expect(p.skipped.map((s: Json) => s.reason)).toEqual(['invalid_email', 'invalid_email']);
+  });
+  test('invitation API: display names are parsed off, only the bare address is stored and mailed', async () => {
+    const p = await poll('en');
+    const r = await call(`/api/events/${p.slug}/invitations`, { method: 'POST', token: p.token, json: { recipients: '"Phish: click evil.example" <ok-' + uniq() + '@example.com>' } });
+    expect(r.status).toBeLessThan(300);
+    const rows = await prisma.invitation.findMany({ where: { eventId: p.eventId }, select: { email: true } });
+    for (const x of rows) expect(isBare(x.email), x.email).toBe(true);
+  });
+  test('test delivery hook rejects display-name forms', async () => {
+    const r = await call('/api/test/delivery', { method: 'POST', json: { email: REPRO[0], event: 'delivered' } });
+    expect([400, 404]).toContain(r.status); // 404 when the capture gate is closed (prod test build), 400 otherwise
+  });
+});
+const isBare = (e: string) => /^[^\s<>"@]+@[^\s<>"@]+$/.test(e);
+
+describe('modal: live countdown (wait / ip / hour)', () => {
+  for (const reason of ['wait', 'ip', 'hour'] as const) test(`${reason}: Send disabled while counting down, re-enabled at 0`, async () => {
+    const b = await pwc.chromium.launch({ executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome' });
+    try {
+      const pg = await (await b.newContext({ extraHTTPHeaders: { 'x-forwarded-for': ip() } })).newPage();
+      const p = await poll('da');
+      await pg.route('**/send-to-self', (rt) => rt.request().method() === 'POST'
+        ? rt.fulfill({ status: 429, headers: { 'Retry-After': '3', 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: reason === 'wait' ? 'self_too_soon' : 'rate', reason }) })
+        : rt.continue());
+      await pg.goto(`${BASE}/da/p/${p.slug}/admin#${p.token}`);
+      await pg.click('#mailme'); await pg.fill('#sts-email', `cd-${uniq()}@example.com`); await pg.click('#sts-send');
+      await expect.poll(() => pg.locator('#sts-alert').textContent()).toBeTruthy();
+      expect(await pg.locator('#sts-send').isDisabled()).toBe(true);
+      if (reason === 'wait') {
+        const t1 = await pg.locator('#sts-alert p').textContent();
+        await expect.poll(() => pg.locator('#sts-alert p').textContent(), { timeout: 2500 }).not.toBe(t1); // it ticks
+      }
+      await expect.poll(() => pg.locator('#sts-send').isDisabled(), { timeout: 6000 }).toBe(false);
+      expect(await pg.locator('#sts-alert').count()).toBe(0);
+    } finally { await b.close(); }
+  });
+});
+
+describe('owner limits table uses the configured quota', () => {
+  test('lim.day / lim.poll have placeholders (no hardcoded 100/200)', async () => {
+    for (const L of ['en', 'da', 'fr', 'de']) {
+      const m = JSON.parse((await import('node:fs')).readFileSync(`messages/${L}.json`, 'utf8')).owner.lim;
+      expect(m.day).toContain('{n}'); expect(m.poll).toContain('{n}'); expect(m.day).not.toMatch(/100/);
+    }
   });
 });

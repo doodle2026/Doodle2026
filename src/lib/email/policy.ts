@@ -15,7 +15,7 @@ import de from '../../../messages/de.json';
 
 const ORGANIZER: Record<MailLocale, string> = { en: 'The organizer', da: 'Arrangøren', fr: 'L’organisateur', de: 'Der Organisator' };
 const FOOTER: Record<MailLocale, string> = { en: en.email.footerText, da: da.email.footerText, fr: fr.email.footerText, de: de.email.footerText };
-import { isEmail, sanitizeDisplayName, type EmailMessage } from './send';
+import { isBareEmail, sanitizeDisplayName, type EmailMessage } from './send';
 
 export const APP_NAME = 'grabAday';
 
@@ -95,7 +95,7 @@ function plan(kind: 'invite' | 'reminder', p: PollForEmail, invitees: Invitee[],
   for (const inv of invitees) {
     const e = norm(inv.email);
     const skip = (reason: SkipReason) => out.skipped.push({ email: inv.email, reason });
-    if (!isEmail(e)) { skip('invalid_email'); continue; }
+    if (!isBareEmail(e)) { skip('invalid_email'); continue; }
     if (seen.has(e)) { skip('duplicate'); continue; }
     seen.add(e);
     if (inv.unsubscribedAt) { skip('unsubscribed'); continue; }

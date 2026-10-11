@@ -1,3 +1,4 @@
+import { isBareEmail } from '@/lib/email/send';
 import { NextResponse } from 'next/server';
 import { captureActive } from '@/lib/email/capture';
 import { prisma } from '@/lib/db';
@@ -19,6 +20,7 @@ export async function POST(req: Request) {
   const email = typeof b.email === 'string' ? b.email.trim().toLowerCase() : '';
   const EV = ['delivered', 'bounced', 'failed', 'unsubscribed'] as const;
   const ev = EV.find((e) => e === b.event);
+  if (email && !isBareEmail(email)) return NextResponse.json({ errors: ['Ugyldig e-mailadresse.'] }, { status: 400, headers: h });
   if (!email || !ev) return NextResponse.json({ errors: [`email og event (${EV.join('|')}) kræves.`] }, { status: 400, headers: h });
   const where = { email, ...(typeof b.poll === 'string' ? { event: { slug: b.poll } } : {}) };
   const now = new Date();

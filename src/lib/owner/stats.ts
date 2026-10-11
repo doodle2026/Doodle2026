@@ -4,6 +4,7 @@
  * Never returns tokens, token hashes, link tokens or provider ids.
  * "Day" = UTC calendar day (same as the mail quota, EmailQuota.day) – DAY_TZ.
  */
+import { DAILY_QUOTA } from '../invitations';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { DAY_TZ, utcDay } from './counters';
@@ -19,7 +20,7 @@ export const clearStatsCache = () => cache.clear();
 const LOCALES = ['en', 'da', 'fr', 'de'] as const;
 type Locale = (typeof LOCALES)[number];
 const dayStart = (offsetDays = 0) => { const d = new Date(`${utcDay()}T00:00:00.000Z`); d.setUTCDate(d.getUTCDate() - offsetDays); return d; };
-const dailyLimit = () => Number(process.env.EMAIL_DAILY_QUOTA) > 0 ? Number(process.env.EMAIL_DAILY_QUOTA) : 100;
+const dailyLimit = () => DAILY_QUOTA(); // the configured quota the server enforces (EMAIL_DAILY_QUOTA, default 100)
 const n = (x: unknown) => Number(x ?? 0);
 const isoDate = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
 

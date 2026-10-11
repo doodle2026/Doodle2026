@@ -9,23 +9,31 @@ import { useLocale, useTranslations } from 'next-intl';
 
 const RE = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[a-z]{2,}$/i;
 /** j***@j***.dk (first char of local part / first domain label + TLD). */
-export const maskSelf = (e: string) => { const [l, d = ''] = e.split('@'); const p = d.split('.'); const tld = p.pop(); return `${l[0] ?? ''}***@${p[0]?.[0] ?? ''}***.${tld ?? ''}`; };
+/** Same shape as the server's sent_to (spec): first letter of the local part, full domain – u***@example.com. */
+export const maskSelf = (e: string) => { const i = e.lastIndexOf('@'); return `${e[0] ?? ''}***@${e.slice(i + 1)}`; };
 
 export type StsError = 'required' | 'invalid' | 'blocked' | 'token' | 'wait' | 'poll_max' | 'ip' | 'hour' | 'quota' | 'server' | 'offline';
 /** HTTP → error kind (§48.2, mapResponse() in send-to-self.js). */
+/** Retry-After as delta-seconds or HTTP date → seconds (≥ 0). */
+export function retrySecs(v: string | null, now = Date.now()): number {
+  if (!v) return 0;
+  const n = Number(v); if (Number.isFinite(n)) return Math.max(0, Math.ceil(n));
+  const d = Date.parse(v); return Number.isFinite(d) ? Math.max(0, Math.ceil((d - now) / 1000)) : 0;
+}
 export function mapResponse(status: number, body: { reason?: string } | null, retryAfter: string | null): [StsError, { sec?: number; min?: number }?] {
-  const s = Number(retryAfter) || 0;
+  const s = retrySecs(retryAfter);
   if (status === 400) return ['invalid'];
   if (status === 401 || status === 403) return ['token'];
   if (status === 409) return ['blocked'];
   if (status === 429) {
     const r = body?.reason;
-    return r === 'wait' ? ['wait', { sec: s || 60 }] : r === 'poll_max' ? ['poll_max'] : r === 'quota' ? ['quota'] : ['ip', { min: Math.ceil(s / 60) }];
+    return r === 'wait' ? ['wait', { sec: s || 60 }] : r === 'poll_max' ? ['poll_max'] : r === 'quota' ? ['quota'] : [r === 'hour' ? 'hour' : 'ip', { sec: s || 60, min: Math.ceil((s || 60) / 60) }];
   }
   return ['server'];
 }
 
-type View = { kind: 'form'; busy?: boolean; field?: string; alert?: { text: string; copy?: boolean } } | { kind: 'sent'; email: string; remaining: number };
+type Alert = { text: string; copy?: boolean; kind?: 'wait' | 'ip' | 'hour'; until?: number };
+type View = { kind: 'form'; busy?: boolean; field?: string; alert?: Alert } | { kind: 'sent'; email: string; remaining: number };
 
 export default function SendToSelf({ slug, token, adminUrl }: { slug: string; token: string; adminUrl: string }) {
   const t = useTranslations('self'), tc = useTranslations('common');
@@ -36,6 +44,16 @@ export default function SendToSelf({ slug, token, adminUrl }: { slug: string; to
   const [live, setLive] = useState('');
   const [copied, setCopied] = useState(false);
   const announce = (m: string) => { setLive(''); setTimeout(() => setLive(m), 40); };
+  const [now, setNow] = useState(() => Date.now());
+  const until = view.kind === 'form' ? view.alert?.until : undefined;
+  const left = until ? Math.max(0, Math.ceil((until - now) / 1000)) : 0;
+  // Live countdown for wait/ip/hour: ticks every second, Send stays disabled until 0, then the message clears.
+  useEffect(() => {
+    if (!until) return;
+    const id = setInterval(() => { const n = Date.now(); setNow(n); if (n >= until) { clearInterval(id); setView((v) => (v.kind === 'form' && v.alert?.until === until ? { kind: 'form' } : v)); } }, 1000);
+    return () => clearInterval(id);
+  }, [until]);
+  const timedText = (a: Alert) => (a.kind === 'wait' ? t('errWait', { sec: left }) : t('errIp', { min: Math.ceil(left / 60) }));
 
   useEffect(() => {
     const d = dlg.current, vv = typeof window !== 'undefined' ? window.visualViewport : null;
@@ -59,12 +77,14 @@ export default function SendToSelf({ slug, token, adminUrl }: { slug: string; to
       const msg = t(kind === 'required' ? 'errRequired' : kind === 'invalid' ? 'errInvalid' : 'errBlocked');
       setView({ kind: 'form', field: msg }); announce(msg); return;
     }
-    const A: Record<string, { text: string; copy?: boolean }> = {
-      wait: { text: t('errWait', { sec: x.sec ?? 60 }) }, poll_max: { text: t('errPollMax'), copy: true },
-      ip: { text: t('errIp', { min: x.min ?? 0 }), copy: true }, hour: { text: t('errIp', { min: x.min ?? 0 }), copy: true },
+    const A: Record<string, Alert> = {
+      wait: { text: t('errWait', { sec: x.sec ?? 60 }), kind: 'wait' }, poll_max: { text: t('errPollMax'), copy: true },
+      ip: { text: t('errIp', { min: x.min ?? 1 }), copy: true, kind: 'ip' }, hour: { text: t('errIp', { min: x.min ?? 1 }), copy: true, kind: 'hour' },
       quota: { text: t('errQuota'), copy: true }, server: { text: t('errServer') }, offline: { text: t('errOffline') }, token: { text: t('errToken') },
     };
-    setCopied(false); setView({ kind: 'form', alert: A[kind] });
+    const a = A[kind];
+    if (a.kind) { const n = Date.now(); a.until = n + (x.sec ?? 60) * 1000; setNow(n); announce(a.text); }
+    setCopied(false); setView({ kind: 'form', alert: a });
   }
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -78,7 +98,7 @@ export default function SendToSelf({ slug, token, adminUrl }: { slug: string; to
     } catch { return fail('offline'); }
     const b = await r.json().catch(() => null) as { ok?: boolean; remaining?: number; reason?: string } | null;
     if (r.ok && b?.ok) {
-      const m = maskSelf(v);
+      const m = (b as { sent_to?: string }).sent_to || maskSelf(v.toLowerCase());
       setView({ kind: 'sent', email: m, remaining: b.remaining ?? 0 }); announce(`${t('sentP', { email: m })} ${t('spam')}`);
       return;
     }
@@ -105,8 +125,11 @@ export default function SendToSelf({ slug, token, adminUrl }: { slug: string; to
           <div className="sts__done">
             <div className="sts__check" aria-hidden="true">{'✓'}</div>
             <h2 id="sts-h" className="sts__h" tabIndex={-1}>{t('sentH')}</h2>
-            <p className="sts__lead" id="sts-lead">{t('sentP', { email: '\u0001' }).split('\u0001').map((part, i) => (i ? <span key={i}><strong>{view.email}</strong>{part}</span> : part))}</p>
-            <p className="sts__spam"><span aria-hidden="true">{'📬 '}</span>{t('spam')}</p>
+            {/* Receipt: exactly two lines – where it went, and the spam hint. The "N more" line below is separate (remaining ≤ 2). */}
+            <p className="sts__lead sts__receipt" id="sts-lead">
+              <span className="sts__line">{t('sentP', { email: '\u0001' }).split('\u0001').map((part, i) => (i ? <span key={i}><strong>{view.email}</strong>{part}</span> : part))}</span>
+              <span className="sts__line sts__spam"><span aria-hidden="true">{'📬 '}</span>{t('spam')}</span>
+            </p>
             {view.remaining <= 2 && <p className="meta sts__left">{t('left', { n: view.remaining })}</p>}
             <div className="sts__actions">
               <button type="button" className="btn btn--ghost" id="sts-again" hidden={!view.remaining} onClick={() => { setVal(''); setView({ kind: 'form' }); }}>{t('another')}</button>
@@ -118,8 +141,8 @@ export default function SendToSelf({ slug, token, adminUrl }: { slug: string; to
             <h2 id="sts-h" className="sts__h"><span aria-hidden="true">{'✉'}</span> {t('title')}</h2>
             <p id="sts-lead" className="sts__lead">{t('lead')}</p>
             {view.alert && (
-              <div className="sts__alert" role="alert">
-                <p>{view.alert.text}</p>
+              <div className="sts__alert" role={view.alert.until ? undefined : 'alert'} id="sts-alert">
+                <p>{view.alert.until ? timedText(view.alert) : view.alert.text}</p>
                 {view.alert.copy && <button type="button" className="btn btn--secondary btn--sm" id="sts-copy" onClick={copyAdmin}>{copied ? t('copied') : t('copyInstead')}</button>}
               </div>
             )}
@@ -134,7 +157,7 @@ export default function SendToSelf({ slug, token, adminUrl }: { slug: string; to
               </div>
               <div className="sts__actions">
                 <button type="button" className="btn btn--ghost" id="sts-cancel" onClick={close}>{t('cancel')}</button>
-                <button type="submit" className="btn btn--primary" id="sts-send" disabled={view.busy} aria-busy={view.busy || undefined}>
+                <button type="submit" className="btn btn--primary" id="sts-send" disabled={view.busy || left > 0} aria-busy={view.busy || undefined}>
                   {view.busy ? <><span className="spinner" aria-hidden="true" /> {t('sending')}</> : t('send')}
                 </button>
               </div>

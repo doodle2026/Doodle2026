@@ -148,7 +148,7 @@
     "native": "Partager via …",
     "email": "E-mail",
     "adminLabel": "Votre lien d’administration secret – enregistrez-le maintenant",
-    "adminDesc": "<strong>Ne le partagez pas.</strong> Ce lien permet de modifier et de clôturer le sondage. Nous n’avons pas de comptes : si vous perdez le lien, nous ne pourrons pas vous le renvoyer.",
+    "adminDesc": "<strong>Ne le partagez pas.</strong> Ce lien permet de modifier et de clôturer le sondage. Nous n’avons pas de comptes et ne conservons pas votre adresse : gardez le lien précieusement – ou utilisez « M’envoyer par e-mail » pour le recevoir par e-mail.",
     "adminAria": "Lien d’administration secret",
     "copyAdmin": "Copier le lien admin",
     "ack": "Je l’ai enregistré",
@@ -744,10 +744,10 @@
     "lim7": "7 jours",
     "lim30": "30 jours",
     "lim": {
-      "poll": "200 par sondage",
+      "poll": "{n} par sondage",
       "hour": "Par heure (organisateur)",
       "ip": "Par IP/réseau",
-      "day": "Quota quotidien (100)"
+      "day": "Quota quotidien ({n})"
     },
     "limTodayCol": "Aujourd’hui",
     "mailSplit": "Invitations {inv} · rappels {rem} · aux organisateurs {self}",

@@ -52,3 +52,7 @@
 /* Header: keep 📅 + wordmark on one line on narrow phones (de at 320/375) */
 .app-header__logo{white-space:nowrap;flex-shrink:0}
 .app-header__actions{min-width:0}
+
+/* Send til mig selv – receipt is exactly two block lines (destination, spam hint) */
+.sts__receipt .sts__line{display:block}
+.sts__receipt .sts__spam{margin:var(--s-1) 0 0;font-weight:600;color:var(--c-text)}

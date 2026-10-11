@@ -14,7 +14,7 @@ import { ApiError } from './events';
 import { clientIp } from './client-ip';
 import { emailHash, reserveQuota, releaseQuota } from './invitations';
 import { normEmail } from './recipients';
-import { isEmail, maskEmail, mailer } from './email/send';
+import { isBareEmail, maskEmail, mailer } from './email/send';
 import { APP_NAME } from './email/policy';
 import { dateLabels, mailLocale, renderOrganizerLinks } from './email/render';
 import { bumpStat } from './owner/counters';
@@ -40,8 +40,9 @@ export async function sendToSelf(eventId: number, adminToken: string, req: Reque
   if (extra.length) throw err(400, 'invalid', { fields: extra }); // never accept links/text/cc from the client
   const raw = typeof b.email === 'string' ? b.email : '';
   if (raw.includes(',') || raw.includes(';')) throw err(400, 'invalid'); // one recipient only
+  // Bare address only: 'Name <addr>', quotes, angle brackets, whitespace/CRLF are rejected (never hashed or used as To).
   const email = normEmail(raw.replace(/^mailto:/i, ''));
-  if (!email || !isEmail(email) || email.length > 254) throw err(400, 'invalid');
+  if (!email || !isBareEmail(email)) throw err(400, 'invalid');
 
   const ev = await prisma.event.findUnique({ where: { id: eventId }, select: { slug: true, title: true, locale: true, mailBlockedAt: true, timeOptions: { select: { date: true } } } });
   if (!ev) throw new ApiError(404, ['Afstemningen findes ikke.']);

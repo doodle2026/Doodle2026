@@ -148,7 +148,7 @@
     "native": "Share via …",
     "email": "Email",
     "adminLabel": "Your secret admin link – save it now",
-    "adminDesc": "<strong>Don’t share it.</strong> With this link you can edit and close the poll. We have no accounts, so if you lose the link, we can’t send it again.",
+    "adminDesc": "<strong>Don’t share it.</strong> With this link you can edit and close the poll. We have no accounts and don’t store your address, so keep the link safe – or use “Send to myself” to get it by email.",
     "adminAria": "Secret admin link",
     "copyAdmin": "Copy admin link",
     "ack": "I’ve saved it",
@@ -744,10 +744,10 @@
     "lim7": "7 days",
     "lim30": "30 days",
     "lim": {
-      "poll": "200 per poll",
+      "poll": "{n} per poll",
       "hour": "Per hour (organizer)",
       "ip": "Per IP / network",
-      "day": "Daily quota (100)"
+      "day": "Daily quota ({n})"
     },
     "limTodayCol": "Today",
     "mailSplit": "Invitations {inv} · reminders {rem} · to organizers {self}",

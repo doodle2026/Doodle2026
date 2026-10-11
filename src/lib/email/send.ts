@@ -1,3 +1,4 @@
+import { validEmail } from '../recipients';
 /**
  * Email adapter (Resend). Notification features come later; this only sends/logs one message.
  *
@@ -52,7 +53,10 @@ const fromWithName = (from: string, name?: string) => {
 const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 /** Plain address or `Name <address>`. */
 const addr = (s: string) => { const m = /<([^>]+)>\s*$/.exec(s); return (m ? m[1] : s).trim(); };
+/** Config values only (EMAIL_FROM / EMAIL_REPLY_TO may be `Name <address>`). Never use for recipients. */
 export const isEmail = (s: string) => EMAIL_RE.test(addr(s)) && s.length <= 320;
+/** Recipients: a bare, strictly valid address only – no display name, no `<>`, no whitespace/CRLF (PR #36 blocker). */
+export const isBareEmail = (s: string) => typeof s === 'string' && s === s.trim() && !/[<>\s"]/.test(s) && validEmail(s);
 
 export function emailConfig(env: Env = process.env): EmailConfig {
   const problems: string[] = [];
@@ -106,7 +110,7 @@ export function createMailer(opts: { env?: Env; fetch?: typeof fetch; log?: Log;
   warnConfig(); // at startup/first construction
 
   const recipients = (m: EmailMessage) => (Array.isArray(m.to) ? m.to : [m.to]).map((x) => x.trim()).filter(Boolean);
-  const valid = (m: EmailMessage) => { const to = recipients(m); return to.length > 0 && to.length <= 50 && to.every(isEmail) && !!m.subject?.trim() && !!m.text?.trim(); };
+  const valid = (m: EmailMessage) => { const to = recipients(m); return to.length > 0 && to.length <= 50 && to.every(isBareEmail) && !!m.subject?.trim() && !!m.text?.trim(); };
   const summarize = (m: EmailMessage) => `to=${recipients(m).map((x) => maskEmail(x)).join(',')} subject="${redact(m.subject).slice(0, 120)}" text=${m.text.length} chars${m.html ? ' +html' : ''}`;
   const payload = (m: EmailMessage) => {
     const replyTo = m.replyTo && isEmail(m.replyTo) ? m.replyTo : cfg.replyTo;

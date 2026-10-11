@@ -148,7 +148,7 @@
     "native": "Teilen über …",
     "email": "E-Mail",
     "adminLabel": "Ihr geheimer Admin-Link – jetzt speichern",
-    "adminDesc": "<strong>Nicht weitergeben.</strong> Mit diesem Link können Sie die Umfrage bearbeiten und schließen. Wir haben keine Konten – geht der Link verloren, können wir ihn nicht erneut senden.",
+    "adminDesc": "<strong>Nicht weitergeben.</strong> Mit diesem Link können Sie die Umfrage bearbeiten und schließen. Wir haben keine Konten und speichern Ihre Adresse nicht – bewahren Sie den Link gut auf oder nutzen Sie „An mich selbst senden“, um ihn per E-Mail zu erhalten.",
     "adminAria": "Geheimer Admin-Link",
     "copyAdmin": "Admin-Link kopieren",
     "ack": "Ich habe ihn gespeichert",
@@ -744,10 +744,10 @@
     "lim7": "7 Tage",
     "lim30": "30 Tage",
     "lim": {
-      "poll": "200 pro Umfrage",
+      "poll": "{n} pro Umfrage",
       "hour": "Pro Stunde (Organisation)",
       "ip": "Pro IP/Netzwerk",
-      "day": "Tageskontingent (100)"
+      "day": "Tageskontingent ({n})"
     },
     "limTodayCol": "Heute",
     "mailSplit": "Einladungen {inv} · Erinnerungen {rem} · an Organisierende {self}",

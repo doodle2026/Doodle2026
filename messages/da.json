@@ -148,7 +148,7 @@
     "native": "Del via …",
     "email": "E-mail",
     "adminLabel": "Dit hemmelige admin-link – gem det nu",
-    "adminDesc": "<strong>Del det ikke.</strong> Med dette link kan du redigere og lukke afstemningen. Vi har ingen konti, så hvis du mister linket, kan vi ikke sende det igen.",
+    "adminDesc": "<strong>Del det ikke.</strong> Med dette link kan du redigere og lukke afstemningen. Vi har ingen konti og gemmer ikke din adresse, så pas godt på linket – eller brug “Send til mig selv” for at få det på mail.",
     "adminAria": "Hemmeligt admin-link",
     "copyAdmin": "Kopiér admin-link",
     "ack": "Jeg har gemt det",
@@ -744,10 +744,10 @@
     "lim7": "7 dage",
     "lim30": "30 dage",
     "lim": {
-      "poll": "200 pr. afstemning",
+      "poll": "{n} pr. afstemning",
       "hour": "Pr. time (arrangør)",
       "ip": "Pr. IP/netværk",
-      "day": "Dagskvote (100)"
+      "day": "Dagskvote ({n})"
     },
     "limTodayCol": "I dag",
     "mailSplit": "Invitationer {inv} · påmindelser {rem} · til arrangøren selv {self}",

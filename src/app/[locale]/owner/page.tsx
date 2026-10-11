@@ -1,3 +1,4 @@
+import { MAX_PER_POLL } from '@/lib/recipients';
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 import { LOCALES, LOCALE_NAMES, type Locale } from '@/i18n/config';
@@ -126,7 +127,7 @@ export default async function OwnerDashboard({ params }: Props) {
           <section className="card okpi okpi--lim" aria-labelledby="k7"><h2 id="k7">{t('owner.limH')}</h2>
             <table className="olim" id="o-limits"><thead><tr><th scope="col">{t('owner.limType')}</th><th scope="col" className="num">{t('owner.limTodayCol')} <span className="meta">{`(${tz})`}</span></th><th scope="col" className="num">{t('owner.lim7')}</th><th scope="col" className="num">{t('owner.lim30')}</th></tr></thead>
               <tbody>{(['poll', 'hour', 'ip', 'day'] as const).map((k) => (
-                <tr key={k}><th scope="row">{t(`owner.lim.${k}` as 'owner.lim.poll')}</th>{[Li[k].today, Li[k].d7, Li[k].d30].map((v, i) => <td key={i} className="num">{v ? <strong>{f.n(v)}</strong> : <span className="meta">{'0'}</span>}</td>)}</tr>
+                <tr key={k}><th scope="row">{k === 'day' ? t('owner.lim.day', { n: f.n(E.dailyLimit) }) : k === 'poll' ? t('owner.lim.poll', { n: f.n(MAX_PER_POLL) }) : t(`owner.lim.${k}` as 'owner.lim.hour')}</th>{[Li[k].today, Li[k].d7, Li[k].d30].map((v, i) => <td key={i} className="num">{v ? <strong>{f.n(v)}</strong> : <span className="meta">{'0'}</span>}</td>)}</tr>
               ))}</tbody></table>
             <p className="meta okpi__note">{`🔒 ${t('owner.limNote')}`}</p></section>
         </div>
