@@ -110,14 +110,14 @@ describe.skipIf(!existsSync(CHROME))('device matrix (§0.1)', () => {
           await idle.locator('input').fill(`w-${lang}-${Date.now()}@example.com`);
           const btn = idle.locator('.se-btn'); const w0 = await btn.evaluate((e) => e.getBoundingClientRect().width);
           let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
-          await pg.route('**/invitations', async (rt) => { if (rt.request().method() === 'POST') await gate; await rt.continue(); });
+          await pg.route('**/invitations', async (rt) => { if (rt.request().method() === 'POST') await gate; await rt.continue().catch(() => undefined); });
           await btn.click();
           const sending = pg.locator('#se-rows li[data-status="sending"] .se-btn'); await sending.waitFor();
           const w1 = await sending.evaluate((e) => e.getBoundingClientRect().width);
           if (Math.abs(w1 - w0) > 1) issues.push(`${lang} send width ${Math.round(w0)}→${Math.round(w1)}`);
           issues.push(...(await pg.evaluate(AUDIT)).map((x) => `${lang} sending ${x}`));
           await pg.screenshot({ path: `${OUT}${d.id}-se-sending-${lang}.png` });
-          release(); await pg.unroute('**/invitations');
+          release(); await pg.unrouteAll({ behavior: 'wait' });
           await (await pg.$('#se'))!.screenshot({ path: `${OUT}${d.id}-se-${lang}.png` });
           await ctx.close();
         }
