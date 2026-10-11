@@ -359,7 +359,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
                   <button type="button" role="radio" key={v} data-i={i} data-v={v} aria-checked={me[i] === v} disabled={past(i)}
                     tabIndex={me[i] === v || (!me[i] && v === 'yes') ? 0 : -1}
                     onClick={() => set(i, (cur) => (cur === v ? null : v), `.seg button[data-i="${i}"][data-v="${v}"]`)} onKeyDown={(e) => segKey(e, i, v)}>
-                    <span aria-hidden="true">{ICON[v]}</span> {tr(voteKey(v))}
+                    <span aria-hidden="true">{ICON[v]}</span><span>{tr(voteKey(v))}</span>
                   </button>
                 ))}
               </div>

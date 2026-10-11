@@ -390,7 +390,6 @@ h1,h2,h3,h4,.btn,.field__label,.vgrid th,.choose-btn,.tri,.st,.legend,.reminder_
 .toast,.toast-undo{border-radius:var(--r-lg)}
 .vgrid th{vertical-align:bottom}
 .result-banner__actions,.linkbox__actions,.form-actions,.landing__actions,.notfound__actions,.row-actions,.opt-edit__actions{flex-wrap:wrap}
-.seg button{flex-direction:column;gap:0;line-height:1.15}
 .rlist li{grid-template-columns:minmax(0,1fr)}.rlist .addr{word-break:normal;overflow-wrap:anywhere}.rlist .badges{justify-content:flex-start}
 
 /* ===== §46 Send til e-mails (bekræftelsessiden) – bevidst sekundær under admin-linket ===== */
@@ -424,9 +423,7 @@ h1,h2,h3,h4,.btn,.field__label,.vgrid th,.choose-btn,.tri,.st,.legend,.reminder_
 [hidden]{display:none!important} /* fix: komponenter med display:flex overstyrede hidden (fx "Admin-link gemt" vist samtidig med admin-boksen) */
 .share__confirm{padding-right:min(9rem,42%)}
 .se-row.is-warn .se-input{border-color:var(--c-warn)}
-.se-btn{white-space:normal;max-width:45%;min-width:5.5rem;line-height:1.2}
 .se-btn--bounced{background:var(--c-surface);color:var(--c-error);border:1px solid var(--c-error);opacity:1!important;cursor:default}
-.se-btn{flex:0 0 8rem;min-width:0}
 /* §46 fase 2 */
 .se-mode{display:inline-flex;border:1px solid var(--c-border-strong);border-radius:var(--r-full);padding:2px;margin:0 0 var(--s-3);flex-wrap:wrap}
 .se-mode button{font:inherit;font-size:var(--fs-sm);font-weight:600;min-height:36px;padding:0 var(--s-3);border:0;border-radius:var(--r-full);background:transparent;color:var(--c-text);cursor:pointer}
@@ -452,3 +449,15 @@ h1,h2,h3,h4,.btn,.field__label,.vgrid th,.choose-btn,.tri,.st,.legend,.reminder_
 .se-mode{display:flex;width:max-content;max-width:100%}.se-pm-toggle{display:block}
 .se-quota{font-size:var(--fs-xs);margin:0 0 var(--s-2)}
 .se-notice{margin:0 0 var(--s-2);padding:var(--s-2) var(--s-3);border-radius:var(--r-md);background:var(--c-primary-50);color:var(--c-text);font-size:var(--fs-sm)}
+.se-note{display:block}
+
+/* ===== iOS Safari knap-fix (11. okt.) – se ios-button-fix.md ===== */
+:where(button,.btn,[type=button],[type=submit]){-webkit-appearance:none;appearance:none;font:inherit;line-height:1.2;margin:0;display:inline-flex;align-items:center;justify-content:center;gap:var(--s-1);text-align:center;box-sizing:border-box}
+.btn{min-height:44px;height:auto;line-height:1.2}
+.seg button{display:inline-flex;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:center;align-content:center;gap:2px 4px;min-height:44px;height:auto;padding:4px 6px;line-height:1.2;text-align:center}
+.se-row__line{align-items:center}
+.se-input{flex:1 1 auto;min-width:0;width:auto}
+.se-btn{flex:0 0 auto;min-width:6.5rem;max-width:none;min-height:44px;white-space:nowrap;padding-left:var(--s-3);padding-right:var(--s-3)}
+.se-btn:disabled:not(.se-btn--done):not(.se-btn--bounced){opacity:1;background:var(--c-bg);color:var(--c-muted);border-color:var(--c-border-strong)}
+:where(button,.btn):focus-visible{outline:3px solid var(--c-focus);outline-offset:2px}
+.se-input{min-width:6rem}

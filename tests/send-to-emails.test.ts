@@ -60,7 +60,14 @@ describe('API', () => {
     expect((await prisma.invitation.findFirstOrThrow({ where: { email: f, event: { slug: p.id } } })).delivery).toBe('sent');
     await prisma.invitation.updateMany({ where: { email: f, event: { slug: p.id } }, data: { delivery: 'failed' } });
     const many = await call(`/api/events/${p.id}/invitations/retry`, { method: 'POST', token: p.token, json: { emails: [f, `nope-${uniq()}@example.com`] } });
-    expect(many.status).toBe(200); expect(many.body.results).toEqual([{ email: f, status: 'sent' }, expect.objectContaining({ status: 'failed' })]); expect(many.body.remaining).toBeTruthy();
+    expect(many.status).toBe(200); expect(many.body.results).toEqual([{ email: f, status: 'sent' }, expect.objectContaining({ status: 'not_invited' })]); expect(many.body.remaining).toBeTruthy();
+    // already sent → reported as not_failed, not re-sent
+    const again = await call(`/api/events/${p.id}/invitations/retry`, { method: 'POST', token: p.token, json: { emails: [f] } });
+    expect(again.body.results).toEqual([{ email: f, status: 'not_failed' }]);
+    // P5: never-invited address → not_invited (nothing sent)
+    const ni = `never-${uniq()}@example.com`;
+    const nv = await call(`/api/events/${p.id}/invitations/retry`, { method: 'POST', token: p.token, json: { emails: [ni, f] } });
+    expect(nv.body.results).toEqual([{ email: ni, status: 'not_invited' }, { email: f, status: 'not_failed' }]);
   });
 
   test('admin API never exposes unsub/bounced (neutral blocked); §46.8 remaining + invitations shape', async () => {
@@ -114,7 +121,7 @@ describe.skipIf(!existsSync(CHROME))('UI (headless)', () => {
     expect(await pg.inputValue('#se-pmsg')).toBe('Hej');
     await pg.click('#share-open'); await pg.waitForSelector('#share #se-rows');
     expect(await pg.inputValue('#se-pmsg')).toBe('Hej');
-    const before = await pg.locator('#se-rows li').count(); await pg.click('#se-more'); expect(await pg.locator('#se-rows li').count()).toBe(before + 5);
+    await pg.waitForLoadState('networkidle'); const before = await pg.locator('#se-rows li').count(); await pg.click('#se-more'); await expect.poll(() => pg.locator('#se-rows li').count()).toBe(before + 5); // count settles after the panel remount (CI flake)
     await prisma.invitation.updateMany({ where: { event: { slug: p.id } }, data: { delivery: 'bounced' } });
     await pg.reload(); await pg.waitForSelector('#se-rows >> text=Afvist – tjek adressen');
     await prisma.invitation.updateMany({ where: { event: { slug: p.id } }, data: { delivery: 'sent' } });

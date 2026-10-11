@@ -4,6 +4,22 @@
 .vgrid td.is-past .tri,.vcard.is-past .seg button{cursor:not-allowed}
 .past-badge{display:inline-block;margin-top:2px;padding:0 6px;border-radius:999px;font-size:.75rem;font-weight:600;color:var(--c-muted);border:1px solid currentColor}
 
-/* L8: 'Sendt ✓' / status buttons never wrap on narrow screens */
-.se-btn{white-space:nowrap}
+/* P2 (#26): mode switch fits on one line at 390 px (Danish); wraps only as a fallback. */
+.se-mode button{white-space:nowrap;padding:0 var(--s-2)}
+/* P4 (#26): reserve the widest label so the Send button doesn't jump while "Sender…" – labels stacked in one grid cell. */
+.se-btn__stack{display:inline-grid}
+.se-btn__stack>*{grid-area:1/1;display:inline-flex;align-items:center;justify-content:center;gap:var(--s-1)}
+.se-btn__stack>[aria-hidden="true"].ghost{visibility:hidden}
 .se-bitem__name{font-weight:600}
+/* P1 (#26): at ≤400 px the nested paddings (container › card › share › box) left only 170 px for a row;
+   trim them so the field keeps its 6rem and the nowrap Send button fits beside it (no h-scroll). */
+@media (max-width:400px){
+  .card.poll-view{padding-left:var(--s-3);padding-right:var(--s-3)}
+  .card.poll-view .vote-bar{margin-left:calc(-1*var(--s-3));margin-right:calc(-1*var(--s-3));margin-bottom:calc(-1*var(--s-5))}
+  .share{padding-left:var(--s-2);padding-right:var(--s-2)}
+  .se>div{padding-left:var(--s-2);padding-right:var(--s-2)}
+  .se-mode button{padding:0 var(--s-2);font-size:.8125rem}
+  .se-btn{padding-left:var(--s-2);padding-right:var(--s-2)}
+  .se-row__line{gap:var(--s-1)}
+  .se-input[readonly]{min-width:4rem} /* read-only (already sent) rows may shrink; editable fields keep 6rem */
+}
