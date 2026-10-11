@@ -121,7 +121,7 @@ describe.skipIf(!existsSync(CHROME))('UI (headless)', () => {
     expect(await pg.inputValue('#se-pmsg')).toBe('Hej');
     await pg.click('#share-open'); await pg.waitForSelector('#share #se-rows');
     expect(await pg.inputValue('#se-pmsg')).toBe('Hej');
-    const before = await pg.locator('#se-rows li').count(); await pg.click('#se-more'); expect(await pg.locator('#se-rows li').count()).toBe(before + 5);
+    await pg.waitForLoadState('networkidle'); const before = await pg.locator('#se-rows li').count(); await pg.click('#se-more'); await expect.poll(() => pg.locator('#se-rows li').count()).toBe(before + 5); // count settles after the panel remount (CI flake)
     await prisma.invitation.updateMany({ where: { event: { slug: p.id } }, data: { delivery: 'bounced' } });
     await pg.reload(); await pg.waitForSelector('#se-rows >> text=Afvist – tjek adressen');
     await prisma.invitation.updateMany({ where: { event: { slug: p.id } }, data: { delivery: 'sent' } });
