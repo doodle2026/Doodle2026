@@ -1,4 +1,5 @@
 'use client';
+import SendToSelf from '@/components/SendToSelf';
 import SendToEmails from '@/components/SendToEmails';
 import { storeAdminToken, TOKEN_RE } from '@/lib/admin-client';
 import { useLp } from '@/i18n/link';
@@ -90,7 +91,6 @@ export default function PollView({ event, shareUrl, justCreated }:
     setTimeout(() => (focusAdmin ? adminRef.current : document.getElementById('share-h'))?.focus(), 0);
   }
   function hidePanel() { setPanel(false); setTimeout(() => shareOpenRef.current?.focus(), 0); }
-  const mailMe = adminUrl ? mailtoLink(t('share.adminMailSubject', { title: event.title }), t('share.adminMailBody', { admin: adminUrl, url: shareUrl })) : '';
   const mailto = mailtoLink(t('poll.mailSubject', { title: event.title }), `${t('app.mailHello')}\n\n${t('poll.mailBody', { url: shareUrl })}\n`);
 
   return (
@@ -140,7 +140,7 @@ export default function PollView({ event, shareUrl, justCreated }:
                     onFocus={(e) => e.currentTarget.select()} onClick={(e) => e.currentTarget.select()} />
                   <div className="linkbox__actions">
                     <CopyButton state={copy.admin} label={t('share.copyAdmin')} className="btn--secondary" onClick={() => doCopy('admin', adminUrl, adminRef.current)} />
-                    <a className="btn btn--secondary" id="mailme" href={mailMe}><span aria-hidden="true">✉</span> {t('common.sendToSelf')}</a>
+                    {adminTok && <SendToSelf slug={event.slug} token={adminTok} adminUrl={adminUrl} />}
                   </div>
                 </div>
                 {copy.admin === 'error' && <p className="share__hint share__hint--error">{MANUAL_COPY}</p>}

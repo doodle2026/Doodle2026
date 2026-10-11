@@ -4,6 +4,7 @@
  * Never returns tokens, token hashes, link tokens or provider ids.
  * "Day" = UTC calendar day (same as the mail quota, EmailQuota.day) – DAY_TZ.
  */
+import { DAILY_QUOTA } from '../invitations';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { DAY_TZ, utcDay } from './counters';
@@ -19,7 +20,7 @@ export const clearStatsCache = () => cache.clear();
 const LOCALES = ['en', 'da', 'fr', 'de'] as const;
 type Locale = (typeof LOCALES)[number];
 const dayStart = (offsetDays = 0) => { const d = new Date(`${utcDay()}T00:00:00.000Z`); d.setUTCDate(d.getUTCDate() - offsetDays); return d; };
-const dailyLimit = () => Number(process.env.EMAIL_DAILY_QUOTA) > 0 ? Number(process.env.EMAIL_DAILY_QUOTA) : 100;
+const dailyLimit = () => DAILY_QUOTA(); // the configured quota the server enforces (EMAIL_DAILY_QUOTA, default 100)
 const n = (x: unknown) => Number(x ?? 0);
 const isoDate = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
 
@@ -61,13 +62,16 @@ export async function ownerStats() {
       polls: evByLang.find((x) => x.locale === l)?._count._all ?? 0,
       participants: n(partByLang.find((x) => x.locale === l)?.c),
     }])) as Record<Locale, { polls: number; participants: number }>;
-    const [quotaToday, deliveries, unsubscribes, limitsRows] = await Promise.all([
+    const [quotaToday, deliveries, unsubscribes, limitsRows, splitRows, selfAll] = await Promise.all([
       prisma.emailQuota.findUnique({ where: { day: utcDay() } }),
       prisma.invitation.groupBy({ by: ['delivery'], _count: { _all: true } }),
       prisma.emailSuppression.count(),
       prisma.dailyStat.findMany({ where: { key: { startsWith: 'limit_' }, day: { gte: utcDay(dayStart(29)) } } }),
+      prisma.dailyStat.findMany({ where: { key: { in: ['mail_inv', 'mail_rem', 'self_sent'] }, day: utcDay() } }),
+      prisma.dailyStat.aggregate({ where: { key: 'self_sent' }, _sum: { count: true } }),
     ]);
     const dc = (ks: string[]) => deliveries.filter((d) => ks.includes(d.delivery)).reduce((a, d) => a + d._count._all, 0);
+    const sp = (key: string) => splitRows.find((r) => r.key === key)?.count ?? 0;
     const lim = (key: string) => {
       const rows = limitsRows.filter((r) => r.key === key);
       const since = (k: number) => rows.filter((r) => r.day >= utcDay(dayStart(k))).reduce((a, r) => a + r.count, 0);
@@ -86,7 +90,9 @@ export async function ownerStats() {
       participation: { participants, votes, avgPerPoll: existing ? participants / existing : 0, shareWithParticipant: existing ? n(withPart?.c) / existing : 0 },
       dates: { avgPerPoll: existing ? optionCount / existing : 0, timeToClose: { ...bucket, medianDays: Math.round(median * 10) / 10 } },
       languages,
-      email: { sentToday: quotaToday?.count ?? 0, dailyLimit: dailyLimit(), sent: dc(SENT), failed: dc(['failed']), rejected: dc(['bounced']), unsubscribes },
+      email: { sentToday: quotaToday?.count ?? 0, dailyLimit: dailyLimit(), sent: dc(SENT), failed: dc(['failed']), rejected: dc(['bounced']), unsubscribes,
+        // §47.9: main number = ALL mails today (every type reserves the shared Resend quota); split + all-time self count (no addresses)
+        split: { inv: sp('mail_inv'), rem: sp('mail_rem'), self: sp('self_sent') }, selfTotal: selfAll._sum.count ?? 0 },
       limits: { poll: lim('limit_poll'), hour: lim('limit_hour'), ip: lim('limit_ip'), day: lim('limit_day') },
       daily: dailyRaw.map((r) => ({ date: r.day, polls: n(r.polls), votes: n(r.votes) })),
       newest,
@@ -149,7 +155,7 @@ export async function eventDetail(slug: string) {
     where: { slug },
     select: {
       id: true, slug: true, title: true, description: true, locale: true, createdAt: true, closedAt: true, inviteTracking: true,
-      remindersSent: true, lastReminderAt: true, chosenOption: { select: { date: true } },
+      remindersSent: true, lastReminderAt: true, _count: { select: { selfSends: true } }, chosenOption: { select: { date: true } },
       timeOptions: { orderBy: { date: 'asc' }, select: { id: true, date: true, votes: { select: { value: true } } } },
       participants: { orderBy: { createdAt: 'asc' }, select: { name: true, createdAt: true, updatedAt: true, votes: { select: { value: true } } } },
       invitations: { orderBy: { createdAt: 'asc' }, select: { email: true, delivery: true, deliveryBeforeUnsub: true, participantId: true, lastEventAt: true, createdAt: true } },
@@ -173,6 +179,7 @@ export async function eventDetail(slug: string) {
   return {
     id: e.slug, title: e.title, description: e.description, locale: e.locale, status: e.closedAt ? 'closed' : 'open',
     createdAt: e.createdAt.toISOString(), closedAt: e.closedAt?.toISOString() ?? null, tracking: e.inviteTracking, finalDate,
+    selfSent: e._count.selfSends, // "Send til mig selv": only the number (no address is stored)
     publicUrl: `${appUrl}/${e.locale}/p/${e.slug}`, // the only link – never admin/edit/invite links
     purgeAt: e.closedAt ? new Date(e.closedAt.getTime() + 90 * 86400_000).toISOString() : null,
     options: e.timeOptions.map((o) => ({ date: isoDate(o.date)!, yes: count(o.votes, 'yes'), maybe: count(o.votes, 'maybe'), no: count(o.votes, 'no'), final: isoDate(o.date) === finalDate })),

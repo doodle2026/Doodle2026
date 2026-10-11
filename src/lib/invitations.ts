@@ -116,7 +116,7 @@ async function pollForEmail(eventId: number) {
 
 type Planned = { to: string; idempotencyKey?: string } & Parameters<ReturnType<typeof mailer>['send']>[0];
 /** Send planned messages (batch), record provider ids/status per invitation; releases quota for failures. */
-async function deliver(eventId: number, msgs: Planned[], byEmail: Map<string, number>) {
+async function deliver(eventId: number, msgs: Planned[], byEmail: Map<string, number>, kind: 'mail_inv' | 'mail_rem' = 'mail_inv') {
   const results = await mailer().sendBatch(msgs);
   let failed = 0;
   await prisma.$transaction(results.map((r, i) => {
@@ -130,6 +130,7 @@ async function deliver(eventId: number, msgs: Planned[], byEmail: Map<string, nu
     });
   }));
   await releaseQuota(failed);
+  if (results.length - failed) await bumpStat(kind, results.length - failed); // §47.9 split of today's mails
   return { sent: results.length - failed, failed };
 }
 
@@ -229,7 +230,7 @@ export async function sendReminder(eventId: number) {
     }
     return { plan, ids: new Map(inv.map((i) => [i.email, i.id])) };
   }).then(async ({ plan, ids }) => {
-    const r = await deliver(eventId, plan.messages.map((m) => ({ ...m, idempotencyKey: `${m.idempotencyKey}:${Date.now() >> 20}` })), ids);
+    const r = await deliver(eventId, plan.messages.map((m) => ({ ...m, idempotencyKey: `${m.idempotencyKey}:${Date.now() >> 20}` })), ids, 'mail_rem');
     return { ...r, recipients: plan.messages.length };
   });
 }
@@ -282,13 +283,31 @@ async function byToken(token: string) {
 }
 export async function linkInfo(token: string) {
   const i = await byToken(token);
-  if (!i) return null;
+  if (!i) return selfLinkInfo(token);
   const s = await prisma.emailSuppression.findMany({ where: { emailHash: emailHash(i.email), scope: { in: ['all', pollScope(i.eventId)] } }, select: { scope: true } });
   // E2: landing pages/API only ever show a masked address (token holders may forward the mail).
   return { email: maskEmail(i.email, '•••'), title: i.event.title, slug: i.event.slug, poll_unsubscribed: s.some((x) => x.scope !== 'all'), all_unsubscribed: s.some((x) => x.scope === 'all') };
 }
+/** "Send til mig selv" footer token: only "unsubscribe from all" exists (no clear-text address → shown masked as •••). */
+async function selfLinkInfo(token: string) {
+  if (!TOKEN_RE.test(token)) return null;
+  const { selfByToken } = await import('./self-send');
+  const s = await selfByToken(token); if (!s) return null;
+  const all = await prisma.emailSuppression.count({ where: { emailHash: s.emailHash, scope: 'all' } });
+  return { email: '•••', title: s.event.title, slug: s.event.slug, poll_unsubscribed: false, all_unsubscribed: all > 0, self: true };
+}
 export async function setSubscription(token: string, scope: 'poll' | 'all', unsubscribe: boolean) {
   const i = await byToken(token);
+  if (!i && scope === 'all' && TOKEN_RE.test(token)) {
+    const { selfByToken } = await import('./self-send');
+    const s = await selfByToken(token);
+    if (s) {
+      const key = { emailHash: s.emailHash, scope: 'all' };
+      if (unsubscribe) await prisma.emailSuppression.upsert({ where: { emailHash_scope: key }, create: key, update: {} });
+      else await prisma.emailSuppression.deleteMany({ where: key });
+      return selfLinkInfo(token);
+    }
+  }
   if (!i) throw new ApiError(404, ['Linket er ugyldigt eller udløbet.']);
   const key = { emailHash: emailHash(i.email), scope: scope === 'all' ? 'all' : pollScope(i.eventId) };
   if (unsubscribe) await prisma.emailSuppression.upsert({ where: { emailHash_scope: key }, create: key, update: {} });

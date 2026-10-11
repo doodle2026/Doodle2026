@@ -96,3 +96,18 @@ export function icsTexts(eventTitle: string, pollUrl: string, locale?: string) {
   const r = (t: string) => Mustache.render(t, { eventTitle, pollUrl }, undefined, { escape: String });
   return { summary: r(s.summary), description: r(s.description) };
 }
+
+/** "Send til mig selv" (§48.5): the ONLY mail allowed to carry the admin link – to the address the organizer typed. */
+export interface OrganizerLinksData {
+  locale: MailLocale; eventTitle: string; adminUrl: string; pollUrl: string; appUrl: string; assetBaseUrl: string;
+  unsubscribeAllUrl: string; dates: { dateLabel: string }[]; optionCount: number;
+}
+export function renderOrganizerLinks(d: OrganizerLinksData): Rendered {
+  const T = TEMPLATES[mailLocale(d.locale)];
+  const data = { ...d, eventTitle: clip(d.eventTitle, 100) };
+  return {
+    subject: oneLine(Mustache.render(T.strings.organizerLinks.subject, data, undefined, { escape: String })),
+    html: Mustache.render(T.organizerLinks.html, data, undefined, { escape }),
+    text: Mustache.render(T.organizerLinks.text, data, undefined, { escape: String }),
+  };
+}

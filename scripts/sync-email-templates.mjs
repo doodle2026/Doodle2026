@@ -5,12 +5,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 const src = process.argv[2] || '../doodle-ui/email';
 const LANGS = ['en', 'da', 'fr', 'de'];
+const fx = (l, t) => (l === 'fr' ? frTxt(t) : t);
+// French typography: a space before ':' in the plain-text labels (upstream build.js hardcodes 'Label: url' for all languages – reported to Doodle UI).
+const frTxt = (t) => t.replace(/([\p{L})])(:) (?=\{\{|https?:)/gu, '$1 $2 ');
 const read = (f) => fs.readFileSync(path.join(src, f), 'utf8');
 const all = {};
 for (const l of LANGS) {
   all[l] = {
-    invitation: { html: read(`invitation.${l}.html`), text: read(`invitation.${l}.txt`) },
-    reminder: { html: read(`reminder.${l}.html`), text: read(`reminder.${l}.txt`) },
+    invitation: { html: read(`invitation.${l}.html`), text: fx(l, read(`invitation.${l}.txt`)) },
+    reminder: { html: read(`reminder.${l}.html`), text: fx(l, read(`reminder.${l}.txt`)) },
+    organizerLinks: { html: read(`organizer-links.${l}.html`), text: fx(l, read(`organizer-links.${l}.txt`)) },
     strings: JSON.parse(read(`strings.${l}.json`)),
   };
 }
