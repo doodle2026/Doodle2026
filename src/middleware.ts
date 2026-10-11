@@ -68,7 +68,7 @@ const isSecretUrl = (req: NextRequest) => {
 };
 
 /** Page routes that exist under /<locale>; anything else → 404 page. */
-const knownPage = (p: string) => p === '/' || /^\/owner(\/login|\/events(\/[A-Za-z0-9_-]{1,64})?)?$/.test(p) || /^\/p\/[^/]+(\/admin)?$/.test(p) || /^\/(u\/(p|all)|abuse)\/[^/]+$/.test(p);
+const knownPage = (p: string) => p === '/' || /^\/owner(\/login|\/log|\/events(\/[A-Za-z0-9_-]{1,64})?)?$/.test(p) || /^\/p\/[^/]+(\/admin)?$/.test(p) || /^\/(u\/(p|all)|abuse)\/[^/]+$/.test(p);
 
 /** Location built on APP_URL (not the Host header); Next emits same-origin redirects as relative paths. */
 const redirect = (req: NextRequest, location: string, status: 301 | 302 | 308) =>

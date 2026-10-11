@@ -247,8 +247,22 @@ model OwnerLoginLog {
   outcome   String   @db.VarChar(24)
   ip        String   @db.VarChar(64)
   userAgent String   @map("user_agent") @db.VarChar(255)
+  /// outcome 'view': slug of the owner detail page that was viewed (views are logged without IP/UA)
+  eventSlug String?  @map("event_slug") @db.VarChar(22)
 
+  @@index([at])
   @@index([ip, at])
   @@index([username, at])
   @@map("owner_login_log")
+}
+
+/// Aggregate counters per UTC day (same day boundary as the mail quota). No per-poll/IP/email data.
+/// keys: polls_deleted, limit_poll (200/poll), limit_hour (organizer hourly), limit_ip (per-IP mail), limit_day (daily quota)
+model DailyStat {
+  day   String @db.Char(10)
+  key   String @db.VarChar(32)
+  count Int    @default(0)
+
+  @@id([day, key])
+  @@map("daily_stats")
 }

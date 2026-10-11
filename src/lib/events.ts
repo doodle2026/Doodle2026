@@ -1,3 +1,4 @@
+import { bumpStat } from '@/lib/owner/counters';
 import { randomBytes } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from './db';
@@ -260,6 +261,8 @@ export async function editOption(eventId: number, optionId: number, date: string
 
 /** Organizer deletes the whole poll (options, participants, votes, idempotency keys cascade). */
 export async function deleteEvent(eventId: number) {
+  // Hard delete (cascade). Only an aggregate counter remains for the owner dashboard (PM 11 Oct).
   const r = await prisma.event.deleteMany({ where: { id: eventId } });
   if (!r.count) throw new ApiError(404, ['Afstemningen findes ikke.']);
+  await bumpStat('polls_deleted');
 }
