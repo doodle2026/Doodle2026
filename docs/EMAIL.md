@@ -115,3 +115,10 @@ Shows the FULL rendered mails (incl. personal invite tokens and unsubscribe link
 - Data shape per design §46.8: GET and every POST return `remaining: {poll, hour, day}` and `invitations: [{email, status: sent|failed|bounced}]`; POST adds `results: [{email, status: sent|failed|blocked}]`; 429s carry `remaining` too. (Legacy `quota.*_remaining` kept for the admin view.)
 - Admin never shows 'Afmeldt': the admin API maps unsub and bounced to the neutral `blocked` ('⊘ Kan ikke sendes til denne adresse', filter 'Kan ikke sendes'); the DB keeps the distinction.
 - Per-IP mail limit: `RATE_LIMIT_MAIL_PER_HOUR` default **150 calls/hour/IP** (was 10; one call per address in the box). Every 429 carries `Retry-After` (+ `retry_after`, `code`: ip_limit | poll_hourly_limit | quota). UI shows `se.limitIp` with a local minute countdown, no auto-resend (§46.9).
+
+### Send til e-mails – phase 2 ("Indsæt mange", §46.7)
+- Toggle "Én ad gangen" / "Indsæt mange" (remembered in localStorage `ga-se-mode`). One field accepts `;`, `,`, newlines and Outlook `Name <x@y>`.
+- Overview is computed client-side only (format, duplicates, already invited) – there is **no pre-check endpoint**, so opt-outs only appear as the neutral `blocked` after sending.
+- "Send til N" = ONE `POST /invitations` with ≤50 recipients; all chips show "Sender…" until the combined response (`results[]`, `remaining`). >50 and remaining quota are refused before sending.
+- "Prøv de fejlede igen" = ONE `POST /invitations/retry {emails[]}` (stored-but-failed); never-stored failures go through `POST /invitations`.
+- Switching bulk → lines removes duplicates and shows "N dubletter fjernet"; unsent addresses carry over both ways; drafts survive hiding the share panel but not a reload.

@@ -3,6 +3,9 @@
  * "Send til e-mails" on the confirmation page – design-spec §46.1–46.6 (phase 1: one address per line, Send per line).
  * Uses the existing invitations API (admin Bearer, Invitation model, limits, suppression list): one recipient per click.
  * PM: opted-out addresses are never revealed – the server answers "rejected" (neutral text), no pre-check.
+ * Phase 2 (§46.7): toggle "Indsæt mange" – one field (semicolon/comma/newline/Outlook "Name <x>"), overview chips,
+ * "Send til N" as ONE combined call (≤50) with per-address results, "Prøv de fejlede igen" via /retry {emails}.
+ * Classification is client-side (format, duplicates, already invited) – no pre-check endpoint, opt-outs only show up as "blocked" after sending.
  * Quota (poll/hour/day) comes with GET on load and with every send; status re-polled every 20 s while the tab is visible.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -17,7 +20,15 @@ type Row = { id: number; value: string; status: St; touched: boolean; earlier?: 
 const POLL_MS = 20_000;
 let uid = 0;
 /** Unsent drafts survive remounts (share panel hidden/shown) but not a reload (§46.2: drafts are lost on reload). */
-const drafts = new Map<string, { rows: Row[]; message: string }>();
+type BSt = '' | 'sending' | 'sent' | 'failed' | 'blocked' | 'bounced';
+type BItem = { id: number; raw: string; email: string; status: BSt };
+type Kind = 'valid' | 'invalid' | 'dup' | 'already';
+const drafts = new Map<string, { rows: Row[]; message: string; bulk?: BItem[] }>();
+const MODE_KEY = 'ga-se-mode';
+/** Split pasted text: ; , newline/whitespace, and Outlook "Name <x@y>" (keeps only the address). */
+export function splitBulk(text: string): string[] {
+  return text.replace(/[^,;\n<>]*<([^>]+)>/g, ' $1 ').split(/[\s,;]+/).map((x) => x.trim().replace(/^<|>$/g, '')).filter(Boolean);
+}
 const newRow = (value = '', status: St = 'idle', earlier = false): Row => ({ id: ++uid, value, status, touched: !!value, earlier });
 /** trim, drop mailto:, lower-case the domain (§46.3). */
 export const normSe = (v: string) => { v = v.trim().replace(/^mailto:/i, ''); const i = v.lastIndexOf('@'); return i < 0 ? v : v.slice(0, i) + '@' + v.slice(i + 1).toLowerCase(); };
@@ -38,6 +49,12 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
   const [pmOpen, setPmOpen] = useState(() => !!drafts.get(slug)?.message);
   const [message, setMessage] = useState(() => drafts.get(slug)?.message ?? '');
   const [live, setLive] = useState('');
+  const [mode, setModeS] = useState<'rows' | 'bulk'>('rows');
+  const [B, setB] = useState<BItem[]>(() => drafts.get(slug)?.bulk ?? []);
+  const [bulkText, setBulkText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  useEffect(() => { try { if (localStorage.getItem(MODE_KEY) === 'bulk') setModeS('bulk'); } catch { /* private mode */ } }, []);
   const [ipWait, setIpWait] = useState<number | null>(null);
   const rootRef = useRef<HTMLElement>(null);
   const loaded = useRef(false);
@@ -51,8 +68,8 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
   };
   useEffect(() => () => clearInterval(ipTimer.current), []);
   useEffect(() => {
-    drafts.set(slug, { rows: rows.filter((r) => !r.earlier && r.status !== 'sent' && r.status !== 'sending' && r.status !== 'bounced').map((r) => ({ ...r, status: r.status === 'failed' ? 'failed' : 'idle' })), message });
-  }, [slug, rows, message]);
+    drafts.set(slug, { bulk: B.filter((x) => x.status !== 'sent' && x.status !== 'bounced' && x.status !== 'sending'), rows: rows.filter((r) => !r.earlier && r.status !== 'sent' && r.status !== 'sending' && r.status !== 'bounced').map((r) => ({ ...r, status: r.status === 'failed' ? 'failed' : 'idle' })), message });
+  }, [slug, rows, message, B]);
   const say = (m: string) => { setLive(''); setTimeout(() => setLive(m), 30); };
   const api = useCallback(async (path: string, init?: RequestInit) => {
     const res = await fetch(`/api/events/${encodeURIComponent(slug)}/invitations${path}`, {
@@ -74,6 +91,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
         if (s === 'bounced' && r.status !== 'bounced') say(t('se.liveBounced', { email: r.value }));
         return s === r.status ? r : { ...r, status: s };
       });
+      setB((bs) => bs.map((x) => (x.status === 'sent' && by.get(key(x.email)) === 'bounced' ? { ...x, status: 'bounced' as BSt } : x)));
       if (!loaded.current) { // reload: earlier invitations on top, read-only
         loaded.current = true;
         next = [...inv.map((i) => newRow(i.email, fromDelivery(i.status), true)), ...next];
@@ -161,6 +179,79 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
     setRows((rs) => [...rs, ...add]); focus(`#se-i${add[0].id}`); say(t('se.liveRows'));
   }
 
+  // ===== Phase 2: "Indsæt mange" =====
+  const kinds = new Map<number, Kind>();
+  { const seen = new Set(B.filter((x) => x.status).map((x) => key(x.email)));
+    for (const x of B) if (!x.status) {
+      const k = key(x.email);
+      kinds.set(x.id, !validEmail(x.email) ? 'invalid' : seen.has(k) ? 'dup' : (seen.add(k), invited.has(k)) ? 'already' : 'valid');
+    } }
+  const kindOf = (x: BItem) => x.status || kinds.get(x.id)!;
+  const c = { valid: 0, invalid: 0, dup: 0, already: 0, sent: 0, failed: 0, blocked: 0 };
+  for (const x of B) { if (x.status === 'sent' || x.status === 'bounced') c.sent++; else if (x.status === 'failed') c.failed++; else if (x.status === 'blocked') c.blocked++; else if (!x.status) c[kinds.get(x.id)!]++; }
+  const bulkLimit = (n: number) => {
+    if (limitMsg) return limitMsg;
+    const pollL = Math.max(0, quota?.poll ?? Infinity), dayL = Math.max(0, Math.min(quota?.day ?? Infinity, quota?.hour ?? Infinity));
+    if (n > 50) return t('se.max50', { n: n - 50 });
+    if (n > dayL) return t('se.quotaDay', { n: dayL, m: n - dayL });
+    if (n > pollL) return t('se.quotaPoll', { n: pollL, m: n - pollL });
+    return '';
+  };
+  const bulkErr = busy || !c.valid ? '' : bulkLimit(c.valid);
+  const addBulk = (text: string) => { const parts = splitBulk(text); if (parts.length) setB((bs) => [...bs, ...parts.map((raw) => ({ id: ++uid, raw, email: normSe(raw), status: '' as BSt }))]); };
+  const flushBulk = () => { if (bulkText.trim()) { addBulk(bulkText); setBulkText(''); } };
+  const summary = (res: { status: string }[]) => {
+    const n = (s: string) => res.filter((x) => x.status === s).length;
+    say([t('se.sumSent', { n: n('sent') }), n('failed') && t('se.sumFailed', { n: n('failed') }), n('blocked') && t('se.sumBlocked', { n: n('blocked') })].filter(Boolean).join(', '));
+  };
+  async function bulkCall(list: BItem[], retry: boolean) {
+    if (!list.length) return;
+    const ids = new Set(list.map((x) => x.id));
+    setBusy(true); setB((bs) => bs.map((x) => (ids.has(x.id) ? { ...x, status: 'sending' } : x))); say(t('se.sendingN', { n: list.length }));
+    let res: Response | null = null; let data: Record<string, unknown> = {};
+    try {
+      ({ res, data } = await api(retry ? '/retry' : '', { method: 'POST', body: JSON.stringify(retry ? { emails: list.map((x) => key(x.email)) } : { recipients: list.map((x) => x.email), message: message.trim() || undefined, locale }) }));
+    } catch { /* network → all failed */ }
+    const results = (data.results as { email: string; status: string }[] | undefined) ?? [];
+    const by = new Map(results.map((r) => [r.email, r.status]));
+    if (data.remaining) setQuota(data.remaining as Quota);
+    if (res?.status === 429 && data.code === 'ip_limit') startIpWait(Number(res.headers.get('Retry-After') || data.retry_after || 3600));
+    const final = list.map((x) => { const s = res?.ok ? by.get(key(x.email)) : undefined; return { id: x.id, status: (s === 'sent' ? 'sent' : s === 'blocked' ? 'blocked' : 'failed') as BSt }; });
+    const fm = new Map(final.map((f) => [f.id, f.status]));
+    setB((bs) => bs.map((x) => (fm.has(x.id) ? { ...x, status: fm.get(x.id)! } : x)));
+    setBusy(false);
+    if (res?.ok) apply(data as { invitations?: Invitee[] }); else void refresh();
+    summary(final);
+    focus(final.some((f) => f.status === 'failed') ? '#se-bretry' : '#se-bulk');
+  }
+  function setMode(m: 'rows' | 'bulk') {
+    if (m === mode || busy) return;
+    try { localStorage.setItem(MODE_KEY, m); } catch { /* ignore */ }
+    setNotice('');
+    if (m === 'bulk') {
+      const carry = rows.filter((r) => !r.earlier && normSe(r.value));
+      setB((bs) => [...bs, ...carry.map((r) => ({ id: ++uid, raw: r.value, email: normSe(r.value), status: (r.status === 'rejected' ? 'blocked' : r.status === 'idle' ? '' : r.status) as BSt }))]);
+      setRows((rs) => { const e = rs.filter((r) => r.earlier); return [...e, ...Array.from({ length: 5 }, () => newRow())]; });
+      if (bulkText.trim()) flushBulk();
+      focus('#se-bulk');
+    } else {
+      const all = bulkText.trim() ? [...B, ...splitBulk(bulkText).map((raw) => ({ id: ++uid, raw, email: normSe(raw), status: '' as BSt }))] : B;
+      const seen = new Set<string>(); let nd = 0; const keep: BItem[] = [];
+      for (const x of all) { const k = key(x.email); if (!x.status && seen.has(k)) { nd++; continue; } seen.add(k); keep.push(x); }
+      setBulkText(''); setB([]);
+      setRows((rs) => {
+        const e = rs.filter((r) => r.earlier || normSe(r.value));
+        const moved = keep.map((x) => { const r = newRow(x.email || x.raw, (x.status === 'blocked' ? 'rejected' : x.status === '' || x.status === 'sending' ? 'idle' : x.status) as St); return r; });
+        const n = [...e, ...moved];
+        const idle = n.filter((r) => !r.earlier && r.status === 'idle').length;
+        return [...n, ...Array.from({ length: Math.max(1, 5 - idle) }, () => newRow())];
+      });
+      if (nd) setNotice(t('se.dupsRemoved', { n: nd }));
+      focus('.se-row:not(.is-done) input');
+    }
+    setModeS(m);
+  }
+
   const idleCount = rows.filter((r) => !r.earlier && r.status === 'idle').length;
   const showMore = !limitMsg && idleCount < left;
   const pmLen = graphemes(message);
@@ -180,6 +271,10 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
         <p className="se-note" id="se-linknote">{t('se.linkNote')}</p>
         {quota && <p className="se-note" id="se-quota" aria-live="polite">{t('se.quotaHint', { poll: quota.poll, day: quota.day, hour: quota.hour })}</p>}
         <div id="se-limit">{limitMsg && <p className="se-limit" role="alert"><span aria-hidden="true">{'⛔'}</span> {limitMsg}</p>}</div>
+        <div className="se-mode" role="group" aria-label={t('se.modeLabel')}>
+          <button type="button" data-mode="rows" aria-pressed={mode === 'rows'} onClick={() => setMode('rows')}>{t('se.modeOne')}</button>
+          <button type="button" data-mode="bulk" aria-pressed={mode === 'bulk'} onClick={() => setMode('bulk')}>{t('se.modeMany')}</button>
+        </div>
         <button type="button" className="link-btn se-pm-toggle" id="se-pm-toggle" aria-expanded={pmOpen} aria-controls="se-pm"
           onClick={() => { setPmOpen(!pmOpen); if (!pmOpen) focus('#se-pmsg'); }}>{'+ '}{t('se.pmsgToggle')}</button>
         <div className="field se-pm" id="se-pm" hidden={!pmOpen}>
@@ -187,7 +282,8 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
           <textarea className="input" id="se-pmsg" rows={2} placeholder={t('inv.pmsgPh')} aria-describedby="se-pcount" value={message} onChange={(e) => setMessage(e.target.value)} aria-invalid={pmLen > MESSAGE_MAX} />
           <div className="field__meta"><span className="counter" id="se-pcount">{t('common.counter', { n: pmLen, max: MESSAGE_MAX })}</span></div>
         </div>
-        <div id="se-rowsview">
+        <div id="se-rowsview" hidden={mode !== 'rows'}>
+          <p className="se-notice" id="se-notice" role="status" hidden={!notice}>{notice}</p>
           <ol className="se-rows" id="se-rows" aria-labelledby="se-h">
             {rows.map((r, i) => {
               if (!r.earlier) lineNo++;
@@ -228,6 +324,54 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
             })}
           </ol>
           <button type="button" className="btn btn--ghost btn--sm" id="se-more" aria-label={t('se.moreAria')} hidden={!showMore} onClick={more}>{'+ '}{t('se.more')}</button>
+        </div>
+        <div id="se-bulkview" hidden={mode !== 'bulk'}>
+          <div className="field">
+            <label className="field__label" htmlFor="se-bulk">{t('se.bulkLabel')}</label>
+            <textarea className="input se-bulk" id="se-bulk" rows={3} spellCheck={false} placeholder={t('se.bulkPh')} aria-describedby="se-bulk-hint se-bulk-err"
+              value={bulkText} disabled={busy}
+              onPaste={(e) => { e.preventDefault(); addBulk(bulkText + ' ' + e.clipboardData.getData('text')); setBulkText(''); }}
+              onChange={(e) => { const v = e.target.value; if (/[;,\n]\s*$/.test(v)) { addBulk(v); setBulkText(''); } else setBulkText(v); }}
+              onBlur={flushBulk}
+              onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); flushBulk(); } }} />
+            <p className="field__hint" id="se-bulk-hint">{tr('se.bulkHint')}</p>
+          </div>
+          <div id="se-bulk-sum" className="se-sum" aria-live="polite">
+            {!B.length ? <span className="meta">{t('se.bulkEmpty')}</span> : [
+              c.sent ? <span key="s" className="ok">{'✓ '}{t('se.sumSent', { n: c.sent })}</span> : null,
+              c.failed ? <span key="f" className="err">{t('se.sumFailed', { n: c.failed })}</span> : null,
+              c.valid || !(c.sent + c.failed + c.blocked) ? <strong key="v">{t('se.sumValid', { n: c.valid })}</strong> : null,
+              c.invalid ? <span key="i" className="err">{t('se.sumInvalid', { n: c.invalid })}</span> : null,
+              c.dup ? <span key="d" className="warn">{t('se.sumDup', { n: c.dup })}</span> : null,
+              c.already ? <span key="a" className="warn">{t('se.sumAlready', { n: c.already })}</span> : null,
+              c.blocked ? <span key="b" className="err">{t('se.sumBlocked', { n: c.blocked })}</span> : null,
+            ].filter(Boolean).flatMap((el, i) => (i ? [<span key={`sep${i}`} aria-hidden="true">{' · '}</span>, el] : [el]))}
+          </div>
+          <div className="field__error" id="se-bulk-err" role="alert">{limitMsg ? '' : bulkErr}</div>
+          <ul className="se-blist" id="se-blist" aria-label={t('se.bulkLabel')}>
+            {B.map((x) => {
+              const k = kindOf(x);
+              const cls = ({ valid: '', invalid: 'err', dup: 'warn', already: 'warn', blocked: 'err', sent: 'ok', sending: '', failed: 'err', bounced: 'err' } as Record<string, string>)[k];
+              return (
+                <li key={x.id} className={`se-bitem se-bitem--${k}`} data-kind={k}>
+                  <span className="se-bitem__addr">{x.email || x.raw}</span>
+                  {k !== 'valid' && <span className={`se-badge se-badge--${cls}`}>{k === 'sending' && <span className="spinner" aria-hidden="true" />}{k === 'sending' ? ' ' : ''}{t(`se.why.${k}` as 'se.why.invalid')}</span>}
+                  {!(x.status === 'sent' || x.status === 'sending' || x.status === 'bounced' || busy) &&
+                    <button type="button" className="se-x" data-brm={x.id} aria-label={t('se.remove', { email: x.email || x.raw })}
+                      onClick={() => { const i = B.findIndex((y) => y.id === x.id); const nx = B[i + 1] || B[i - 1]; setB((bs) => bs.filter((y) => y.id !== x.id)); focus(nx ? `[data-brm="${nx.id}"]` : '#se-bulk'); }}>{'✕'}</button>}
+                </li>
+              );
+            })}
+          </ul>
+          <div id="se-progress">{busy && <p className="se-prog"><span className="spinner" aria-hidden="true" />{' '}{t('se.sendingN', { n: B.filter((x) => x.status === 'sending').length })}</p>}</div>
+          <div className="se-bulk-actions">
+            <button type="button" className="btn btn--primary btn--sm" id="se-bsend" hidden={busy || (!c.valid && c.sent + c.failed + c.blocked > 0)} disabled={busy || !c.valid || !!bulkErr || !!limitMsg}
+              onClick={() => { const v = B.filter((x) => !x.status && kinds.get(x.id) === 'valid'); if (!bulkLimit(v.length)) void bulkCall(v, false); }}>{t('se.sendN', { n: c.valid })}</button>
+            <button type="button" className="link-btn" id="se-bclean" hidden={busy || !(c.invalid + c.dup + c.already)}
+              onClick={() => { setB((bs) => bs.filter((x) => x.status || kinds.get(x.id) === 'valid')); focus('#se-bulk'); }}>{t('se.removeProblems')}</button>
+            <button type="button" className="btn btn--secondary btn--sm" id="se-bretry" hidden={busy || !c.failed || !!limitMsg}
+              onClick={async () => { const f = B.filter((x) => x.status === 'failed'); const st = f.filter((x) => invited.has(key(x.email))), ns = f.filter((x) => !invited.has(key(x.email))); if (st.length) await bulkCall(st, true); if (ns.length) await bulkCall(ns, false); }}>{t('se.retryFailed')}</button>
+          </div>
         </div>
         <p className="privacy se-privacy">{tr('inv.privacy')}</p>
         <p className="se-adminlink"><a href={lp(`/p/${slug}/admin#${token}`)} id="se-admin">{t('se.adminLink')} {'→'}</a></p>
