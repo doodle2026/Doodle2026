@@ -132,6 +132,26 @@ Use a sending subdomain (`mail.<domain>`) to keep reputation separate from the r
 (template name, recipient domain/masked address, poll id), never tokens or full admin/edit links. `EMAIL_MODE=send` only
 in production. Notification mails contain secret links, so they must not be logged in full there either.
 
+## Ejer-login (drift)
+- **OWNER_SESSION_SECRET**: Vercel project env, Production only, type **Sensitive** (e.g. `openssl rand -base64 48`).
+  Rotating it invalidates all owner sessions (everyone is logged out). Redeploy production after changing it.
+- **Create/reset the owner** (prod DB is only reachable from Actions):
+  ```bash
+  gh secret set OWNER_PASSWORD -R doodle2026/Doodle2026          # paste the password at the prompt (not in shell history)
+  gh workflow run owner-create.yml -R doodle2026/Doodle2026 -f username=jan            # create
+  gh workflow run owner-create.yml -R doodle2026/Doodle2026 -f username=jan -f reset=true   # new password, logs out everywhere
+  gh run watch -R doodle2026/Doodle2026 $(gh run list -R doodle2026/Doodle2026 -w owner-create.yml -L1 --json databaseId -q '.[0].databaseId')
+  gh secret delete OWNER_PASSWORD -R doodle2026/Doodle2026       # remove right after
+  ```
+  The workflow pipes the password to `npm run owner:create` on stdin (see `docs/OWNER.md`); it is never echoed or passed as an argument.
+  Inputs are passed via env (injection-safe) and the username is validated.
+- **Unlock** after too many failed logins: `gh workflow run owner-unlock.yml -R doodle2026/Doodle2026 -f username=jan`.
+  Fails with a clear error if `owner:unlock` isn't in package.json yet.
+- **TRUSTED_PROXY_HOPS** must be unset/empty or `0` on Vercel (the client IP comes from `x-vercel-forwarded-for`); a wrong
+  value lets clients spoof their IP and bypass login rate limiting.
+- **Expected drift:** the migration creates a `pg_trgm` GIN index on `invitations.email` conditionally (only if the
+  extension exists). Prisma doesn't model it, so `prisma migrate diff` shows it as drift. That is expected; don't "fix" it with a migration that drops it.
+
 ## GDPR
 Data is hosted in the EU (Vercel fra1, Supabase Frankfurt). As a personal, non-commercial app a formal DPA isn't required;
 if it ever becomes commercial or processes others' data on behalf of an organisation, sign the Supabase DPA
