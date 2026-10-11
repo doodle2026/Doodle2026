@@ -845,6 +845,6 @@
     "seQuotaHour": "Only {n} invitations left this hour – remove {m}.",
     "ownerNotConfigured": "Owner login is not set up on the server.",
     "ownerRetry": "Something went wrong. Reload the page and try again.",
-    "ownerPlaceholder": "Statistics will appear here."
+    "ownerSkip": "Skip to content"
   }
 }

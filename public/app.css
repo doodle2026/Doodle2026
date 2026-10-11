@@ -39,3 +39,9 @@
   .rtable--resp td:empty{display:none}
   .rtable--resp .row-actions{display:flex;flex-wrap:wrap;gap:var(--s-2)}
 }
+
+/* Owner dashboard (§47) – 320 px fix (report upstream to Doodle UI): the single-column KPI grid used 1fr (= min-content floor),
+   so the limits table with "Heute (UTC)" pushed every card past the viewport. Allow shrinking and let the header wrap. */
+@media (max-width:639px){.okpis{grid-template-columns:minmax(0,1fr)}}
+.olim thead .num{white-space:normal}
+.okpi{min-width:0}

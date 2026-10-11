@@ -161,10 +161,10 @@ describe('owner pages', () => {
       expect(r.headers.get('referrer-policy')).toBe('no-referrer');
     }
     const anon = await fetch(BASE + '/da/owner', { redirect: 'manual' });
-    expect([303, 307, 308]).toContain(anon.status); expect(anon.headers.get('location')).toMatch(/\/da\/owner\/login$/);
+    expect([303, 307, 308]).toContain(anon.status); expect(anon.headers.get('location')).toMatch(/\/da\/owner\/login(\?|$)/);
     const u = await mkUser(); const j = jar(); await login(j, u);
     const page = await req(j, '/da/owner');
-    expect(page.status).toBe(200); expect(page.text).toContain(`Logget ind som ${u}`);
+    expect(page.status).toBe(200); expect(page.text).toContain(`Logget ind som <strong>${u}</strong>`);
     expect(page.text).not.toContain(j.cookies.get('ga_owner')!.split('.')[0]);
     const again = await req(j, '/da/owner/login'); expect(again.res.headers.get('location')).toMatch(/\/da\/owner$/);
   });
@@ -174,15 +174,15 @@ describe('owner pages', () => {
     const b = await chromium.launch({ executablePath: CHROME });
     const u = await mkUser();
     const pg = await b.newPage({ extraHTTPHeaders: { 'X-Forwarded-For': ipGen() } });
-    await pg.goto(`${BASE}/da/owner`); await pg.waitForURL(/\/da\/owner\/login$/);
+    await pg.goto(`${BASE}/da/owner`); await pg.waitForURL(/\/da\/owner\/login(\?|$)/);
     await pg.fill('#owner-user', u); await pg.fill('#owner-pw', 'wrong password!!'); await pg.click('#owner-submit');
     await pg.waitForSelector('#owner-err >> text=Forkert brugernavn eller password');
     await pg.fill('#owner-pw', PW); await pg.click('#owner-submit');
     await pg.waitForURL(/\/da\/owner$/); await pg.waitForSelector('#owner-who');
     const ck = (await pg.context().cookies()).find((c) => c.name === 'ga_owner')!;
     expect(ck.httpOnly).toBe(true); expect(ck.sameSite).toBe('Strict');
-    await pg.click('#owner-logout'); await pg.waitForURL(/\/da\/owner\/login$/);
-    await pg.goto(`${BASE}/da/owner`); await pg.waitForURL(/\/da\/owner\/login$/);
+    await pg.click('#owner-logout'); await pg.waitForURL(/\/da\/owner\/login(\?|$)/);
+    await pg.goto(`${BASE}/da/owner`); await pg.waitForURL(/\/da\/owner\/login(\?|$)/);
     await b.close();
   });
 });

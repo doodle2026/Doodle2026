@@ -8,5 +8,5 @@ export default function LogoutButton({ loginUrl }: { loginUrl: string }) {
     if (me.ok) { const { csrf } = await me.json(); await fetch('/api/owner/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrf } }); }
     location.replace(loginUrl);
   }
-  return <button type="button" className="btn btn--secondary" id="owner-logout" onClick={out}>{t('owner.logout')}</button>;
+  return <button type="button" className="btn btn--ghost btn--sm" id="owner-logout" onClick={out}>{t('owner.logout')}</button>;
 }
