@@ -15,11 +15,15 @@ const cleanName = (s: string) =>
   s.replace(/[\u0000-\u001F\u007F"<>]/g, ' ').replace(/[\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g, '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
 
 /** Split on newlines, commas and semicolons (but not inside "Name <email>"); accepts `Name <email>`. */
+/** `Name <email>` incl. quoted names with commas/semicolons ('"Lund, Jan" <a@x>') – shared by server parsing and the bulk field (H3). */
+export const NAME_ADDR_RE = /((?:"[^"\n]*"|[^,;\n<>"])*)<([^<>\n]+)>/g;
+const unquote = (n: string) => n.trim().replace(/^"(.*)"$/s, '$1').trim();
+
 export function parseRecipients(input: string | string[], alreadyInvited: Iterable<string> = []): ParsedRecipients {
   const items: string[] = [];
   for (const chunk of Array.isArray(input) ? input : [input]) {
     // `Name <email>` entries first (names may contain spaces), then split the rest on commas/semicolons/whitespace.
-    const rest = chunk.replace(/([^,;\n<>]*)<([^<>\n]+)>/g, (_, n: string, e: string) => { items.push(`${n.trim()} <${e.trim()}>`); return ' '; });
+    const rest = chunk.replace(NAME_ADDR_RE, (_, n: string, e: string) => { items.push(`${unquote(n)} <${e.trim()}>`); return ' '; });
     items.push(...rest.split(/[\s,;]+/));
   }
   for (let k = items.length - 1; k >= 0; k--) { items[k] = items[k].trim(); if (!items[k]) items.splice(k, 1); }
