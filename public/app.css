@@ -4,6 +4,6 @@
 .vgrid td.is-past .tri,.vcard.is-past .seg button{cursor:not-allowed}
 .past-badge{display:inline-block;margin-top:2px;padding:0 6px;border-radius:999px;font-size:.75rem;font-weight:600;color:var(--c-muted);border:1px solid currentColor}
 
-/* L8: 'Sendt ✓' / status buttons never wrap on narrow screens */
-.se-btn{white-space:nowrap}
+/* iOS fix (ios-button-fix.md): field may shrink fully so the nowrap button never overflows at 320 px. */
+.se-input{min-width:0}
 .se-bitem__name{font-weight:600}

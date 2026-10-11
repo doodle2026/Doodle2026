@@ -261,7 +261,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
     const by = new Map(results.map((r) => [r.email, r.status]));
     if (data.remaining) setQuota(data.remaining as Quota);
     if (isIpLimit(res?.status, data)) startIpWait(parseRetryAfter(res!.headers.get('Retry-After')));
-    const final = list.map((x) => { const s = res?.ok ? by.get(key(x.email)) : undefined; return { id: x.id, status: (s === 'sent' ? 'sent' : s === 'blocked' ? 'blocked' : 'failed') as BSt }; });
+    const final = list.map((x) => { const s = res?.ok ? by.get(key(x.email)) : undefined; return { id: x.id, status: (s === 'sent' || s === 'not_failed' ? 'sent' : s === 'blocked' ? 'blocked' : 'failed') as BSt }; });
     const fm = new Map(final.map((f) => [f.id, f.status]));
     setB((bs) => bs.map((x) => (fm.has(x.id) ? { ...x, status: fm.get(x.id)! } : x)));
     setBusy(false);

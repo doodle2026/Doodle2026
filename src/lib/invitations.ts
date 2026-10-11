@@ -398,12 +398,14 @@ export async function retryInvite(eventId: number, email: unknown) {
 /** Retry several failed invitations in ONE call (bulk "Prøv de fejlede igen", §46.7): per-address results sent|failed|blocked. */
 export async function retryFailed(eventId: number, emails: unknown) {
   if (!Array.isArray(emails) || !emails.length || emails.length > MAX_PER_SEND) throw new ApiError(400, [`Angiv 1–${MAX_PER_SEND} adresser.`], { code: 'bad_recipients' });
-  const results: { email: string; status: 'sent' | 'failed' | 'blocked' }[] = [];
+  const results: { email: string; status: 'sent' | 'failed' | 'blocked' | 'not_failed' }[] = [];
   for (const e of emails) {
     const email = String(e).trim().toLowerCase();
     try { const r = await retryInvite(eventId, email); results.push({ email, status: r.sent ? 'sent' : 'failed' }); } catch (err) {
       if (err instanceof ApiError && err.status === 429) throw new ApiError(429, err.errors, { ...err.extra, results, remaining: await remainingNow(eventId) });
-      results.push({ email, status: err instanceof ApiError && err.extra.code === 'blocked' ? 'blocked' : 'failed' });
+      const code = err instanceof ApiError ? err.extra.code : undefined;
+      // tester (#25): an address that isn't in a failed state (e.g. already sent) is reported as not_failed – nothing is re-sent
+      results.push({ email, status: code === 'blocked' ? 'blocked' : code === 'not_failed' ? 'not_failed' : 'failed' });
     }
   }
   return { results };
