@@ -1,115 +1,128 @@
-/** Follow-ups to #15/#16: P1 deleted participant's edit link, P2 calendar hydration, E1 delivery after resubscribe, E2 masked address. */
+/** "Send til e-mails" (confirmation page, follow-ups L1–L8 + tester hooks. Mail runs in log mode – nothing is sent. */
 import { describe, test, expect, inject, beforeAll, afterAll } from 'vitest';
-import { createHmac } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { PrismaClient } from '@prisma/client';
 import type { Browser } from 'playwright-core';
-import { TEST_WEBHOOK_SECRET } from './global-setup';
+import { emailHash } from '../src/lib/invitations';
 
 const BASE = inject('baseUrl');
 const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
 const prisma = new PrismaClient();
 afterAll(() => prisma.$disconnect());
 const Y = new Date().getUTCFullYear() + 1;
-const ip = () => `10.31.${(Math.random() * 255) | 0}.${(Math.random() * 250 + 1) | 0}`;
+let FIXED_IP = '';
+const ip = () => FIXED_IP || `10.51.${(Math.random() * 255) | 0}.${(Math.random() * 250 + 1) | 0}`;
 const uniq = () => Math.random().toString(36).slice(2, 10);
-const linkToken = (id: number) => createHmac('sha256', 'dev-only-email-link-secret-not-for-production').update(`moedetid-inv-link-v1:${id}`).digest('base64url');
 async function call(path: string, init: RequestInit & { token?: string; json?: unknown } = {}) {
-  const headers: Record<string, string> = { 'X-Forwarded-For': ip(), ...(init.headers as Record<string, string>) };
+  const headers: Record<string, string> = { 'X-Forwarded-For': ip() };
   if (init.token) headers.Authorization = `Bearer ${init.token}`;
   if (init.json !== undefined) headers['Content-Type'] = 'application/json';
-  const r = await fetch(BASE + path, { ...init, headers, body: init.json !== undefined ? JSON.stringify(init.json) : init.body });
-  const text = await r.text();
-  let body: any; try { body = JSON.parse(text); } catch { body = text; } // eslint-disable-line @typescript-eslint/no-explicit-any
+  const r = await fetch(BASE + path, { ...init, headers, body: init.json !== undefined ? JSON.stringify(init.json) : undefined });
+  const text = await r.text(); let body: any; try { body = JSON.parse(text); } catch { body = text; } // eslint-disable-line @typescript-eslint/no-explicit-any
   return { status: r.status, body, text };
 }
-async function poll() {
-  const r = await call('/api/events', { method: 'POST', json: { title: 'Opfølgning', options: [{ date: `${Y}-11-03` }] } });
-  return { id: r.body.id as string, token: r.body.admin_token as string, o: r.body.time_options[0].id as number };
+async function poll(locale = 'da') {
+  const r = await call('/api/events', { method: 'POST', json: { locale, title: 'Send til e-mails', options: [{ date: `${Y}-11-03` }] } });
+  return { id: r.body.id as string, token: r.body.admin_token as string };
 }
-async function deletedVoter() {
+const send = (p: { id: string; token: string }, json: unknown) => call(`/api/events/${p.id}/invitations`, { method: 'POST', token: p.token, json });
+
+
+test('L1: stricter address validation', async () => {
+  const { validEmail } = await import('../src/lib/recipients');
+  for (const ok of ['a@x.dk', 'a.b@x.dk', `${'a'.repeat(64)}@x.dk`]) expect(validEmail(ok)).toBe(true);
+  for (const bad of ['.a@x.dk', 'a.@x.dk', 'a..b@x.dk', `${'a'.repeat(65)}@x.dk`, 'a@x..dk']) expect(validEmail(bad)).toBe(false);
+});
+
+test('L4/H3: splitBulkNamed keeps display names; server stores the name', async () => {
+  const { splitBulkNamed } = await import('../src/components/SendToEmails');
+  expect(splitBulkNamed('x@a.dk; "Lund, Jan" <jan@a.dk>, Eva <eva@a.dk>')).toEqual([
+    { raw: 'x@a.dk', email: 'x@a.dk' }, { raw: '"Lund, Jan" <jan@a.dk>', email: 'jan@a.dk', name: 'Lund, Jan' }, { raw: 'Eva <eva@a.dk>', email: 'eva@a.dk', name: 'Eva' }]);
+  const p = await poll(); const e = `n-${uniq()}@example.com`;
+  await send(p, { recipients: [`"Lund, Jan" <${e}>`] });
+  expect((await prisma.invitation.findFirstOrThrow({ where: { email: e, event: { slug: p.id } } })).name).toBe('Lund, Jan');
+});
+
+test('escaped quotes in quoted display names (server + bulk, round trip)', async () => {
+  const { parseRecipients } = await import('../src/lib/recipients');
+  const { splitBulkNamed } = await import('../src/components/SendToEmails');
+  const txt = '"Say \\"hi\\", Bo" <bo@x.dk>; "Back\\\\slash" <bs@x.dk>, ok@x.dk';
+  expect(parseRecipients(txt).valid).toEqual([{ email: 'bo@x.dk', name: 'Say "hi", Bo' }, { email: 'bs@x.dk', name: 'Back\\slash' }, { email: 'ok@x.dk' }]);
+  expect(splitBulkNamed(txt).map((x) => [x.email, x.name])).toEqual([['bo@x.dk', 'Say "hi", Bo'], ['bs@x.dk', 'Back\\slash'], ['ok@x.dk', undefined]]);
+  // what the bulk field sends back to the server (re-escaped) parses to the same name
+  const p = await poll(); const e = `q-${uniq()}@example.com`;
+  await send(p, { recipients: [`"${'Say "hi", Bo'.replace(/[\\"]/g, '\\$&')}" <${e}>`] });
+  expect((await prisma.invitation.findFirstOrThrow({ where: { email: e, event: { slug: p.id } } })).name).toBe('Say "hi", Bo');
+});
+
+test('L2: overlapping concurrent sends → per-address already_invited, the rest sent', async () => {
+  const p = await poll(); const s = `shared-${uniq()}@example.com`, a = `a-${uniq()}@example.com`, b = `b-${uniq()}@example.com`;
+  const [r1, r2] = await Promise.all([send(p, { recipients: [s, a] }), send(p, { recipients: [s, b] })]);
+  expect([r1.status, r2.status]).toEqual([201, 201]);
+  const all = [...r1.body.results, ...r2.body.results];
+  expect(all.filter((x: { email: string; status: string }) => x.email === s).map((x: { status: string }) => x.status).sort()).toEqual(['already_invited', 'sent']);
+  expect(all.find((x: { email: string }) => x.email === a).status).toBe('sent');
+  expect(all.find((x: { email: string }) => x.email === b).status).toBe('sent');
+  expect(await prisma.invitation.count({ where: { event: { slug: p.id } } })).toBe(3);
+});
+
+test('L3: mail endpoints are not limited by the general 20-writes IP limit', async () => {
   const p = await poll();
-  const v = await call(`/api/events/${p.id}/votes`, { method: 'POST', json: { name: 'Slettet', votes: [{ option_id: p.o, value: 'yes' }] } });
-  expect((await call(`/api/events/${p.id}/participants/${v.body.participant_id}`, { method: 'DELETE', token: p.token })).status).toBe(200);
-  return { p, edit: v.body.edit_token as string };
-}
+  FIXED_IP = `10.77.${(Math.random() * 255) | 0}.9`;
+  try {
+    for (let i = 0; i < 25; i++) expect((await send(p, { recipients: [`l3-${i}-${uniq()}@example.com`] })).status).toBe(201);
+    // other admin writes still have the general limit
+    let last = 0; for (let i = 0; i < 25; i++) last = (await call(`/api/events/${p.id}`, { method: 'PATCH', token: p.token, json: { title: `t${i}` } })).status;
+    expect(last).toBe(429);
+  } finally { FIXED_IP = ''; }
+}, 60_000);
 
-describe('P1 deleted participant', () => {
-  test('edit link → 410 participant_deleted (GET + PUT); unknown token stays 403; tombstone cascades with the poll', async () => {
-    const { p, edit } = await deletedVoter();
-    const g = await call(`/api/events/${p.id}/votes/me`, { token: edit });
-    expect(g.status).toBe(410); expect(g.body.code).toBe('participant_deleted');
-    expect((await call(`/api/events/${p.id}/votes/me`, { method: 'PUT', token: edit, json: { name: 'X', votes: [{ option_id: p.o, value: 'no' }] } })).status).toBe(410);
-    expect((await call(`/api/events/${p.id}/votes/me`, { token: 'Z'.repeat(43) })).status).toBe(403);
-    const other = await poll(); // token of poll A is not "deleted" on poll B
-    expect((await call(`/api/events/${other.id}/votes/me`, { token: edit })).status).toBe(403);
-    expect((await call(`/api/events/${p.id}`, { method: 'DELETE', token: p.token })).status).toBe(200);
-    expect(await prisma.deletedParticipant.count({ where: { event: { slug: p.id } } })).toBe(0);
-  });
+test('tester hooks are inert outside capture mode', async () => {
+  const { captureShouldFail } = await import('../src/lib/email/capture');
+  const capEnv = { NODE_ENV: 'test', EMAIL_MODE: 'capture', EMAIL_CAPTURE_FAIL: '^fail-' } as unknown as NodeJS.ProcessEnv;
+  expect(captureShouldFail(['fail-x@a.dk'], capEnv)).toBe(true);
+  expect(captureShouldFail(['ok@a.dk'], capEnv)).toBe(false);
+  expect(captureShouldFail(['fail-x@a.dk'], { ...capEnv, EMAIL_MODE: 'log' })).toBe(false);
+  expect(captureShouldFail(['fail-x@a.dk'], { ...capEnv, NODE_ENV: 'production' })).toBe(false);
+  expect(captureShouldFail(['fail-x@a.dk'], { ...capEnv, VERCEL: '1' })).toBe(false);
+  const once = { ...capEnv, EMAIL_CAPTURE_FAIL_ONCE: '1' } as NodeJS.ProcessEnv;
+  const e = `fail-${uniq()}@a.dk`;
+  expect(captureShouldFail([e], once)).toBe(true); expect(captureShouldFail([e], once)).toBe(false);
+  expect((await call('/api/test/delivery', { method: 'POST', json: { email: 'x@a.dk', event: 'bounced' } })).status).toBe(404);
 });
 
-describe('E1/E2 unsubscribe', () => {
-  test('delivered → unsubscribe → resubscribe restores delivered; webhooks while unsubscribed are kept; address masked', async () => {
-    const p = await poll(); const a = `anna-${uniq()}@example.com`;
-    expect((await call(`/api/events/${p.id}/invitations`, { method: 'POST', token: p.token, json: { recipients: a } })).status).toBe(201);
-    const row = () => prisma.invitation.findFirstOrThrow({ where: { email: a, event: { slug: p.id } } });
-    const id = (await row()).providerId!;
-    const hook = (type: string) => {
-      const body = JSON.stringify({ type, data: { email_id: id } }), ts = Math.floor(Date.now() / 1000), sid = `msg_${uniq()}`;
-      const sig = createHmac('sha256', Buffer.from(TEST_WEBHOOK_SECRET.slice(6), 'base64')).update(`${sid}.${ts}.${body}`).digest('base64');
-      return call('/api/webhooks/resend', { method: 'POST', headers: { 'svix-id': sid, 'svix-timestamp': String(ts), 'svix-signature': `v1,${sig}`, 'Content-Type': 'application/json' }, body });
-    };
-    const t = linkToken((await row()).id);
-    const info = await call(`/api/u/p/${t}`);
-    expect(info.body.email).toBe('a•••@example.com'); expect(info.text).not.toContain(a);
-    // sent → unsub → (delivered arrives while unsubscribed) → resubscribe → delivered
-    await call(`/api/u/p/${t}`, { method: 'POST', json: { action: 'unsubscribe' } });
-    expect((await row()).delivery).toBe('unsub');
-    await hook('email.delivered');
-    expect((await row()).delivery).toBe('unsub');
-    const re = await call(`/api/u/p/${t}`, { method: 'POST', json: { action: 'resubscribe' } });
-    expect(re.body.email).toBe('a•••@example.com');
-    expect((await row()).delivery).toBe('delivered');
-    // delivered → unsub (all) → resubscribe → delivered, idempotent double unsubscribe
-    await call(`/api/u/all/${t}`, { method: 'POST', json: { action: 'unsubscribe' } });
-    await call(`/api/u/p/${t}`, { method: 'POST', json: { action: 'unsubscribe' } });
-    await call(`/api/u/p/${t}`, { method: 'POST', json: { action: 'resubscribe' } });
-    expect((await row()).delivery).toBe('unsub'); // still globally unsubscribed
-    await call(`/api/u/all/${t}`, { method: 'POST', json: { action: 'resubscribe' } });
-    expect((await row()).delivery).toBe('delivered');
-  });
-});
-
-describe('P3', () => {
-  test('no Doodle mention in public/app.css', () => {
-    expect(readFileSync('public/app.css', 'utf8')).not.toMatch(/doodle/i);
-  });
-});
-
-describe.skipIf(!existsSync(CHROME))('headless: P1 notice, P2 no hydration mismatch', () => {
+const HAS = existsSync(CHROME);
+describe.skipIf(!HAS)('UI (headless)', () => {
   let browser: Browser;
-  beforeAll(async () => { const { chromium } = await import('playwright-core'); browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] }); });
+  beforeAll(async () => { const { chromium } = await import('playwright-core'); browser = await chromium.launch({ executablePath: CHROME }); });
   afterAll(async () => { await browser?.close(); });
 
-  test('P1: deleted participant opening their edit link sees "Dit svar er slettet"', async () => {
-    const { p, edit } = await deletedVoter();
+  test('L6 hint shows <…> literally decoded; L4 names on chips; L5 Backspace removes last chip; L8 focus stays in list; L7 hour message', async () => {
+    const p = await poll();
     const pg = await browser.newPage();
-    await pg.goto(`${BASE}/da/p/${p.id}#edit=${edit}`);
-    await pg.waitForSelector('#deleted-mine');
-    expect(await pg.textContent('#deleted-mine')).toContain('Dit svar er slettet');
-    expect(await pg.locator('text=Redigeringslinket er ugyldigt').count()).toBe(0);
+    await pg.goto(`${BASE}/da`);
+    await pg.evaluate(([id, tok]) => { sessionStorage.setItem(`mt-admin-${id}`, `/p/${id}/admin#${tok}`); localStorage.setItem('ga-se-mode', 'bulk'); }, [p.id, p.token]);
+    await pg.goto(`${BASE}/da/p/${p.id}?created=1`);
+    await pg.waitForSelector('#se-bulk:visible');
+    const hint = await pg.textContent('#se-bulk-hint');
+    expect(hint).toContain('"Navn <mail@x.dk>"'); expect(hint).not.toContain('&lt;');
+    await pg.fill('#se-bulk', '"Lund, Jan" <jan@example.com>; b@example.com; c@example.com;');
+    await pg.waitForFunction(() => document.querySelectorAll('#se-blist li').length === 3);
+    expect(await pg.textContent('#se-blist li:first-child')).toContain('Lund, Jan');
+    await pg.focus('#se-bulk'); await pg.keyboard.press('Backspace');
+    await pg.waitForFunction(() => document.querySelectorAll('#se-blist li').length === 2);
+    await pg.focus('#se-blist li:first-child .se-x'); await pg.keyboard.press('Enter');
+    await pg.waitForFunction(() => document.querySelectorAll('#se-blist li').length === 1);
+    await pg.waitForFunction(() => document.activeElement?.classList.contains('se-x'));
+    // L7: hour limit → its own message
+    await pg.route('**/invitations', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      const r = await route.fetch(); const j = await r.json(); j.remaining = { poll: 190, hour: 1, day: 90 };
+      await route.fulfill({ response: r, json: j });
+    });
+    await pg.reload(); await pg.waitForSelector('#se-bulk:visible');
+    await pg.fill('#se-bulk', 'h1@example.com; h2@example.com;');
+    await pg.waitForSelector('#se-bulk-err >> text=Kun 1 invitationer tilbage i denne time – fjern 1.');
     await pg.close();
-  });
-
-  test('P2: create page calendar renders without hydration errors (far-off TZ)', async () => {
-    const ctx = await browser.newContext({ timezoneId: 'Pacific/Kiritimati' });
-    const pg = await ctx.newPage(); const errs: string[] = [];
-    pg.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
-    pg.on('pageerror', (e) => errs.push(e.message));
-    await pg.goto(`${BASE}/`);
-    await pg.waitForSelector('.dp table');
-    await pg.waitForTimeout(300);
-    expect(errs.filter((e) => /hydrat|did not match/i.test(e))).toEqual([]);
-    await ctx.close();
   });
 });

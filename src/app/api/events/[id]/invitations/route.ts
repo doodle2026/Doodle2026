@@ -22,4 +22,4 @@ export const POST = adminRoute(async ({ req, eventId, body }) => {
   // Same minimum response time whether or not anything was actually sent (rejected addresses aren't distinguishable by timing).
   const wait = MIN_MS - (Date.now() - started); if (wait > 0) await new Promise((res) => setTimeout(res, wait + Math.random() * 100));
   return NextResponse.json(out, { status: 201 });
-});
+}, { ownLimit: true });

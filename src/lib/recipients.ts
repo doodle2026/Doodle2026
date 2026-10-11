@@ -6,18 +6,24 @@ export const NAME_MAX = 100;
 
 const EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 export const normEmail = (e: string) => e.trim().toLowerCase();
-export const validEmail = (e: string) => e.length <= 254 && EMAIL_RE.test(e) && !e.includes('..') && /\.[A-Za-z]{2,}$/.test(e);
+/** L1: also local part ≤ 64, no leading/trailing dot in the local part, no consecutive dots anywhere. */
+export const validEmail = (e: string) => {
+  if (e.length > 254 || !EMAIL_RE.test(e) || e.includes('..') || !/\.[A-Za-z]{2,}$/.test(e)) return false;
+  const local = e.slice(0, e.lastIndexOf('@'));
+  return local.length >= 1 && local.length <= 64 && !local.startsWith('.') && !local.endsWith('.');
+};
 
 export interface Recipient { email: string; name?: string }
 export interface ParsedRecipients { valid: Recipient[]; invalid: string[]; duplicates: string[]; alreadyInvited: string[] }
 
 const cleanName = (s: string) =>
-  s.replace(/[\u0000-\u001F\u007F"<>]/g, ' ').replace(/[\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g, '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
+  s.replace(/[\u0000-\u001F\u007F<>]/g, ' ').replace(/[\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g, '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
 
 /** Split on newlines, commas and semicolons (but not inside "Name <email>"); accepts `Name <email>`. */
 /** `Name <email>` incl. quoted names with commas/semicolons ('"Lund, Jan" <a@x>') – shared by server parsing and the bulk field (H3). */
-export const NAME_ADDR_RE = /((?:"[^"\n]*"|[^,;\n<>"])*)<([^<>\n]+)>/g;
-const unquote = (n: string) => n.trim().replace(/^"(.*)"$/s, '$1').trim();
+export const NAME_ADDR_RE = /((?:"(?:[^"\\\n]|\\.)*"|[^,;\n<>"])*)<([^<>\n]+)>/g;
+/** Strip the outer quotes of a quoted display name and undo backslash escapes (`"Say \\"hi\\", Bo"` → `Say "hi", Bo`). */
+export const unquote = (n: string) => { n = n.trim(); const m = /^"(.*)"$/s.exec(n); return (m ? m[1].replace(/\\(.)/g, '$1') : n).trim(); };
 
 export function parseRecipients(input: string | string[], alreadyInvited: Iterable<string> = []): ParsedRecipients {
   const items: string[] = [];

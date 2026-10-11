@@ -18,12 +18,12 @@ type Handler = (a: { req: Request; slug: string; eventId: number; body: unknown;
  * Wraps admin endpoints: rate limit (writes), JSON-only + size cap (writes), Bearer token check
  * (constant-time), uniform no-store/noindex/no-referrer headers, safe error logging.
  */
-export function adminRoute(handler: Handler, opts: { write?: boolean; json?: boolean; allowEmptyBody?: boolean } = {}) {
+export function adminRoute(handler: Handler, opts: { write?: boolean; json?: boolean; allowEmptyBody?: boolean; /** L3: endpoint applies its own (mail) limit instead of the general write limit */ ownLimit?: boolean } = {}) {
   const write = opts.write ?? true, json = opts.json ?? write, allowEmptyBody = opts.allowEmptyBody ?? false;
   return async (req: Request, ctx: Ctx): Promise<Response> => {
     const res = await (async () => {
       try {
-        if (write) { const limited = rateLimit(req); if (limited) return limited; }
+        if (write && !opts.ownLimit) { const limited = rateLimit(req); if (limited) return limited; }
         let body: unknown = undefined;
         if (json) {
           const r = await readJson(req, LIMITS.bodyBytes, allowEmptyBody);

@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '@/i18n/use';
 import { useLp } from '@/i18n/link';
-import { graphemes, MESSAGE_MAX, NAME_ADDR_RE, validEmail } from '@/lib/recipients';
+import { graphemes, MESSAGE_MAX, NAME_ADDR_RE, unquote, validEmail } from '@/lib/recipients';
 
 type Invitee = { email: string; status: string }; // §46.8 invitations[] (sent|failed|bounced; opt-outs never shown as such)
 type Quota = { poll: number; hour: number; day: number }; // §46.8 QuotaRemaining
@@ -21,14 +21,23 @@ const POLL_MS = 20_000;
 let uid = 0;
 /** Unsent drafts survive remounts (share panel hidden/shown) but not a reload (§46.2: drafts are lost on reload). */
 type BSt = '' | 'sending' | 'sent' | 'failed' | 'blocked' | 'bounced';
-type BItem = { id: number; raw: string; email: string; status: BSt };
+type BItem = { id: number; raw: string; email: string; name?: string; status: BSt };
 type Kind = 'valid' | 'invalid' | 'dup' | 'already';
 const drafts = new Map<string, { rows: Row[]; message: string; bulk?: BItem[] }>();
 const MODE_KEY = 'ga-se-mode';
 /** Split pasted text: ; , newline/whitespace, and Outlook "Name <x@y>" (keeps only the address). */
-export function splitBulk(text: string): string[] {
-  return text.replace(NAME_ADDR_RE, (_m: string, _n: string, e: string) => ` ${e} `).split(/[\s,;]+/).map((x) => x.trim().replace(/^<|>$/g, '')).filter(Boolean);
+/** Split pasted text into addresses, keeping display names from `Name <x@y>` / `"Lund, Jan" <x@y>` (L4, H3). */
+export function splitBulkNamed(text: string): { raw: string; email: string; name?: string }[] {
+  const out: { raw: string; email: string; name?: string; at: number }[] = [];
+  const rest = text.replace(NAME_ADDR_RE, (m: string, n: string, e: string, at: number) => {
+    const name = unquote(n);
+    out.push({ raw: m.trim(), email: e.trim(), ...(name ? { name } : {}), at }); return ' '.repeat(m.length);
+  });
+  let pos = 0;
+  for (const part of rest.split(/([\s,;]+)/)) { if (part && !/^[\s,;]+$/.test(part)) out.push({ raw: part, email: part.replace(/^<|>$/g, ''), at: pos }); pos += part.length; }
+  return out.sort((a, b) => a.at - b.at).map(({ at: _at, ...x }) => x); // eslint-disable-line @typescript-eslint/no-unused-vars
 }
+export const splitBulk = (text: string): string[] => splitBulkNamed(text).map((x) => x.email);
 const newRow = (value = '', status: St = 'idle', earlier = false): Row => ({ id: ++uid, value, status, touched: !!value, earlier });
 /** trim, drop mailto:, lower-case the domain (§46.3). */
 export const normSe = (v: string) => { v = v.trim().replace(/^mailto:/i, ''); const i = v.lastIndexOf('@'); return i < 0 ? v : v.slice(0, i) + '@' + v.slice(i + 1).toLowerCase(); };
@@ -199,14 +208,25 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
   for (const x of B) { if (x.status === 'sent' || x.status === 'bounced') c.sent++; else if (x.status === 'failed') c.failed++; else if (x.status === 'blocked') c.blocked++; else if (!x.status) c[kinds.get(x.id)!]++; }
   const bulkLimit = (n: number) => {
     if (limitMsg) return limitMsg;
-    const pollL = Math.max(0, quota?.poll ?? Infinity), dayL = Math.max(0, Math.min(quota?.day ?? Infinity, quota?.hour ?? Infinity));
+    const pollL = Math.max(0, quota?.poll ?? Infinity), dayL = Math.max(0, quota?.day ?? Infinity), hourL = Math.max(0, quota?.hour ?? Infinity);
     if (n > 50) return t('se.max50', { n: n - 50 });
-    if (n > dayL) return t('se.quotaDay', { n: dayL, m: n - dayL });
+    if (n > dayL && dayL <= hourL) return t('se.quotaDay', { n: dayL, m: n - dayL });
+    if (n > hourL) return t('app.seQuotaHour', { n: hourL, m: n - hourL }); // L7: hour limit has its own message
     if (n > pollL) return t('se.quotaPoll', { n: pollL, m: n - pollL });
     return '';
   };
   const bulkErr = busy || !c.valid ? '' : bulkLimit(c.valid);
-  const addBulk = (text: string) => { const parts = splitBulk(text); if (parts.length) setB((bs) => [...bs, ...parts.map((raw) => ({ id: ++uid, raw, email: normSe(raw), status: '' as BSt }))]); };
+  const toItems = (text: string): BItem[] => splitBulkNamed(text).map((x) => ({ id: ++uid, raw: x.raw, email: normSe(x.email), ...(x.name ? { name: x.name } : {}), status: '' as BSt }));
+  const addBulk = (text: string) => { const items = toItems(text); if (items.length) setB((bs) => [...bs, ...items]); };
+  const removable = (y: BItem) => !(y.status === 'sent' || y.status === 'sending' || y.status === 'bounced');
+  /** L8: after removing a chip, focus stays in the list (next removable chip, else previous, else the field). */
+  const removeChip = (id: number) => {
+    const i = B.findIndex((y) => y.id === id);
+    const nx = B.slice(i + 1).find(removable) ?? B.slice(0, i).reverse().find(removable);
+    setB((bs) => bs.filter((y) => y.id !== id));
+    requestAnimationFrame(() => requestAnimationFrame(() => rootRef.current?.querySelector<HTMLElement>(nx ? `[data-brm="${nx.id}"]` : '#se-bulk')?.focus()));
+    say(t('se.remove', { email: B[i]?.email ?? '' }));
+  };
   const flushBulk = () => { if (bulkText.trim()) { addBulk(bulkText); setBulkText(''); } };
   const summary = (res: { status: string }[]) => {
     const n = (s: string) => res.filter((x) => x.status === s).length;
@@ -218,7 +238,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
     setBusy(true); setB((bs) => bs.map((x) => (ids.has(x.id) ? { ...x, status: 'sending' } : x))); say(t('se.sendingN', { n: list.length }));
     let res: Response | null = null; let data: Record<string, unknown> = {};
     try {
-      ({ res, data } = await api(retry ? '/retry' : '', { method: 'POST', body: JSON.stringify(retry ? { emails: list.map((x) => key(x.email)) } : { recipients: list.map((x) => x.email), message: message.trim() || undefined, locale }) }));
+      ({ res, data } = await api(retry ? '/retry' : '', { method: 'POST', body: JSON.stringify(retry ? { emails: list.map((x) => key(x.email)) } : { recipients: list.map((x) => (x.name ? `"${x.name.replace(/[\\"]/g, '\\$&')}" <${x.email}>` : x.email)), message: message.trim() || undefined, locale }) }));
     } catch { /* network → all failed */ }
     const results = (data.results as { email: string; status: string }[] | undefined) ?? [];
     const by = new Map(results.map((r) => [r.email, r.status]));
@@ -243,7 +263,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
       if (bulkText.trim()) flushBulk();
       focus('#se-bulk');
     } else {
-      const all = bulkText.trim() ? [...B, ...splitBulk(bulkText).map((raw) => ({ id: ++uid, raw, email: normSe(raw), status: '' as BSt }))] : B;
+      const all = bulkText.trim() ? [...B, ...toItems(bulkText)] : B;
       const seen = new Set<string>(); let nd = 0; const keep: BItem[] = [];
       for (const x of all) { const k = key(x.email); if (!x.status && seen.has(k)) { nd++; continue; } seen.add(k); keep.push(x); }
       setBulkText(''); setB([]);
@@ -341,8 +361,11 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
               onPaste={(e) => { e.preventDefault(); addBulk(bulkText + ' ' + e.clipboardData.getData('text')); setBulkText(''); }}
               onChange={(e) => { const v = e.target.value; if (/[;,\n]\s*$/.test(v)) { addBulk(v); setBulkText(''); } else setBulkText(v); }}
               onBlur={flushBulk}
-              onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); flushBulk(); } }} />
-            <p className="field__hint" id="se-bulk-hint">{tr('se.bulkHint')}</p>
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); flushBulk(); }
+                else if (e.key === 'Backspace' && !bulkText) { const last = [...B].reverse().find(removable); if (last) { e.preventDefault(); setB((bs) => bs.filter((y) => y.id !== last.id)); say(t('se.remove', { email: last.email })); } } // L5
+              }} />
+            <p className="field__hint" id="se-bulk-hint">{t('se.bulkHint').replace(/&lt;/g, '<').replace(/&gt;/g, '>')}</p>
           </div>
           <div id="se-bulk-sum" className="se-sum" aria-live="polite">
             {!B.length ? <span className="meta">{t('se.bulkEmpty')}</span> : [
@@ -362,11 +385,11 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
               const cls = ({ valid: '', invalid: 'err', dup: 'warn', already: 'warn', blocked: 'err', sent: 'ok', sending: '', failed: 'err', bounced: 'err' } as Record<string, string>)[k];
               return (
                 <li key={x.id} className={`se-bitem se-bitem--${k}`} data-kind={k}>
-                  <span className="se-bitem__addr">{x.email || x.raw}</span>
+                  <span className="se-bitem__addr">{x.name ? <><span className="se-bitem__name">{x.name}</span>{' '}<span className="meta">{x.email}</span></> : (x.email || x.raw)}</span>
                   {k !== 'valid' && <span className={`se-badge se-badge--${cls}`}>{k === 'sending' && <span className="spinner" aria-hidden="true" />}{k === 'sending' ? ' ' : ''}{t(`se.why.${k}` as 'se.why.invalid')}</span>}
                   {!(x.status === 'sent' || x.status === 'sending' || x.status === 'bounced' || busy) &&
                     <button type="button" className="se-x" data-brm={x.id} aria-label={t('se.remove', { email: x.email || x.raw })}
-                      onClick={() => { const i = B.findIndex((y) => y.id === x.id); const nx = B[i + 1] || B[i - 1]; setB((bs) => bs.filter((y) => y.id !== x.id)); focus(nx ? `[data-brm="${nx.id}"]` : '#se-bulk'); }}>{'✕'}</button>}
+                      onClick={() => removeChip(x.id)}>{'✕'}</button>}
                 </li>
               );
             })}

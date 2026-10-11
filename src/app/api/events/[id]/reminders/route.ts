@@ -11,4 +11,4 @@ export const POST = adminRoute(async ({ req, eventId }) => {
   const limited = rateLimit(req, 'mail'); if (limited) return limited;
   const r = await sendReminder(eventId);
   return NextResponse.json({ ...r, ...(await listInvitations(eventId)) }, { status: 201 });
-}, { json: false });
+}, { json: false, ownLimit: true });

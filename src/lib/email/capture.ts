@@ -52,3 +52,22 @@ export function recordMail(m: Omit<CapturedMail, 'id' | 'at'>, env: Env = proces
 }
 export const capturedMails = () => [...store()];
 export const clearCaptured = () => { store().length = 0; };
+
+/**
+ * Tester hook (capture mode only): EMAIL_CAPTURE_FAIL=<regex> makes sends to matching recipients fail (as a provider error);
+ * with EMAIL_CAPTURE_FAIL_ONCE=1 each matching address fails only the first time. Inert unless capture is active.
+ */
+export function captureShouldFail(to: string[], env: Env = process.env): boolean {
+  const pat = env.EMAIL_CAPTURE_FAIL;
+  if (!pat || !captureActive(env)) return false;
+  let re: RegExp; try { re = new RegExp(pat, 'i'); } catch { return false; }
+  const hit = to.find((x) => re.test(x));
+  if (!hit) return false;
+  if (env.EMAIL_CAPTURE_FAIL_ONCE === '1') {
+    const g = globalThis as { __gaCaptureFailed?: Set<string> };
+    g.__gaCaptureFailed ??= new Set();
+    if (g.__gaCaptureFailed.has(hit.toLowerCase())) return false;
+    g.__gaCaptureFailed.add(hit.toLowerCase());
+  }
+  return true;
+}

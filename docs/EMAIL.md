@@ -27,7 +27,7 @@ API (all admin-token, JSON): `GET /api/events/:id/invitations` (status list, lim
 - ✅ Personal message: plain text, ≤ 1 000 graphemes ("Beskeden er N tegn for lang."), control/bidi chars stripped, escaped by the template, rejected if it contains admin/edit/invite links.
 - ✅ From: `"<organizer> via GrabAday" <EMAIL_FROM address>`, sanitized name, **no Reply-To**; open/click tracking off (no pixels); one mail per recipient (batch API), idempotency key `invite:<pollId>:<email>`.
 - ✅ Only the public `/p/<id>` link (render guard throws on admin/edit links).
-- ✅ Per-recipient delivery status: queued → sent → delivered / failed / bounced / unsub, shown in the admin view with filters.
+- ✅ Per-recipient delivery status: queued → sent → delivered / failed / bounced / unsub internally. The admin view and API never say why an address can't receive mail: bounced and unsubscribed both show the neutral "⊘ Kan ikke sendes til denne adresse" (`blocked`, filter "Kan ikke sendes"). The text "Modtageren har frabedt sig mails" is not used anywhere.
 
 ## Reminders – implemented
 - ✅ Manual; per poll max one per 24 h and 3 in total; none to closed polls; counter bumped under a row lock (`SELECT … FOR UPDATE`) so parallel clicks can't exceed the limits.
@@ -122,3 +122,15 @@ Shows the FULL rendered mails (incl. personal invite tokens and unsubscribe link
 - "Send til N" = ONE `POST /invitations` with ≤50 recipients; all chips show "Sender…" until the combined response (`results[]`, `remaining`). >50 and remaining quota are refused before sending.
 - "Prøv de fejlede igen" = ONE `POST /invitations/retry {emails[]}` (stored-but-failed); never-stored failures go through `POST /invitations`.
 - Switching bulk → lines removes duplicates and shows "N dubletter fjernet"; unsent addresses carry over both ways; drafts survive hiding the share panel but not a reload.
+
+### Follow-ups after tester reports (PR22/23)
+- **Addresses are lowercased as a whole** (local part too) when stored and compared – `Anna@Example.COM` and `anna@example.com` are the same invitee. The box shows the domain lowercased while typing; the server lowercases everything.
+- **Validation (L1):** ≤254 chars, local part 1–64, no leading/trailing dot in the local part, no consecutive dots, TLD ≥2 letters.
+- **Names (H3/L4):** `Name <x@y>` and quoted `"Lund, Jan" <x@y>` (commas/semicolons inside quotes) are parsed the same way on client and server; bulk chips show the name and it is stored on the invitation.
+- **Concurrent sends (L2):** each address is stored in its own transaction; an address stored by an overlapping request gets `already_invited` in `results[]`, the rest are sent.
+- **Rate limits (L3):** mail endpoints (send, retry, resend, reissue, reminders) are exempt from the general 20-writes IP limit; they use the per-IP mail limit (`RATE_LIMIT_MAIL_PER_HOUR`, 150) plus per-poll/day quotas.
+- **Old links (H2):** `/p/<id>/admin/<token>`, `/p/<id>?edit=<t>`, `/e/<id>` → 302 to the locale URL with the token in the `#fragment`; never logged.
+
+### Tester hooks (capture mode only – 404/inert otherwise)
+- `EMAIL_CAPTURE_FAIL=<regex>`: sends to matching recipients fail like a provider error (→ "Ikke sendt", retry possible). `EMAIL_CAPTURE_FAIL_ONCE=1`: each matching address fails only once (retry then succeeds).
+- `POST /api/test/delivery {email, event: 'bounced'|'failed', poll?}` sets the delivery status like a Resend webhook would.
