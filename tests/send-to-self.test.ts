@@ -13,6 +13,7 @@ process.env.EMAIL_MODE = 'capture';
 process.env.EMAIL_CAPTURE_FILE = './.email-capture/self-send-test.jsonl';
 process.env.APP_URL = 'https://grabaday.test';
 process.env.TRUSTED_PROXY_HOPS = '1';
+process.env.EMAIL_DAILY_QUOTA = '100000'; process.env.EMAIL_MONTHLY_QUOTA = '1000000'; // in-process: don't depend on what other runs used today
 process.env.EMAIL_FROM = 'grabAday <noreply@grabaday.com>';
 
 const BASE = inject('baseUrl');
@@ -128,7 +129,7 @@ describe('send-to-self (capture mode, in-process)', () => {
     const p = await poll();
     process.env.EMAIL_DAILY_QUOTA = '0';
     try { expect(await fail(lib.sendToSelf(p.eventId, p.token, reqFrom(ip()), { email: `q-${uniq()}@example.com` }, null))).toMatchObject({ status: 429, reason: 'quota' }); }
-    finally { delete process.env.EMAIL_DAILY_QUOTA; }
+    finally { process.env.EMAIL_DAILY_QUOTA = '100000'; }
     expect(await lib.selfStatus(p.eventId)).toEqual({ remaining: 3, next_in: 0 });
     for (const b of [{ email: 'nope' }, { email: 'a@x.com, b@y.com' }, { email: 'a@x.com;b@y.com' }, {}, { email: 'a@example.com', cc: 'b@example.com' }, { email: 'a@example.com', adminUrl: 'https://evil' }, { email: 'a@example.com', message: 'hi' }]) {
       expect((await fail(lib.sendToSelf(p.eventId, p.token, reqFrom(ip()), b, null))).status, JSON.stringify(b)).toBe(400);
