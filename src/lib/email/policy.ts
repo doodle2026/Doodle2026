@@ -7,7 +7,14 @@
  *   who are not unsubscribed (answered or not – per the functional spec)
  * - unsubscribed invitees get nothing; List-Unsubscribe (+ One-Click) header when an unsubscribe URL exists
  */
-import { DEFAULT_TZ, formatters, dateLabels, renderInvitation, renderReminder, type PollEmailData } from './render';
+import { DEFAULT_TZ, deadlineLabel, dateLabels, fromNameFor, mailLocale, renderInvitation, renderReminder, type MailLocale, type PollEmailData } from './render';
+import en from '../../../messages/en.json';
+import da from '../../../messages/da.json';
+import fr from '../../../messages/fr.json';
+import de from '../../../messages/de.json';
+
+const ORGANIZER: Record<MailLocale, string> = { en: 'The organizer', da: 'Arrangøren', fr: 'L’organisateur', de: 'Der Organisator' };
+const FOOTER: Record<MailLocale, string> = { en: en.email.footerText, da: da.email.footerText, fr: fr.email.footerText, de: de.email.footerText };
 import { isEmail, sanitizeDisplayName, type EmailMessage } from './send';
 
 export const APP_NAME = 'GrabAday';
@@ -23,6 +30,8 @@ export interface PollForEmail {
   trackingEnabled?: boolean;
   options: { date: string }[];
   deadline?: Date | null; respondedCount?: number; timeZone?: string;
+  /** Poll language (fallback for invitees without their own). */
+  locale?: string;
 }
 export interface Invitee {
   email: string; name?: string;
@@ -33,6 +42,8 @@ export interface Invitee {
   inviteToken?: string;
   /** Hard bounce / complaint: cannot receive mail. */
   bounced?: boolean;
+  /** Recipient's language (Invitation.locale). */
+  locale?: string;
 }
 export interface EmailCtx { appUrl: string; footerText?: string; personalMessage?: string }
 export type SkipReason = 'invalid_email' | 'duplicate' | 'unsubscribed' | 'closed' | 'bounced';
@@ -47,16 +58,19 @@ const base = (u: string) => u.replace(/\/+$/, '');
 export function pollEmailData(p: PollForEmail, inv: Invitee, ctx: EmailCtx): PollEmailData {
   const tz = p.timeZone ?? DEFAULT_TZ;
   const app = base(ctx.appUrl);
+  const L = mailLocale(inv.locale, p.locale); // recipient → poll → en; links always APP_URL/<locale>/...
+  const lp = `${app}/${L}`;
   return {
     assetBaseUrl: `${app}/email-assets`, appUrl: app,
-    eventTitle: p.title, organizerName: p.organizerName, recipientName: inv.name?.trim() || undefined,
-    description: p.description, pollUrl: `${app}/p/${encodeURIComponent(p.slug)}${inv.inviteToken ? `#inv=${inv.inviteToken}` : ''}`,
-    optionCount: p.options.length, dates: dateLabels(p.options), trackingEnabled: !!p.trackingEnabled, deadline: p.deadline ? formatters(tz).deadline(p.deadline) : undefined,
-    respondedCount: p.respondedCount, footerText: ctx.footerText ?? 'GrabAday · Planlæg møder uden login',
+    eventTitle: p.title, organizerName: p.organizerName || ORGANIZER[L], recipientName: inv.name?.trim() || undefined,
+    description: p.description, pollUrl: `${lp}/p/${encodeURIComponent(p.slug)}${inv.inviteToken ? `#inv=${inv.inviteToken}` : ''}`,
+    optionCount: p.options.length, dates: dateLabels(p.options, L), trackingEnabled: !!p.trackingEnabled, deadline: p.deadline ? deadlineLabel(p.deadline, L, tz) : undefined,
+    respondedCount: p.respondedCount, footerText: ctx.footerText ?? FOOTER[L],
     personalMessage: ctx.personalMessage,
-    unsubscribePollUrl: `${app}/u/p/${inv.linkToken}`,
-    unsubscribeAllUrl: `${app}/u/all/${inv.linkToken}`,
-    reportAbuseUrl: `${app}/abuse/${inv.linkToken}`,
+    unsubscribePollUrl: `${lp}/u/p/${inv.linkToken}`,
+    unsubscribeAllUrl: `${lp}/u/all/${inv.linkToken}`,
+    reportAbuseUrl: `${lp}/abuse/${inv.linkToken}`,
+    locale: L,
   };
 }
 
@@ -66,7 +80,7 @@ function message(kind: 'invite' | 'reminder', p: PollForEmail, inv: Invitee, ctx
   const email = norm(inv.email);
   const who = p.organizerFromName ? sanitizeDisplayName(p.organizerFromName) : '';
   return {
-    fromName: who ? `${who} via ${APP_NAME}` : APP_NAME,
+    fromName: who ? fromNameFor(who, d.locale) : APP_NAME,
     to: inv.email.trim(), subject: r.subject, html: r.html, text: r.text,
     idempotencyKey: `${kind}:${p.slug}:${email}`,
     // RFC 8058 one-click: POST to this URL unsubscribes from this poll.

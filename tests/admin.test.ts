@@ -122,7 +122,7 @@ describe('PATCH /api/events/:id', () => {
 
   test('removing an option with votes needs confirm_remove_voted (409 otherwise); other votes survive', async () => {
     const a = await create();
-    const p = await prisma.participant.create({ data: { event: { connect: { slug: a.id } }, name: 'Anders', nameKey: 'anders', editTokenHash: randomBytes(32).toString('hex') } });
+    const p = await prisma.participant.create({ data: { event: { connect: { slug: a.id } }, locale: "da", name: 'Anders', nameKey: 'anders', editTokenHash: randomBytes(32).toString('hex') } });
     await prisma.vote.createMany({ data: [
       { participantId: p.id, timeOptionId: a.opts[0].id, value: 'yes' },
       { participantId: p.id, timeOptionId: a.opts[1].id, value: 'maybe' },

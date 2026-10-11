@@ -35,7 +35,7 @@ describe('choose final time (admin)', () => {
     expect(c.body).toMatchObject({ chosen_option_id: e.o[0], is_closed: false });
     let page = await call(`/da/p/${e.id}`);
     expect(page.text).toContain('Den endelige dato er');
-    expect(page.text).toContain(`href="/api/events/${e.id}/ics"`);
+    expect(page.text).toContain(`href="/api/events/${e.id}/ics?locale=da"`);
     expect(page.text).toContain('is-chosen');
     const ch = await call(`/api/events/${e.id}/choose`, json('POST', { chosen_option_id: e.o[1] }, e.admin));
     expect(ch.body.chosen_option_id).toBe(e.o[1]);
@@ -87,6 +87,11 @@ describe('.ics', () => {
     expect(unfolded).toContain('SUMMARY:Teammøde\\; Q4\\, "plan" ');
     expect(unfolded).toContain('DESCRIPTION:Linje 1\\nLinje 2');
     expect(t).not.toContain(e.admin);
+    // phase 4: .ics texts + URL in the requested language (?locale=), else Accept-Language → poll language
+    for (const [l, txt] of [['da', 'Endelig dato valgt i GrabAday'], ['en', 'Final date chosen in GrabAday']] as const) {
+      const u = (await call(`/api/events/${e.id}/ics?locale=${l}`)).text.replace(/\r\n /g, '');
+      expect(u).toContain(txt); expect(u).toContain(`/${l}/p/${e.id}`); expect(u).toContain(`PRODID:-//GrabAday//GrabAday//${l.toUpperCase()}`);
+    }
     // stable UID across downloads
     const again = (await call(`/api/events/${e.id}/ics`)).text.replace(/\r\n /g, '');
     expect(again.match(/UID:.*/)![0]).toBe(unfolded.match(/UID:.*/)![0]);

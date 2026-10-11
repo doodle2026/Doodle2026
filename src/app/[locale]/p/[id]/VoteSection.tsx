@@ -14,7 +14,7 @@ import {
 const newIdemKey = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
 
 function Badge({ v }: { v: Vote }) {
-  const { tr } = useI18n();
+  const { tr, locale } = useI18n();
   return (
     <span className={`vote vote--${v ?? 'none'}`}>
       <span aria-hidden="true">{ICON[String(v)]}</span> {v ? tr(voteKey(v)) : <span className="sr-only">{tr('vote.none')}</span>}
@@ -26,7 +26,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localTodayIso()), []);
   const lp = useLp();
-  const { t, tr, fd, head, rich } = useI18n();
+  const { t, tr, fd, head, rich, locale } = useI18n();
   const KEY_VOTE = keyVotes(t('vote.keys'));
   const [ev, setEv] = useState(initial);
   const [wide, setWide] = useState(true); // V3: matches the CSS breakpoint (table ≥ 640 px, cards below)
@@ -169,7 +169,7 @@ export default function VoteSection({ initial }: { initial: ApiEvent }) {
     setNameErr(nErr);
     if (items.length) { setSummary({ head: t('common.fixN', { n: items.length }), items }); focusSel.current = nErr ? '#name' : '#summary'; return; }
     setSaving(true); setSummary(null);
-    const body = JSON.stringify({ name, votes: opts.map((o, i) => ({ option_id: o.id, value: me[i] })) });
+    const body = JSON.stringify({ locale, name, votes: opts.map((o, i) => ({ option_id: o.id, value: me[i] })) });
     try {
       let r: Response;
       if (editing && token) {

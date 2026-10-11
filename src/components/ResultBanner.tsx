@@ -52,7 +52,7 @@ export default function ResultBanner({ event, isAdmin = false, appUrl, onClear, 
         {isAdmin && <span className="meta" style={{ display: 'block' }}>{flc(chosen.date)}</span>}
         <p className="result-banner__note">{isAdmin ? t('admin.resNote', { yes: tt.yes, maybe: tt.maybe }) : t('app.yesMaybe', { yes: tt.yes, maybe: tt.maybe })}</p>
         <div className="result-banner__actions">
-          <a className="btn btn--secondary btn--sm" id="ics" href={`/api/events/${event.slug}/ics`} download>{t('admin.ics')}<span className="sr-only">{t('admin.icsSr')}</span></a>
+          <a className="btn btn--secondary btn--sm" id="ics" href={`/api/events/${event.slug}/ics?locale=${locale}`} download>{t('admin.ics')}<span className="sr-only">{t('admin.icsSr')}</span></a>
           <a className="btn btn--secondary btn--sm" id="gcal" target="_blank" rel="noopener noreferrer"
             href={googleCalendarUrlFor(chosen, { title: event.title, description: event.description, url: `${appUrl}/${locale}/p/${event.slug}` })}>
             {t('admin.google')}
