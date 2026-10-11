@@ -15,6 +15,6 @@ export const POST = adminRoute(async ({ req, eventId, body }) => {
   const limited = rateLimit(req, 'mail'); if (limited) return limited;
   const b = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
   if (!b) throw new ApiError(400, ['Forespørgslen skal være et JSON-objekt.']);
-  const r = await sendInvitations(eventId, { recipients: b.recipients, message: b.message, organizer_name: b.organizer_name, track: b.track });
+  const r = await sendInvitations(eventId, { locale: b.locale, recipients: b.recipients, message: b.message, organizer_name: b.organizer_name, track: b.track });
   return NextResponse.json({ ...r, ...(await listInvitations(eventId)) }, { status: 201 });
 });

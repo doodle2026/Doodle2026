@@ -564,6 +564,27 @@
     "wrongH": "Etwas ist schiefgelaufen",
     "wrongP": "Bitte versuche es gleich noch einmal.",
     "abusePrivacy": "Die Meldung ist für die Organisatorin bzw. den Organisator anonym. Wir speichern nur die Umfrage und deine Einschätzung.",
-    "answerDeleted": "Deine Antwort wurde vom Organisator gelöscht. Du kannst als neue Person erneut antworten."
+    "answerDeleted": "Deine Antwort wurde vom Organisator gelöscht. Du kannst als neue Person erneut antworten.",
+    "smTitle": "Per E-Mail senden",
+    "smSub": "Optional – die Empfänger erhalten den Link zur Umfrage",
+    "smToggle": "„Per E-Mail senden“ ein- oder ausblenden",
+    "smMessage": "Persönliche Nachricht (optional)",
+    "smEmailAria": "E-Mail-Adresse {n}",
+    "smSend": "Senden",
+    "smSending": "Wird gesendet…",
+    "smSent": "Gesendet ✓",
+    "smNotSent": "Nicht gesendet",
+    "smRetry": "Erneut versuchen",
+    "smBounced": "Abgelehnt – Adresse prüfen",
+    "smUnsub": "Der Empfänger möchte keine E-Mails erhalten",
+    "smInvalid": "Ungültige E-Mail-Adresse",
+    "smAlready": "Bereits eingeladen",
+    "smMore": "Mehr anzeigen",
+    "smAdminLink": "Alle Einladungen ansehen und Erinnerungen im Admin senden",
+    "smLimitDay": "Das heutige Limit ist erreicht – versuche es morgen erneut",
+    "smLimitPoll": "Max. {n} Einladungen pro Umfrage",
+    "smLimitHour": "Zu viele Einladungen in kurzer Zeit – versuche es in einer Stunde erneut",
+    "smError": "Senden fehlgeschlagen – erneut versuchen",
+    "smClosed": "Die Umfrage ist geschlossen"
   }
 }

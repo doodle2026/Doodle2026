@@ -1,4 +1,6 @@
 'use client';
+import SendToEmails from '@/components/SendToEmails';
+import { storeAdminToken, TOKEN_RE } from '@/lib/admin-client';
 import { useLp } from '@/i18n/link';
 import { useEffect, useRef, useState } from 'react';
 import Header from '@/components/Header';
@@ -37,6 +39,7 @@ export default function PollView({ event, shareUrl, justCreated }:
   const ackShowRef = useRef<HTMLButtonElement>(null);
   const [canShare, setCanShare] = useState(false);
   const [adminUrl, setAdminUrl] = useState<string | null>(null); // shown once, right after creation
+  const [adminTok, setAdminTok] = useState<string | null>(null); // Send til e-mails: organizer's tab only (sessionStorage, like admin)
   const urlRef = useRef<HTMLInputElement>(null);
   const shareOpenRef = useRef<HTMLButtonElement>(null);
   const storeKey = `mt-share-${event.slug}`;
@@ -48,12 +51,13 @@ export default function PollView({ event, shareUrl, justCreated }:
         if (sessionStorage.getItem(storeKey) === 'closed') setOpen(false);
         // The admin link is handed over via sessionStorage (never the URL) and removed after first display.
         const a = sessionStorage.getItem(adminStoreKey(event.slug));
-        if (a && a.startsWith(`/p/${event.slug}/admin#`)) { setAdminUrl(location.origin + lp(a)); setOpen(true); }
+        if (a && a.startsWith(`/p/${event.slug}/admin#`)) { setAdminUrl(location.origin + lp(a)); setOpen(true); storeAdminToken(event.slug, a.split('#')[1], sessionStorage); }
         sessionStorage.removeItem(adminStoreKey(event.slug));
       } catch { /* ignore */ }
       // Drop ?created=1 so a reload/shared copy of the address bar doesn't claim "just created".
       history.replaceState(null, '', lp(`/p/${event.slug}`));
     }
+    try { const k = sessionStorage.getItem(`mt-admintok-${event.slug}`); if (k && TOKEN_RE.test(k)) setAdminTok(k); } catch { /* ignore */ }
   }, [justCreated, storeKey, event.slug]);
 
 
@@ -158,6 +162,7 @@ export default function PollView({ event, shareUrl, justCreated }:
             )}
             <span className="sr-only" role="status" aria-live="polite">{status}</span>
           </section>
+          {adminTok && <SendToEmails slug={event.slug} token={adminTok} />}
           <ResultBanner event={event} appUrl={shareUrl.replace(/\/[a-z]{2}\/p\/[^/]+$/, '')} />
           <h1>{event.title}</h1>
           {event.description && <p className="lead">{event.description}</p>}

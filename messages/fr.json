@@ -564,6 +564,27 @@
     "wrongH": "Une erreur s’est produite",
     "wrongP": "Veuillez réessayer dans un instant.",
     "abusePrivacy": "Le signalement est anonyme pour l’organisateur. Nous ne conservons que le sondage et votre évaluation.",
-    "answerDeleted": "Votre réponse a été supprimée par l’organisateur. Vous pouvez répondre à nouveau comme nouveau participant."
+    "answerDeleted": "Votre réponse a été supprimée par l’organisateur. Vous pouvez répondre à nouveau comme nouveau participant.",
+    "smTitle": "Envoyer par e-mail",
+    "smSub": "Facultatif – les destinataires reçoivent le lien vers le sondage",
+    "smToggle": "Afficher ou masquer « Envoyer par e-mail »",
+    "smMessage": "Message personnel (facultatif)",
+    "smEmailAria": "Adresse e-mail {n}",
+    "smSend": "Envoyer",
+    "smSending": "Envoi…",
+    "smSent": "Envoyé ✓",
+    "smNotSent": "Non envoyé",
+    "smRetry": "Réessayer",
+    "smBounced": "Refusé – vérifiez l’adresse",
+    "smUnsub": "Le destinataire a refusé les e-mails",
+    "smInvalid": "Adresse e-mail invalide",
+    "smAlready": "Déjà invité",
+    "smMore": "Afficher plus",
+    "smAdminLink": "Voir toutes les invitations et envoyer des rappels dans l’admin",
+    "smLimitDay": "La limite du jour est atteinte – réessayez demain",
+    "smLimitPoll": "{n} invitations max. par sondage",
+    "smLimitHour": "Trop d’invitations en peu de temps – réessayez dans une heure",
+    "smError": "Envoi impossible – réessayez",
+    "smClosed": "Le sondage est clos"
   }
 }

@@ -564,6 +564,27 @@
     "wrongH": "Noget gik galt",
     "wrongP": "Prøv igen om lidt.",
     "abusePrivacy": "Rapporten er anonym over for arrangøren. Vi gemmer kun afstemningen og din vurdering.",
-    "answerDeleted": "Dit svar er slettet af arrangøren. Du kan svare igen som ny deltager."
+    "answerDeleted": "Dit svar er slettet af arrangøren. Du kan svare igen som ny deltager.",
+    "smTitle": "Send til e-mails",
+    "smSub": "Valgfrit – modtagerne får linket til afstemningen",
+    "smToggle": "Vis eller skjul “Send til e-mails”",
+    "smMessage": "Personlig besked (valgfri)",
+    "smEmailAria": "E-mailadresse {n}",
+    "smSend": "Send",
+    "smSending": "Sender…",
+    "smSent": "Sendt ✓",
+    "smNotSent": "Ikke sendt",
+    "smRetry": "Prøv igen",
+    "smBounced": "Afvist – tjek adressen",
+    "smUnsub": "Modtageren har frabedt sig mails",
+    "smInvalid": "Ugyldig e-mailadresse",
+    "smAlready": "Allerede inviteret",
+    "smMore": "Vis flere",
+    "smAdminLink": "Se alle invitationer og send påmindelser i admin",
+    "smLimitDay": "Grænsen for i dag er nået – prøv igen i morgen",
+    "smLimitPoll": "Maks. {n} invitationer pr. afstemning",
+    "smLimitHour": "For mange invitationer på kort tid – prøv igen om en time",
+    "smError": "Kunne ikke sende – prøv igen",
+    "smClosed": "Afstemningen er lukket"
   }
 }

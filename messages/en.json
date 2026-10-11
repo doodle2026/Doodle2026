@@ -564,6 +564,27 @@
     "wrongH": "Something went wrong",
     "wrongP": "Please try again in a moment.",
     "abusePrivacy": "The report is anonymous to the organizer. We only store the poll and your assessment.",
-    "answerDeleted": "Your answer was deleted by the organizer. You can answer again as a new participant."
+    "answerDeleted": "Your answer was deleted by the organizer. You can answer again as a new participant.",
+    "smTitle": "Send to emails",
+    "smSub": "Optional – recipients get the link to the poll",
+    "smToggle": "Show or hide “Send to emails”",
+    "smMessage": "Personal message (optional)",
+    "smEmailAria": "Email address {n}",
+    "smSend": "Send",
+    "smSending": "Sending…",
+    "smSent": "Sent ✓",
+    "smNotSent": "Not sent",
+    "smRetry": "Try again",
+    "smBounced": "Rejected – check the address",
+    "smUnsub": "The recipient has opted out of emails",
+    "smInvalid": "Invalid email address",
+    "smAlready": "Already invited",
+    "smMore": "Show more",
+    "smAdminLink": "See all invitations and send reminders in admin",
+    "smLimitDay": "Today’s limit has been reached – try again tomorrow",
+    "smLimitPoll": "Max. {n} invitations per poll",
+    "smLimitHour": "Too many invitations in a short time – try again in an hour",
+    "smError": "Could not send – try again",
+    "smClosed": "The poll is closed"
   }
 }

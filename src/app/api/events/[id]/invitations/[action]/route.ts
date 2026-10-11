@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminRoute } from '@/lib/admin-api';
 import { ApiError } from '@/lib/events';
-import { linkAnswer, listInvitations, resendInvite, revokeInvite, unlinkAnswer } from '@/lib/invitations';
+import { linkAnswer, listInvitations, resendInvite, retryInvite, revokeInvite, unlinkAnswer } from '@/lib/invitations';
 import { rateLimit } from '@/lib/ratelimit';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,8 @@ export const POST = adminRoute(async ({ req, eventId, body, params }) => {
   const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
   const action = (params as { action?: string }).action;
   let r: object;
-  if (action === 'resend') { const l = rateLimit(req, 'mail'); if (l) return l; r = await resendInvite(eventId, b.email); }
+  if (action === 'retry') { const l = rateLimit(req, 'mail'); if (l) return l; r = await retryInvite(eventId, b.email); }
+  else if (action === 'resend') { const l = rateLimit(req, 'mail'); if (l) return l; r = await resendInvite(eventId, b.email); }
   else if (action === 'revoke') { if (b.reissue === true) { const l = rateLimit(req, 'mail'); if (l) return l; } r = await revokeInvite(eventId, b.email, b.reissue); }
   else if (action === 'link') r = await linkAnswer(eventId, b.email, b.participant_id);
   else if (action === 'unlink') r = await unlinkAnswer(eventId, b.email);

@@ -101,3 +101,9 @@ Shows the FULL rendered mails (incl. personal invite tokens and unsubscribe link
   code is not a production build (`next build` output is always refused, even if started with `NODE_ENV=test`).
   Otherwise: config error logged, mailer falls back to `log` mode (redacted), nothing is sent or captured.
   The test suite runs its production test server with `EMAIL_MODE=capture` to prove this.
+
+## "Send til e-mails" on the confirmation page (phase 1)
+- Same endpoint/model/limits/suppression: `POST /api/events/:id/invitations` (admin Bearer) with one recipient per click; `locale` = creator's UI language.
+- Response adds `results: [{ email, status }]` (`sent` | `failed` | `unsub` | `already_invited` | `duplicate`); `GET` adds `quota: { poll_remaining, hour_remaining, day_remaining }`.
+- `POST /api/events/:id/invitations/retry { email }`: re-send a **failed** invitation unchanged (same link, tracking unchanged).
+- The box shows only in the organizer's tab: the admin token from the creation hand-over is kept in the tab's sessionStorage (same key the admin page uses). Status re-polls every 20 s while visible. UI is a placeholder until Doodle UI's design.
