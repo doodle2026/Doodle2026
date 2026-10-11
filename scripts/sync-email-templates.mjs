@@ -11,6 +11,7 @@ for (const l of LANGS) {
   all[l] = {
     invitation: { html: read(`invitation.${l}.html`), text: read(`invitation.${l}.txt`) },
     reminder: { html: read(`reminder.${l}.html`), text: read(`reminder.${l}.txt`) },
+    organizerLinks: { html: read(`organizer-links.${l}.html`), text: read(`organizer-links.${l}.txt`) },
     strings: JSON.parse(read(`strings.${l}.json`)),
   };
 }

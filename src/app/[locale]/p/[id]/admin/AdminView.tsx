@@ -1,4 +1,5 @@
 'use client';
+import SendToSelf from '@/components/SendToSelf';
 import { useLp } from '@/i18n/link';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { AdminEvent } from '@/lib/events';
@@ -299,6 +300,7 @@ export default function AdminView({ slug, shareUrl }: { slug: string; shareUrl: 
                 {copied === 'url' ? `✓ ${t('common.copied')}` : t('common.copyLink')}
               </button>
               <a className="btn btn--ghost" href={lp(`/p/${slug}`)} target="_blank" rel="noopener noreferrer">{t('admin.openAsParticipant')}</a>
+              {token && <SendToSelf slug={slug} token={token} adminUrl={typeof window === 'undefined' ? '' : `${location.origin}${lp(`/p/${slug}/admin`)}#${token}`} />}
             </div>
           </div>
         </div>

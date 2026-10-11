@@ -163,9 +163,7 @@
     "copyFailed": "Copie impossible",
     "copyHint": "Sélectionnez et copiez manuellement (Ctrl+C / ⌘C – ou appui long sur le lien).",
     "copyFailedLive": "Copie impossible. Sélectionnez et copiez manuellement.",
-    "ackLive": "Lien admin marqué comme enregistré. L’encadré a été réduit.",
-    "adminMailSubject": "Mon lien admin : {title}",
-    "adminMailBody": "Conservez cet e-mail. Ne partagez pas le lien.\n\nAdmin (modifier/clôturer) : {admin}\nLien pour les participants : {url}"
+    "ackLive": "Lien admin marqué comme enregistré. L’encadré a été réduit."
   },
   "nf": {
     "pageTitle": "Sondage introuvable",
@@ -454,7 +452,24 @@
     "footerText": "grabAday · Trouvez une date sans connexion",
     "fromName": "{{organizerName}} via grabAday",
     "icsSummary": "{{eventTitle}}",
-    "icsDescription": "Date retenue dans grabAday : {{pollUrl}}"
+    "icsDescription": "Date retenue dans grabAday : {{pollUrl}}",
+    "selfSubject": "Votre lien admin grabAday : {{eventTitle}}",
+    "selfPreheader": "Conservez cet e-mail – le lien admin donne le contrôle total du sondage.",
+    "selfEyebrow": "Votre nouveau sondage",
+    "selfHeading": "Bravo – votre sondage est prêt ! 🙌",
+    "selfIntro": "Merci d’utiliser grabAday pour trouver une date pour <strong>{{eventTitle}}</strong>. Voici vos deux liens : un à garder, un à partager.",
+    "selfAdminH": "🔑 Votre lien admin",
+    "selfSave": "Conservez cet e-mail – le lien admin donne le contrôle total du sondage.",
+    "selfNoShare": "Ne le partagez pas : toute personne disposant du lien peut modifier, clôturer et choisir la date.",
+    "selfAdminCta": "Ouvrir la page admin",
+    "selfShareH": "Partagez avec vos participants",
+    "selfShareP": "Envoyez ce lien à tous ceux qui doivent voter – sans connexion.",
+    "selfShareCta": "Ouvrir le sondage",
+    "selfOutro": "Bonne recherche de date ! ✨<br>– L’équipe grabAday",
+    "selfNotYou": "Vous n’avez pas créé ce sondage ? Ignorez simplement cet e-mail.",
+    "selfWhy": "Vous recevez cet e-mail car cette adresse a été saisie sur grabAday pour recevoir le lien admin. Nous ne la conservons pas.",
+    "selfTxtHead": "Votre lien admin grabAday – {{eventTitle}}",
+    "selfFallback": "Le bouton ne fonctionne pas ? Copiez ce lien :"
   },
   "se": {
     "title": "Envoyer par e-mail",
@@ -735,6 +750,35 @@
       "day": "Quota quotidien (100)"
     },
     "limTodayCol": "Aujourd’hui"
+  },
+  "self": {
+    "title": "Envoyez-vous le lien admin",
+    "lead": "Nous vous envoyons le lien admin et le lien participants par e-mail pour les retrouver facilement.",
+    "emailLabel": "Votre adresse e-mail",
+    "emailPh": "nom@exemple.fr",
+    "noStore": "Nous ne conservons pas votre adresse.",
+    "send": "Envoyer",
+    "sending": "Envoi…",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "done": "Terminé",
+    "another": "Envoyer à une autre adresse",
+    "sentH": "C’est parti ! 🎉",
+    "sentP": "Envoyé à {email}.",
+    "spam": "Vérifiez vos spams si vous ne trouvez pas l’e-mail.",
+    "errRequired": "Saisissez votre adresse e-mail.",
+    "errInvalid": "Saisissez une adresse valide, p. ex. nom@exemple.fr.",
+    "errBlocked": "Impossible d’envoyer à cette adresse.",
+    "errWait": "Vous venez d’en envoyer un. Réessayez dans {sec, plural, one {# seconde} other {# secondes}}.",
+    "errPollMax": "Le lien admin a déjà été envoyé 3 fois pour ce sondage. Copiez plutôt le lien.",
+    "errIp": "Beaucoup d’e-mails ont été envoyés depuis votre réseau. Réessayez dans {min, plural, =0 {moins d’1 min} one {environ # min} other {environ # min}} – ou copiez le lien.",
+    "errQuota": "Envoi impossible pour le moment – réessayez plus tard. Vous pouvez copier le lien.",
+    "errServer": "Un problème est survenu – rien n’a été envoyé. Réessayez.",
+    "errOffline": "Pas de connexion. Vérifiez votre connexion et réessayez.",
+    "errToken": "Impossible de vérifier le lien admin. Rechargez la page et réessayez.",
+    "copyInstead": "Copier plutôt le lien admin",
+    "copied": "Copié ✓",
+    "left": "{n, plural, =0 {Plus d’envoi possible pour ce sondage} one {Vous pouvez encore en envoyer # pour ce sondage} other {Vous pouvez encore en envoyer # pour ce sondage}}"
   },
   "app": {
     "nfPage": "Oups, nous ne trouvons pas cette page",

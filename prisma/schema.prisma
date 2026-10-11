@@ -43,6 +43,7 @@ model Event {
   mailBlockedAt   DateTime?        @map("mail_blocked_at") @db.Timestamptz(3)
   /// Step 5: personal invite links were used for this poll ("Spor hvem der har svaret"). Never switched off again.
   inviteTracking  Boolean          @default(false) @map("invite_tracking")
+  selfSends       SelfSend[]
 
   @@map("events")
 }
@@ -265,4 +266,21 @@ model DailyStat {
 
   @@id([day, key])
   @@map("daily_stats")
+}
+
+/// "Send til mig selv": one row per attempt. No address in clear text: only a peppered hash (limits/suppression),
+/// a peppered hash of the client IP (10/IP/day) and the hash of the mail's footer token (unsubscribe link).
+/// Deleted with the poll (cascade).
+model SelfSend {
+  id            Int      @id @default(autoincrement())
+  eventId       Int      @map("event_id")
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  emailHash     String   @map("email_hash") @db.Char(64)
+  ipHash        String   @map("ip_hash") @db.Char(64)
+  linkTokenHash String   @unique @map("link_token_hash") @db.Char(64)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([eventId, createdAt])
+  @@index([ipHash, createdAt])
+  @@map("self_sends")
 }

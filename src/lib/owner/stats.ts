@@ -149,7 +149,7 @@ export async function eventDetail(slug: string) {
     where: { slug },
     select: {
       id: true, slug: true, title: true, description: true, locale: true, createdAt: true, closedAt: true, inviteTracking: true,
-      remindersSent: true, lastReminderAt: true, chosenOption: { select: { date: true } },
+      remindersSent: true, lastReminderAt: true, _count: { select: { selfSends: true } }, chosenOption: { select: { date: true } },
       timeOptions: { orderBy: { date: 'asc' }, select: { id: true, date: true, votes: { select: { value: true } } } },
       participants: { orderBy: { createdAt: 'asc' }, select: { name: true, createdAt: true, updatedAt: true, votes: { select: { value: true } } } },
       invitations: { orderBy: { createdAt: 'asc' }, select: { email: true, delivery: true, deliveryBeforeUnsub: true, participantId: true, lastEventAt: true, createdAt: true } },
@@ -173,6 +173,7 @@ export async function eventDetail(slug: string) {
   return {
     id: e.slug, title: e.title, description: e.description, locale: e.locale, status: e.closedAt ? 'closed' : 'open',
     createdAt: e.createdAt.toISOString(), closedAt: e.closedAt?.toISOString() ?? null, tracking: e.inviteTracking, finalDate,
+    selfSent: e._count.selfSends, // "Send til mig selv": only the number (no address is stored)
     publicUrl: `${appUrl}/${e.locale}/p/${e.slug}`, // the only link – never admin/edit/invite links
     purgeAt: e.closedAt ? new Date(e.closedAt.getTime() + 90 * 86400_000).toISOString() : null,
     options: e.timeOptions.map((o) => ({ date: isoDate(o.date)!, yes: count(o.votes, 'yes'), maybe: count(o.votes, 'maybe'), no: count(o.votes, 'no'), final: isoDate(o.date) === finalDate })),

@@ -163,9 +163,7 @@
     "copyFailed": "Kunne ikke kopiere",
     "copyHint": "Markér og kopiér manuelt (Ctrl+C / ⌘C – eller hold fingeren på linket).",
     "copyFailedLive": "Kunne ikke kopiere. Markér og kopiér manuelt.",
-    "ackLive": "Admin-link markeret som gemt. Boksen er foldet sammen.",
-    "adminMailSubject": "Mit admin-link: {title}",
-    "adminMailBody": "Gem denne mail. Del ikke linket.\n\nAdmin (redigér/luk): {admin}\nLink til deltagere: {url}"
+    "ackLive": "Admin-link markeret som gemt. Boksen er foldet sammen."
   },
   "nf": {
     "pageTitle": "Afstemningen findes ikke",
@@ -454,7 +452,24 @@
     "footerText": "grabAday · Find en dato uden login",
     "fromName": "{{organizerName}} via grabAday",
     "icsSummary": "{{eventTitle}}",
-    "icsDescription": "Endelig dato valgt i grabAday: {{pollUrl}}"
+    "icsDescription": "Endelig dato valgt i grabAday: {{pollUrl}}",
+    "selfSubject": "Dit admin-link fra grabAday: {{eventTitle}}",
+    "selfPreheader": "Gem denne mail – admin-linket giver fuld kontrol over afstemningen.",
+    "selfEyebrow": "Din nye afstemning",
+    "selfHeading": "High five – din afstemning er klar! 🙌",
+    "selfIntro": "Tak, fordi du bruger grabAday til at finde en dato for <strong>{{eventTitle}}</strong>. Her er dine to links: ét til dig selv og ét til at dele.",
+    "selfAdminH": "🔑 Dit admin-link",
+    "selfSave": "Gem denne mail – admin-linket giver fuld kontrol over afstemningen.",
+    "selfNoShare": "Del det ikke: alle med linket kan redigere, lukke og vælge den endelige dato.",
+    "selfAdminCta": "Åbn admin-siden",
+    "selfShareH": "Del med deltagerne",
+    "selfShareP": "Send dette link til alle, der skal stemme – ingen login.",
+    "selfShareCta": "Åbn afstemningen",
+    "selfOutro": "God fornøjelse med at finde datoen! ✨<br>– grabAday",
+    "selfNotYou": "Har du ikke oprettet denne afstemning? Så kan du se bort fra mailen.",
+    "selfWhy": "Du får denne mail, fordi adressen blev indtastet på grabAday for at modtage admin-linket. Vi gemmer den ikke.",
+    "selfTxtHead": "Dit admin-link fra grabAday – {{eventTitle}}",
+    "selfFallback": "Virker knappen ikke? Kopiér dette link:"
   },
   "se": {
     "title": "Send til e-mails",
@@ -735,6 +750,35 @@
       "day": "Dagskvote (100)"
     },
     "limTodayCol": "I dag"
+  },
+  "self": {
+    "title": "Send admin-linket til dig selv",
+    "lead": "Vi mailer dig admin-linket og deltagerlinket, så du altid kan finde dem igen.",
+    "emailLabel": "Din e-mailadresse",
+    "emailPh": "navn@eksempel.dk",
+    "noStore": "Vi gemmer ikke din adresse.",
+    "send": "Send",
+    "sending": "Sender…",
+    "cancel": "Annullér",
+    "close": "Luk",
+    "done": "Færdig",
+    "another": "Send til en anden adresse",
+    "sentH": "Den er på vej! 🎉",
+    "sentP": "Sendt til {email}.",
+    "spam": "Tjek din spam-mappe, hvis du ikke kan finde mailen.",
+    "errRequired": "Skriv din e-mailadresse.",
+    "errInvalid": "Skriv en gyldig e-mailadresse, fx navn@eksempel.dk.",
+    "errBlocked": "Kan ikke sendes til denne adresse.",
+    "errWait": "Du har lige sendt en. Prøv igen om {sec, plural, one {# sekund} other {# sekunder}}.",
+    "errPollMax": "Admin-linket er allerede sendt 3 gange for denne afstemning. Kopiér linket i stedet.",
+    "errIp": "Der er sendt mange mails fra dit netværk. Prøv igen om {min, plural, =0 {under 1 min} one {ca. # min} other {ca. # min}} – eller kopiér linket.",
+    "errQuota": "Kan ikke sende lige nu – prøv igen senere. Du kan kopiere linket i stedet.",
+    "errServer": "Noget gik galt – der blev ikke sendt noget. Prøv igen.",
+    "errOffline": "Ingen forbindelse. Tjek dit internet, og prøv igen.",
+    "errToken": "Vi kunne ikke bekræfte admin-linket. Genindlæs siden, og prøv igen.",
+    "copyInstead": "Kopiér admin-linket i stedet",
+    "copied": "Kopieret ✓",
+    "left": "{n, plural, =0 {Du kan ikke sende flere til denne afstemning} one {Du kan sende # mere til denne afstemning} other {Du kan sende # mere til denne afstemning}}"
   },
   "app": {
     "nfPage": "Hov, den side kan vi ikke finde",

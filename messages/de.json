@@ -163,9 +163,7 @@
     "copyFailed": "Kopieren fehlgeschlagen",
     "copyHint": "Manuell markieren und kopieren (Strg+C / ⌘C – oder lange auf den Link tippen).",
     "copyFailedLive": "Kopieren fehlgeschlagen. Bitte manuell markieren und kopieren.",
-    "ackLive": "Admin-Link als gespeichert markiert. Das Feld wurde zugeklappt.",
-    "adminMailSubject": "Mein Admin-Link: {title}",
-    "adminMailBody": "Bewahren Sie diese E-Mail auf. Link nicht weitergeben.\n\nAdmin (bearbeiten/schließen): {admin}\nLink für Teilnehmende: {url}"
+    "ackLive": "Admin-Link als gespeichert markiert. Das Feld wurde zugeklappt."
   },
   "nf": {
     "pageTitle": "Umfrage nicht gefunden",
@@ -454,7 +452,24 @@
     "footerText": "grabAday · Termine finden ohne Anmeldung",
     "fromName": "{{organizerName}} via grabAday",
     "icsSummary": "{{eventTitle}}",
-    "icsDescription": "Endgültiger Termin in grabAday gewählt: {{pollUrl}}"
+    "icsDescription": "Endgültiger Termin in grabAday gewählt: {{pollUrl}}",
+    "selfSubject": "Ihr grabAday-Admin-Link: {{eventTitle}}",
+    "selfPreheader": "Bewahren Sie diese E-Mail auf – der Admin-Link gibt volle Kontrolle über die Umfrage.",
+    "selfEyebrow": "Ihre neue Umfrage",
+    "selfHeading": "Super – Ihre Umfrage ist startklar! 🙌",
+    "selfIntro": "Danke, dass Sie grabAday nutzen, um einen Termin für <strong>{{eventTitle}}</strong> zu finden. Hier sind Ihre zwei Links: einer für Sie, einer zum Teilen.",
+    "selfAdminH": "🔑 Ihr Admin-Link",
+    "selfSave": "Bewahren Sie diese E-Mail auf – der Admin-Link gibt volle Kontrolle über die Umfrage.",
+    "selfNoShare": "Nicht weitergeben: Wer den Link hat, kann bearbeiten, schließen und den Termin festlegen.",
+    "selfAdminCta": "Admin-Seite öffnen",
+    "selfShareH": "Mit den Teilnehmenden teilen",
+    "selfShareP": "Senden Sie diesen Link an alle, die abstimmen sollen – ohne Anmeldung.",
+    "selfShareCta": "Umfrage öffnen",
+    "selfOutro": "Viel Erfolg bei der Terminsuche! ✨<br>– Ihr grabAday-Team",
+    "selfNotYou": "Sie haben diese Umfrage nicht erstellt? Dann ignorieren Sie diese E-Mail einfach.",
+    "selfWhy": "Sie erhalten diese E-Mail, weil diese Adresse auf grabAday eingegeben wurde, um den Admin-Link zu erhalten. Wir speichern sie nicht.",
+    "selfTxtHead": "Ihr grabAday-Admin-Link – {{eventTitle}}",
+    "selfFallback": "Button funktioniert nicht? Kopieren Sie diesen Link:"
   },
   "se": {
     "title": "An E-Mail-Adressen senden",
@@ -735,6 +750,35 @@
       "day": "Tageskontingent (100)"
     },
     "limTodayCol": "Heute"
+  },
+  "self": {
+    "title": "Admin-Link an sich selbst senden",
+    "lead": "Wir senden Ihnen den Admin-Link und den Teilnahme-Link per E-Mail, damit Sie sie jederzeit wiederfinden.",
+    "emailLabel": "Ihre E-Mail-Adresse",
+    "emailPh": "name@beispiel.de",
+    "noStore": "Wir speichern Ihre Adresse nicht.",
+    "send": "Senden",
+    "sending": "Sendet…",
+    "cancel": "Abbrechen",
+    "close": "Schließen",
+    "done": "Fertig",
+    "another": "An eine andere Adresse senden",
+    "sentH": "Ist unterwegs! 🎉",
+    "sentP": "Gesendet an {email}.",
+    "spam": "Schauen Sie im Spam-Ordner nach, falls Sie die E-Mail nicht finden.",
+    "errRequired": "Geben Sie Ihre E-Mail-Adresse ein.",
+    "errInvalid": "Geben Sie eine gültige Adresse ein, z. B. name@beispiel.de.",
+    "errBlocked": "An diese Adresse kann nicht gesendet werden.",
+    "errWait": "Sie haben gerade eine gesendet. Versuchen Sie es in {sec, plural, one {# Sekunde} other {# Sekunden}} erneut.",
+    "errPollMax": "Der Admin-Link wurde für diese Umfrage bereits 3-mal gesendet. Kopieren Sie den Link stattdessen.",
+    "errIp": "Aus Ihrem Netzwerk wurden viele E-Mails gesendet. Versuchen Sie es in {min, plural, =0 {weniger als 1 Min.} one {etwa # Min.} other {etwa # Min.}} erneut – oder kopieren Sie den Link.",
+    "errQuota": "Senden ist gerade nicht möglich – versuchen Sie es später erneut. Sie können den Link kopieren.",
+    "errServer": "Etwas ist schiefgelaufen – es wurde nichts gesendet. Bitte erneut versuchen.",
+    "errOffline": "Keine Verbindung. Prüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.",
+    "errToken": "Der Admin-Link konnte nicht bestätigt werden. Laden Sie die Seite neu und versuchen Sie es erneut.",
+    "copyInstead": "Stattdessen Admin-Link kopieren",
+    "copied": "Kopiert ✓",
+    "left": "{n, plural, =0 {Für diese Umfrage sind keine weiteren Sendungen möglich} one {Sie können noch # für diese Umfrage senden} other {Sie können noch # für diese Umfrage senden}}"
   },
   "app": {
     "nfPage": "Hoppla, diese Seite finden wir nicht",

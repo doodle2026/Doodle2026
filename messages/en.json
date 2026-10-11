@@ -163,9 +163,7 @@
     "copyFailed": "Couldn’t copy",
     "copyHint": "Select and copy manually (Ctrl+C / ⌘C – or long-press the link).",
     "copyFailedLive": "Couldn’t copy. Select and copy manually.",
-    "ackLive": "Admin link marked as saved. The box has been collapsed.",
-    "adminMailSubject": "My admin link: {title}",
-    "adminMailBody": "Keep this email. Don’t share the link.\n\nAdmin (edit/close): {admin}\nLink for participants: {url}"
+    "ackLive": "Admin link marked as saved. The box has been collapsed."
   },
   "nf": {
     "pageTitle": "Poll not found",
@@ -454,7 +452,24 @@
     "footerText": "grabAday · Find a date without logging in",
     "fromName": "{{organizerName}} via grabAday",
     "icsSummary": "{{eventTitle}}",
-    "icsDescription": "Final date chosen in grabAday: {{pollUrl}}"
+    "icsDescription": "Final date chosen in grabAday: {{pollUrl}}",
+    "selfSubject": "Your grabAday admin link: {{eventTitle}}",
+    "selfPreheader": "Save this email – the admin link gives full control over your poll.",
+    "selfEyebrow": "Your new poll",
+    "selfHeading": "High five – your poll is ready! 🙌",
+    "selfIntro": "Thanks for using grabAday to find a date for <strong>{{eventTitle}}</strong>. Here are your two links: one to keep for yourself, one to share.",
+    "selfAdminH": "🔑 Your admin link",
+    "selfSave": "Save this email – the admin link gives full control over the poll.",
+    "selfNoShare": "Don’t share it: anyone with this link can edit, close and choose the final date.",
+    "selfAdminCta": "Open admin page",
+    "selfShareH": "Share with your participants",
+    "selfShareP": "Send this link to everyone who should vote – no login needed.",
+    "selfShareCta": "Open the poll",
+    "selfOutro": "Happy date-grabbing! ✨<br>– The grabAday team",
+    "selfNotYou": "Didn’t create this poll? Then you can ignore this email.",
+    "selfWhy": "You’re getting this email because this address was entered on grabAday to receive the admin link. We don’t store it.",
+    "selfTxtHead": "Your grabAday admin link – {{eventTitle}}",
+    "selfFallback": "Button not working? Copy this link:"
   },
   "se": {
     "title": "Send to email addresses",
@@ -735,6 +750,35 @@
       "day": "Daily quota (100)"
     },
     "limTodayCol": "Today"
+  },
+  "self": {
+    "title": "Send the admin link to yourself",
+    "lead": "We’ll email you the admin link and the participant link, so you can always find them again.",
+    "emailLabel": "Your email address",
+    "emailPh": "name@example.com",
+    "noStore": "We don’t store your address.",
+    "send": "Send",
+    "sending": "Sending…",
+    "cancel": "Cancel",
+    "close": "Close",
+    "done": "Done",
+    "another": "Send to another address",
+    "sentH": "On its way! 🎉",
+    "sentP": "Sent to {email}.",
+    "spam": "Check your spam folder if you can’t find the email.",
+    "errRequired": "Enter your email address.",
+    "errInvalid": "Enter a valid email address, e.g. name@example.com.",
+    "errBlocked": "Can’t be sent to this address.",
+    "errWait": "You just sent one. Try again in {sec, plural, one {# second} other {# seconds}}.",
+    "errPollMax": "The admin link has already been emailed 3 times for this poll. Copy the link instead.",
+    "errIp": "Many emails have been sent from your network. Try again in {min, plural, =0 {less than 1 min} one {about # min} other {about # min}} – or copy the link.",
+    "errQuota": "Can’t send right now – try again later. You can copy the link instead.",
+    "errServer": "Something went wrong – nothing was sent. Try again.",
+    "errOffline": "No connection. Check your internet and try again.",
+    "errToken": "We couldn’t verify the admin link. Reload the page and try again.",
+    "copyInstead": "Copy admin link instead",
+    "copied": "Copied ✓",
+    "left": "{n, plural, =0 {You can’t send more for this poll} one {You can send # more for this poll} other {You can send # more for this poll}}"
   },
   "app": {
     "nfPage": "Oops, we can’t find that page",
