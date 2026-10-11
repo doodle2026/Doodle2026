@@ -75,6 +75,24 @@ async function ctxFor(b: pwc.Browser, opts: Record<string, unknown> = {}) {
 const loc = async (j: ReturnType<typeof jar>, p: string) => (await req(j, p)).res.headers.get('location') ?? '';
 
 describe('owner follow-ups', () => {
+  test('owner:unlock CLI: lifts pair + ceiling locks, writes an audit row, shows in the activity log', async () => {
+    const { spawnSync } = await import('node:child_process');
+    const u = await mkUser(); const ip = ipGen();
+    for (let i = 0; i < 6; i++) await login(jar(ip), u, `wrong-${i}-password`);
+    await prisma.ownerLoginLog.createMany({ data: Array.from({ length: 100 }, (_, i) => ({ username: u, success: false, outcome: 'bad_credentials', ip: `10.9.${i}.xxx`, userAgent: 't' })) });
+    expect((await login(jar(ip), u)).status).toBe(429);
+    expect((await login(jar(), u)).status).toBe(429); // ceiling
+    const run = spawnSync('npm', ['run', '-s', 'owner:unlock', '--', u.toUpperCase()], { encoding: 'utf8', env: process.env });
+    expect(run.status, run.stderr).toBe(0); expect(run.stdout).toContain(`Unlocked "${u}"`);
+    const row = await prisma.ownerLoginLog.findFirst({ where: { username: u, outcome: 'unlock' } });
+    expect(row).toMatchObject({ success: true, ip: '' }); expect(row!.userAgent).toMatch(/^cli owner:unlock/);
+    const j = jar(ip); expect((await login(j, u)).status).toBe(200);
+    expect((await req(j, '/api/owner/log?type=unlock')).body.rows.some((r: { user: string; type: string }) => r.user === u && r.type === 'unlock')).toBe(true);
+    const bad = spawnSync('npm', ['run', '-s', 'owner:unlock', '--', 'no-such-owner-x'], { encoding: 'utf8', env: process.env });
+    expect(bad.status).toBe(1);
+    expect(spawnSync('npm', ['run', '-s', 'owner:unlock'], { encoding: 'utf8', env: process.env }).status).toBe(2);
+  }, 60_000);
+
   test('L1: login redirect says why the session ended (idle / absolute / ended)', async () => {
     const u = await mkUser(); const j = jar();
     await login(j, u);
@@ -105,14 +123,39 @@ describe('owner follow-ups', () => {
   });
 
   describe.skipIf(!existsSync(CHROME))('browser', () => {
+    test('(a) timestamps in the viewer’s local zone with a label; day counts stay UTC and say so', async () => {
+      const b = await pwc.chromium.launch({ executablePath: CHROME });
+      try {
+        const p = await mkPoll(`Zone ${uniq()}`);
+        const { ctx } = await ctxFor(b, { timezoneId: 'America/New_York', locale: 'en-US' }); const pg = await ctx.newPage();
+        await pg.goto(`${BASE}/en/owner`);
+        await pg.waitForSelector('time[data-local="1"]');
+        const t0 = await pg.textContent('#o-newest tbody time');
+        expect(t0).toMatch(/EDT|EST|GMT-4|GMT-5/); expect(t0).not.toMatch(/UTC/);
+        expect(await pg.textContent('#o-tznote')).toContain('America/New_York');
+        expect(await pg.textContent('#o-tznote')).toMatch(/UTC day/);
+        expect(await pg.textContent('#o-today')).toMatch(/today \(UTC\)/);
+        expect(await pg.textContent('#o-reset')).toMatch(/(19|20):00/); // UTC midnight in New York
+        await pg.goto(`${BASE}/en/owner/events/${p.id}`); await pg.waitForSelector('time[data-local="1"]');
+        expect(await pg.textContent('.ometa time')).toMatch(/EDT|EST|GMT-4|GMT-5/);
+        await pg.goto(`${BASE}/en/owner/log`); await pg.waitForSelector('#o-log time[data-local="1"]');
+        expect(await pg.textContent('#o-log time')).toMatch(/EDT|EST|GMT-4|GMT-5/);
+        // no hydration errors
+        const errs: string[] = []; pg.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+        await pg.reload(); await pg.waitForSelector('time[data-local="1"]'); expect(errs.filter((e) => /hydrat/i.test(e))).toEqual([]);
+        await ctx.close();
+      } finally { await b.close(); }
+    }, 60_000);
+
     test('L2: after the lock expires the form re-enables without reload; focus never on <body>', async () => {
       const b = await pwc.chromium.launch({ executablePath: CHROME });
       try {
         const u = await mkUser();
-        for (let i = 0; i < 5; i++) await login(jar(), u, `wrong-${i}-password`);
-        // make the lock end in ~4 s: move the failures to the edge of the 15-min window
-        await prisma.ownerLoginLog.updateMany({ where: { username: u, success: false }, data: { at: new Date(Date.now() - 15 * 60_000 + 4000) } });
-        const ctx = await b.newContext({ extraHTTPHeaders: { 'X-Forwarded-For': ipGen() } }); const pg = await ctx.newPage();
+        const ip = ipGen();
+        for (let i = 0; i < 5; i++) await login(jar(ip), u, `wrong-${i}-password`);
+        // first backoff step is 60 s after the last failure: move the failures so ~4 s remain
+        await prisma.ownerLoginLog.updateMany({ where: { username: u, success: false }, data: { at: new Date(Date.now() - 56_000) } });
+        const ctx = await b.newContext({ extraHTTPHeaders: { 'X-Forwarded-For': ip } }); const pg = await ctx.newPage();
         await pg.goto(`${BASE}/en/owner/login`);
         await pg.fill('#owner-user', u); await pg.fill('#owner-pw', PW); await pg.click('#owner-submit');
         await pg.waitForSelector('#owner-err >> text=less than 1 min');

@@ -849,6 +849,8 @@
     "ownerExpiredIdle": "You were logged out after 2 hours without activity. Log in again.",
     "ownerSessionEnded": "Your session has ended (you were logged out). Log in again.",
     "ownerScrollHint": "Scroll sideways to see all columns →",
-    "ownerTableAria": "Table – scroll sideways for more columns"
+    "ownerTableAria": "Table – scroll sideways for more columns",
+    "ownerTzNote": "Times are shown in your local time ({zone}). “Today”, the per-day counts and the email quota use the UTC day.",
+    "ownerLtUnlock": "Unlocked (CLI)"
   }
 }

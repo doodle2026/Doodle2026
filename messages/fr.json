@@ -849,6 +849,8 @@
     "ownerExpiredIdle": "Vous avez été déconnecté après 2 heures d’inactivité. Reconnectez-vous.",
     "ownerSessionEnded": "Votre session est terminée (vous avez été déconnecté). Reconnectez-vous.",
     "ownerScrollHint": "Faites défiler horizontalement pour voir toutes les colonnes →",
-    "ownerTableAria": "Tableau – faites défiler horizontalement pour plus de colonnes"
+    "ownerTableAria": "Tableau – faites défiler horizontalement pour plus de colonnes",
+    "ownerTzNote": "Les heures sont affichées dans votre heure locale ({zone}). « Aujourd’hui », les chiffres par jour et le quota d’e-mails utilisent le jour UTC.",
+    "ownerLtUnlock": "Déverrouillé (CLI)"
   }
 }

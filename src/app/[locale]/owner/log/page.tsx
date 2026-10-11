@@ -5,6 +5,7 @@ import { requireOwner } from '@/lib/owner/page';
 import { activityLog, LOG_TYPES } from '@/lib/owner/stats';
 import { ownerFmt } from '@/lib/owner/fmt';
 import { logError } from '@/lib/http';
+import LocalTime, { TzNote } from '../LocalTime';
 import OwnerChrome from '../OwnerChrome';
 import ScrollTable from '../ScrollTable';
 import { ErrorBox, Pager, type T } from '../parts';
@@ -17,7 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const t = await getTranslations({ locale: (await params).locale as Locale });
   return { title: t('owner.logTitle'), robots: { index: false, follow: false } };
 }
-const TY: Record<string, [string, string]> = { login_ok: ['✓', 'ok'], login_failed: ['✕', 'bad'], locked: ['⛔', 'bad'], logout: ['⇥', ''], view: ['👁', ''] };
+const TY: Record<string, [string, string]> = { login_ok: ['✓', 'ok'], login_failed: ['✕', 'bad'], locked: ['⛔', 'bad'], logout: ['⇥', ''], view: ['👁', ''], unlock: ['🔓', 'ok'] };
 
 /** Read-only activity log (§47.8): logins + detail views, IPs truncated at write time, no export. */
 export default async function OwnerLog({ params, searchParams }: Props) {
@@ -46,8 +47,8 @@ export default async function OwnerLog({ params, searchParams }: Props) {
           <thead><tr><th scope="col">{t('owner.cTime')}</th><th scope="col">{t('owner.cEvent')}</th><th scope="col">{t('owner.cUser')}</th><th scope="col">{t('owner.cDetails')}</th></tr></thead>
           <tbody>{r.rows.map((e, i) => (
             <tr key={i} data-type={e.type}>
-              <th scope="row" data-label={t('owner.cTime')}><time dateTime={e.at}>{f.dt(e.at)}</time></th>
-              <td data-label={t('owner.cEvent')}><span className={`olog-type olog-type--${TY[e.type]?.[1] ?? ''}`}><span aria-hidden="true">{TY[e.type]?.[0] ?? '·'}</span>{` ${t(`owner.lt.${e.type}` as 'owner.lt.view')}`}</span></td>
+              <th scope="row" data-label={t('owner.cTime')}><LocalTime iso={e.at} /></th>
+              <td data-label={t('owner.cEvent')}><span className={`olog-type olog-type--${TY[e.type]?.[1] ?? ''}`}><span aria-hidden="true">{TY[e.type]?.[0] ?? '·'}</span>{` ${e.type === 'unlock' ? t('app.ownerLtUnlock') : t(`owner.lt.${e.type}` as 'owner.lt.view')}`}</span></td>
               <td data-label={t('owner.cUser')}>{e.known ? e.user : <span className="meta">{t('owner.unknownUser', { user: e.user })}</span>}</td>
               <td data-label={t('owner.cDetails')}>{e.event
                 ? (e.event.title !== null ? <a href={`/${locale}/owner/events/${e.event.id}`}>{e.event.title}</a> : <span className="meta">{t('owner.deletedTitle')}</span>)
@@ -62,6 +63,7 @@ export default async function OwnerLog({ params, searchParams }: Props) {
     <OwnerChrome locale={locale} active="log" user={s.username}>
       <main className="owner-container" id="main">
         <div className="owner-title"><div><h1>{t('owner.logTitle')}</h1><p className="lead">{t('owner.logLead')}</p></div><p className="meta">{t('owner.logRetention')}</p></div>
+        <TzNote />
         <TypeSelect base={base} type={type} />
         <p className="ores meta" id="res" role="status">{res}</p>
         <div id="list">{body}</div>

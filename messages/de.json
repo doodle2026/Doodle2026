@@ -849,6 +849,8 @@
     "ownerExpiredIdle": "Du wurdest nach 2 Stunden ohne Aktivität abgemeldet. Melde dich erneut an.",
     "ownerSessionEnded": "Deine Sitzung wurde beendet (du wurdest abgemeldet). Melde dich erneut an.",
     "ownerScrollHint": "Seitlich scrollen, um alle Spalten zu sehen →",
-    "ownerTableAria": "Tabelle – seitlich scrollen für weitere Spalten"
+    "ownerTableAria": "Tabelle – seitlich scrollen für weitere Spalten",
+    "ownerTzNote": "Zeiten werden in deiner Ortszeit angezeigt ({zone}). „Heute“, die Tageszahlen und das E-Mail-Kontingent verwenden den UTC-Tag.",
+    "ownerLtUnlock": "Entsperrt (CLI)"
   }
 }

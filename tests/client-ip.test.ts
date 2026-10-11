@@ -52,9 +52,9 @@ describe('limits hold against a forged leftmost XFF (integration)', () => {
     expect(last).toBe(429);
   });
 
-  test('owner login lock per IP: different usernames + forged leftmost XFF still lock after 5', async () => {
+  test('owner login lock per IP (20): different usernames + forged leftmost XFF still lock', async () => {
     const real = rnd(); let last = 0;
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 21; i++) {
       const xff = `${rnd()}, ${real}`;
       const c = await fetch(`${BASE}/api/owner/csrf`, { headers: { 'X-Forwarded-For': xff } });
       const { csrf } = await c.json(); const cookie = (c.headers.get('set-cookie') ?? '').split(';')[0];

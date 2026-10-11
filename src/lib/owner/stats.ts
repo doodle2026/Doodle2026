@@ -183,7 +183,7 @@ export async function eventDetail(slug: string) {
 }
 
 // ---------------- activity log ----------------
-export const LOG_TYPES: Record<string, string[]> = { login_ok: ['ok'], login_failed: ['bad_credentials', 'bad_csrf'], locked: ['locked'], logout: ['logout'], view: ['view'] };
+export const LOG_TYPES: Record<string, string[]> = { login_ok: ['ok'], login_failed: ['bad_credentials', 'bad_csrf'], locked: ['locked'], logout: ['logout'], view: ['view'], unlock: ['unlock'] };
 export async function activityLog(type: string | undefined, pageIn: unknown) {
   const pageSize = 50;
   const where = type && LOG_TYPES[type] ? { outcome: { in: LOG_TYPES[type] } } : {};

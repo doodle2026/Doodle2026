@@ -849,6 +849,8 @@
     "ownerExpiredIdle": "Du blev logget ud efter 2 timer uden aktivitet. Log ind igen.",
     "ownerSessionEnded": "Din session er afsluttet (du blev logget ud). Log ind igen.",
     "ownerScrollHint": "Rul til siden for at se alle kolonner →",
-    "ownerTableAria": "Tabel – rul til siden for flere kolonner"
+    "ownerTableAria": "Tabel – rul til siden for flere kolonner",
+    "ownerTzNote": "Tidspunkter vises i din lokale tid ({zone}). “I dag”, tal pr. dag og mailkvoten bruger UTC-døgnet.",
+    "ownerLtUnlock": "Låst op (CLI)"
   }
 }

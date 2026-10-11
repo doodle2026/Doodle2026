@@ -48,3 +48,28 @@ DATABASE_URL='<prod connection string>' npm run owner:create -- --username jan
   - With `TRUSTED_PROXY_HOPS` unset or `0`, no header is trusted: the socket address is used if the runtime exposes it, else `unknown`. That means one shared bucket, which fails closed.
   - Tests and `.env.test` use `1` (the test client plays the proxy).
 - The leftmost `X-Forwarded-For` entry is never used.
+
+## Login throttling (M3) and `owner:unlock`
+Everything is derived from `owner_login_log`, so it works on serverless. Values are in `src/lib/owner/auth.ts`.
+
+| Limit | Rule | Purpose |
+|---|---|---|
+| username + IP (IP truncated /24 or /48) | 5 free failures, then exponential backoff from the last failure: 60 s, 2 min, 4 min … capped at **60 min**. Counted over 24 h since that pair's last successful login or the username's last unlock. | Guessing from one network. Someone else's IP can't lock the owner out. |
+| IP (any usernames) | **20** failures in **15 min** → wait until the window frees | Password spraying |
+| username from all IPs | **100** failures in **1 h** → wait until the window frees | Distributed attacks (high ceiling) |
+
+Lift a lock (e.g. the ceiling was hit):
+
+```bash
+DATABASE_URL='<prod direct URL>' npm run owner:unlock -- jan
+```
+
+- The command writes an `unlock` row to the audit log (activity log type "Unlocked (CLI)", with the OS user in the user-agent field). After that, the username's earlier failures stop counting for the pair backoff and the ceiling.
+- Nothing is deleted.
+- The per-IP spraying limit is not affected.
+- Exit codes: 0 = unlocked, 1 = unknown user, 2 = usage.
+
+## Time zones in the dashboard
+- Timestamps (log, lists, detail, "Updated", "resets at") are shown client-side in the **viewer's local time** with a zone label. The server render shows UTC until the page hydrates.
+- "Today", the per-day counts and charts, and the email quota all use the **UTC day**, as stated on each page.
+- Calendar dates (date options, final date, purge date) are plain dates with no time zone.

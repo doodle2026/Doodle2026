@@ -6,6 +6,8 @@ import { listEvents, SORTS } from '@/lib/owner/stats';
 import { ownerFmt } from '@/lib/owner/fmt';
 import { DAY_TZ } from '@/lib/owner/counters';
 import { logError } from '@/lib/http';
+import LocalTime, { TzNote } from '../LocalTime';
+import { split } from '../split';
 import OwnerChrome from '../OwnerChrome';
 import ScrollTable from '../ScrollTable';
 import { ErrorBox, Pager, StatusBadge, type T } from '../parts';
@@ -69,7 +71,7 @@ export default async function OwnerEvents({ params, searchParams }: Props) {
             <tbody>{r.rows.map((e) => (
               <tr key={e.id}>
                 <th scope="row" data-label={t('owner.cTitle')}><a href={`${base}/${e.id}`}>{e.title}</a>{e.matchedEmail && <div className="meta">{mPre}<mark>{e.matchedEmail}</mark>{mPost}</div>}</th>
-                <td data-label={t('owner.cCreated')}>{fm.dt(e.createdAt)}</td>
+                <td data-label={t('owner.cCreated')}>{<LocalTime iso={e.createdAt} />}</td>
                 <td data-label={t('owner.cLang')}><abbr title={LOCALE_NAMES[e.locale as Locale]} lang={e.locale}>{e.locale.toUpperCase()}</abbr></td>
                 <td data-label={t('owner.cStatus')}><StatusBadge t={tt} s={e.status} /></td>
                 <td className="num" data-label={t('owner.cDates')}>{nfx(e.dateCount)}</td>
@@ -87,7 +89,8 @@ export default async function OwnerEvents({ params, searchParams }: Props) {
   return (
     <OwnerChrome locale={locale} active="events" user={s.username}>
       <main className="owner-container" id="main">
-        <div className="owner-title"><div><h1>{t('owner.evTitle')}</h1></div><p className="meta">{t('owner.updated', { time: fm.time(now) })}</p></div>
+        <div className="owner-title"><div><h1>{t('owner.evTitle')}</h1></div><p className="meta">{split(t('owner.updated', { time: '\u0001' }), <LocalTime iso={now} kind="time" />)}</p></div>
+        <TzNote />
         <Filters base={base} f={f} dayTz={DAY_TZ} />
         <p className="ores meta" id="res" role="status" aria-live="polite">{res}</p>
         <div id="list">{body}</div>
