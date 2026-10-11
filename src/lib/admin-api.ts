@@ -1,3 +1,4 @@
+import { bumpLimit } from '@/lib/owner/counters';
 import { NextResponse } from 'next/server';
 import { adminEventId, ApiError, loadAdminEvent } from './events';
 import { jsonError, logError, NO_STORE, readJson } from './http';
@@ -40,6 +41,7 @@ export function adminRoute(handler: Handler, opts: { write?: boolean; json?: boo
         }
         return await handler({ req, slug, eventId, body, params });
       } catch (e) {
+        if (e instanceof ApiError) { await bumpLimit(e.extra.code); }
         if (e instanceof ApiError) return NextResponse.json({ errors: e.errors, ...e.extra }, { status: e.status, headers: e.status === 429 ? { 'Retry-After': String(e.extra.retry_after ?? 3600) } : undefined });
         logError('admin API', e);
         return jsonError(500, ['Serverfejl.']);

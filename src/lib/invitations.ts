@@ -1,3 +1,4 @@
+import { bumpStat } from '@/lib/owner/counters';
 import { isLocale } from '@/i18n/config';
 import { maskEmail } from './email/send';
 /**
@@ -72,6 +73,7 @@ export async function reserveQuota(n: number, now = new Date(), limits = { day: 
 const secsToUtcMidnight = () => { const n = new Date(); return Math.max(60, Math.ceil((Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1) - n.getTime()) / 1000)); };
 /** §46.9: add `remaining` to a per-IP 429 from rateLimit() (status, headers incl. Retry-After kept). */
 export async function withRemaining(res: Response, eventId: number): Promise<Response> {
+  await bumpStat('limit_ip');
   const body = await res.json().catch(() => ({}));
   return Response.json({ ...body, remaining: await remainingNow(eventId) }, { status: res.status, headers: res.headers });
 }
@@ -351,7 +353,11 @@ export async function cleanup(now = new Date()) {
   const cutoff = new Date(now.getTime() - RETENTION_DAYS * 86400_000);
   const inv = await prisma.invitation.deleteMany({ where: { event: { closedAt: { lt: cutoff } } } });
   const q = await prisma.emailQuota.deleteMany({ where: { day: { lt: utcDay(new Date(now.getTime() - 62 * 86400_000)) } } });
-  return { invitations_deleted: inv.count, quota_rows_deleted: q.count };
+  // Owner activity log: 12 months retention (PM proposal); expired owner sessions.
+  const yearAgo = new Date(now); yearAgo.setUTCMonth(yearAgo.getUTCMonth() - 12);
+  const log = await prisma.ownerLoginLog.deleteMany({ where: { at: { lt: yearAgo } } });
+  await prisma.ownerSession.deleteMany({ where: { expiresAt: { lt: now } } });
+  return { invitations_deleted: inv.count, quota_rows_deleted: q.count, owner_log_deleted: log.count };
 }
 export type { Recipient };
 
