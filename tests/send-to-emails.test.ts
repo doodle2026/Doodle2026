@@ -105,7 +105,13 @@ describe.skipIf(!existsSync(CHROME))('UI (headless)', () => {
     expect(await inp(0).inputValue()).toBe(a.replace('@Example.COM', '@example.com'));
     expect(await pg.evaluate(() => document.activeElement?.id)).toMatch(/^se-i/);
     await pg.waitForSelector('#se-rows >> text=Gensend fra admin.');
-    await pg.click('#se-more'); expect(await pg.locator('#se-rows li').count()).toBe(10);
+    await inp(2).fill('kladde@example.com'); await pg.click('#se-pm-toggle'); await pg.fill('#se-pmsg', 'Hej');
+    await pg.click('#share-close'); await pg.waitForSelector('#share', { state: 'hidden' }); await pg.waitForSelector('#se-rows');
+    expect(await pg.locator('#se-rows input').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value))).toContain('kladde@example.com');
+    expect(await pg.inputValue('#se-pmsg')).toBe('Hej');
+    await pg.click('#share-open'); await pg.waitForSelector('#share #se-rows');
+    expect(await pg.inputValue('#se-pmsg')).toBe('Hej');
+    const before = await pg.locator('#se-rows li').count(); await pg.click('#se-more'); expect(await pg.locator('#se-rows li').count()).toBe(before + 5);
     await pg.reload(); await pg.waitForSelector('#se-rows li[data-status="earlier"]');
     expect(await pg.textContent('#se-rows')).toContain('Sendt tidligere');
     const v = await browser.newPage(); await v.goto(`${BASE}/da/p/${p.id}`); await v.waitForLoadState('networkidle');

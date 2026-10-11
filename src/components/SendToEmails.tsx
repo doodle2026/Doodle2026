@@ -16,6 +16,8 @@ type St = 'idle' | 'sending' | 'sent' | 'failed' | 'bounced' | 'rejected';
 type Row = { id: number; value: string; status: St; touched: boolean; earlier?: boolean };
 const POLL_MS = 20_000;
 let uid = 0;
+/** Unsent drafts survive remounts (share panel hidden/shown) but not a reload (§46.2: drafts are lost on reload). */
+const drafts = new Map<string, { rows: Row[]; message: string }>();
 const newRow = (value = '', status: St = 'idle', earlier = false): Row => ({ id: ++uid, value, status, touched: !!value, earlier });
 /** trim, drop mailto:, lower-case the domain (§46.3). */
 export const normSe = (v: string) => { v = v.trim().replace(/^mailto:/i, ''); const i = v.lastIndexOf('@'); return i < 0 ? v : v.slice(0, i) + '@' + v.slice(i + 1).toLowerCase(); };
@@ -27,11 +29,14 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
   const { t, tr, locale } = useI18n();
   const lp = useLp();
   const [open, setOpen] = useState(true);
-  const [rows, setRows] = useState<Row[]>(() => Array.from({ length: 5 }, () => newRow()));
+  const [rows, setRows] = useState<Row[]>(() => {
+    const d = drafts.get(slug)?.rows ?? [];
+    return [...d, ...Array.from({ length: Math.max(0, 5 - d.length) }, () => newRow())];
+  });
   const [invitees, setInvitees] = useState<Invitee[]>([]);
   const [quota, setQuota] = useState<Quota | null>(null);
-  const [pmOpen, setPmOpen] = useState(false);
-  const [message, setMessage] = useState('');
+  const [pmOpen, setPmOpen] = useState(() => !!drafts.get(slug)?.message);
+  const [message, setMessage] = useState(() => drafts.get(slug)?.message ?? '');
   const [live, setLive] = useState('');
   const [ipWait, setIpWait] = useState<number | null>(null);
   const rootRef = useRef<HTMLElement>(null);
@@ -45,6 +50,9 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
     tick(); ipTimer.current = setInterval(tick, 15_000);
   };
   useEffect(() => () => clearInterval(ipTimer.current), []);
+  useEffect(() => {
+    drafts.set(slug, { rows: rows.filter((r) => !r.earlier && r.status !== 'sent' && r.status !== 'sending' && r.status !== 'bounced').map((r) => ({ ...r, status: r.status === 'failed' ? 'failed' : 'idle' })), message });
+  }, [slug, rows, message]);
   const say = (m: string) => { setLive(''); setTimeout(() => setLive(m), 30); };
   const api = useCallback(async (path: string, init?: RequestInit) => {
     const res = await fetch(`/api/events/${encodeURIComponent(slug)}/invitations${path}`, {
