@@ -88,9 +88,9 @@ describe('.ics', () => {
     expect(unfolded).toContain('DESCRIPTION:Linje 1\\nLinje 2');
     expect(t).not.toContain(e.admin);
     // phase 4: .ics texts + URL in the requested language (?locale=), else Accept-Language → poll language
-    for (const [l, txt] of [['da', 'Endelig dato valgt i GrabAday'], ['en', 'Final date chosen in GrabAday']] as const) {
+    for (const [l, txt] of [['da', 'Endelig dato valgt i grabAday'], ['en', 'Final date chosen in grabAday']] as const) {
       const u = (await call(`/api/events/${e.id}/ics?locale=${l}`)).text.replace(/\r\n /g, '');
-      expect(u).toContain(txt); expect(u).toContain(`/${l}/p/${e.id}`); expect(u).toContain(`PRODID:-//GrabAday//GrabAday//${l.toUpperCase()}`);
+      expect(u).toContain(txt); expect(u).toContain(`/${l}/p/${e.id}`); expect(u).toContain(`PRODID:-//grabAday//grabAday//${l.toUpperCase()}`);
     }
     // stable UID across downloads
     const again = (await call(`/api/events/${e.id}/ics`)).text.replace(/\r\n /g, '');

@@ -10,7 +10,7 @@ export default function Header({ children }: { children?: React.ReactNode }) {
   const t = useTranslations();
   return (
     <header className="app-header">
-      <Link className="app-header__logo" href={lp('/')} aria-label={t('common.home')}>{'📅 GrabAday'}</Link>
+      <Link className="app-header__logo" href={lp('/')} aria-label={t('common.home')}>{'📅 grabAday'}</Link>
       <div className="app-header__actions">
         {children}
         <LanguageSwitcher />

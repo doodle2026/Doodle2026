@@ -33,7 +33,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     alternates: { canonical: url, languages: languageAlternates(`/p/${ev.slug}`) },
     robots: { index: false, follow: false }, // polls are private-by-link
     openGraph: {
-      type: 'website', siteName: 'GrabAday', locale: OG_LOCALE[locale], alternateLocale: LOCALES.filter((x) => x !== locale).map((x) => OG_LOCALE[x]), title: ev.title, description: ogDescription, url,
+      type: 'website', siteName: 'grabAday', locale: OG_LOCALE[locale], alternateLocale: LOCALES.filter((x) => x !== locale).map((x) => OG_LOCALE[x]), title: ev.title, description: ogDescription, url,
       images: [image],
     },
     twitter: { card: 'summary_large_image', title: ev.title, description: ogDescription, images: [image] },

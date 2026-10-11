@@ -88,7 +88,7 @@ const S = (d: PollEmailData) => TEMPLATES[mailLocale(d.locale)].strings;
 export const renderInvitation = (d: PollEmailData) => render('invitation', d, plain(S(d).invitation.subject, d));
 export const renderReminder = (d: PollEmailData) =>
   render('reminder', d, plain(d.deadline ? S(d).reminder.subjectWithDeadline : S(d).reminder.subject, d));
-/** "<name> via GrabAday" in the mail language (name already sanitized). */
+/** "<name> via grabAday" in the mail language (name already sanitized). */
 export const fromNameFor = (organizerName: string, locale?: string) => plain(TEMPLATES[mailLocale(locale)].strings.fromName, { organizerName } as PollEmailData);
 /** .ics SUMMARY/DESCRIPTION in the given language. */
 export function icsTexts(eventTitle: string, pollUrl: string, locale?: string) {

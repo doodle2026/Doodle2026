@@ -14,7 +14,7 @@ export interface EmailMessage {
   to: string | string[]; subject: string; text: string; html?: string; idempotencyKey?: string;
   /** Overrides EMAIL_REPLY_TO (e.g. the organizer). Dropped if not a valid address. */
   replyTo?: string;
-  /** Display name for From (e.g. "Mette via GrabAday"); the address is always EMAIL_FROM. Sanitized here too. */
+  /** Display name for From (e.g. "Mette via grabAday"); the address is always EMAIL_FROM. Sanitized here too. */
   fromName?: string;
   headers?: Record<string, string>;
   tags?: { name: string; value: string }[];

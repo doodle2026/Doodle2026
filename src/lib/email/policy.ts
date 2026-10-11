@@ -17,7 +17,7 @@ const ORGANIZER: Record<MailLocale, string> = { en: 'The organizer', da: 'Arrang
 const FOOTER: Record<MailLocale, string> = { en: en.email.footerText, da: da.email.footerText, fr: fr.email.footerText, de: de.email.footerText };
 import { isEmail, sanitizeDisplayName, type EmailMessage } from './send';
 
-export const APP_NAME = 'GrabAday';
+export const APP_NAME = 'grabAday';
 
 export interface PollForEmail {
   slug: string; title: string; description?: string; isClosed: boolean;
