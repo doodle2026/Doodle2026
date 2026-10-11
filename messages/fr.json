@@ -846,7 +846,7 @@
     "ownerRetry": "Une erreur est survenue. Rechargez la page et réessayez.",
     "ownerSkip": "Aller au contenu",
     "ownerExpiredIdle": "Vous avez été déconnecté après 2 heures d’inactivité. Reconnectez-vous.",
-    "ownerSessionEnded": "Votre session est terminée (vous avez été déconnecté). Reconnectez-vous.",
+    "ownerSessionEnded": "Veuillez vous reconnecter.",
     "ownerScrollHint": "Faites défiler horizontalement pour voir toutes les colonnes →",
     "ownerTableAria": "Tableau – faites défiler horizontalement pour plus de colonnes",
     "ownerTzNote": "Les heures sont affichées dans votre heure locale ({zone}). « Aujourd’hui », les chiffres par jour et le quota d’e-mails utilisent le jour UTC.",

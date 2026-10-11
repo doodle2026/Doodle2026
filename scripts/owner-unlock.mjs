@@ -20,4 +20,8 @@ try {
     await prisma.ownerLoginLog.create({ data: { username, userId: user.id, success: true, outcome: 'unlock', ip: '', userAgent: `cli owner:unlock (${process.env.USER || 'unknown'})`.slice(0, 255) } });
     process.stdout.write(`Unlocked "${username}" (${fails} failed attempts in the last 24 h no longer count). Logged in the audit log.\n`);
   }
-} finally { await prisma.$disconnect(); }
+} catch (e) {
+  // exit 3 = database error (unreachable DB, bad DATABASE_URL, missing migration); 1 = unknown user; 2 = usage
+  process.stderr.write(`owner:unlock: database error: ${e?.code ?? ''} ${String(e?.message ?? e).split('\n').pop()}\n`);
+  process.exitCode = 3;
+} finally { await prisma.$disconnect().catch(() => undefined); }
