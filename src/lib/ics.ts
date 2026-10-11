@@ -28,12 +28,12 @@ export function icsFold(line: string): string {
 export const icsDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
 /** All-day event: `date` 'YYYY-MM-DD' → DTSTART;VALUE=DATE + DTEND next day, no TZID. */
-export type IcsEvent = { uid: string; stamp: Date; sequence?: number; lastModified?: Date; summary: string; description?: string; url?: string; date: string };
+export type IcsEvent = { uid: string; stamp: Date; sequence?: number; lastModified?: Date; summary: string; description?: string; url?: string; date: string; lang?: string };
 
 export function buildIcs(e: IcsEvent): string {
   const when = [`DTSTART;VALUE=DATE:${basicDate(e.date)}`, `DTEND;VALUE=DATE:${basicDate(addDays(e.date, 1))}`];
   const lines = [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//GrabAday//GrabAday//DA', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VCALENDAR', 'VERSION:2.0', `PRODID:-//GrabAday//GrabAday//${(e.lang ?? 'en').toUpperCase()}`, 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT',
     `UID:${e.uid}`, `DTSTAMP:${icsDate(e.stamp)}`,
     ...(e.sequence !== undefined ? [`SEQUENCE:${e.sequence}`] : []),

@@ -20,7 +20,7 @@ const newKey = () =>
  */
 export default function CreateForm() {
   const lp = useLp();
-  const { t, fd } = useI18n();
+  const { t, fd, locale } = useI18n();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [dates, setDates] = useState<string[]>([]);
@@ -63,7 +63,7 @@ export default function CreateForm() {
       const res = await fetch('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestKey.current },
-        body: JSON.stringify({ title, description, options: dates.map((date) => ({ date })) }),
+        body: JSON.stringify({ locale, title, description, options: dates.map((date) => ({ date })) }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {

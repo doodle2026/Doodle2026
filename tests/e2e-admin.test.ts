@@ -49,7 +49,7 @@ describe.skipIf(!existsSync(CHROME))('admin round 4 (headless Chrome)', () => {
     await v.waitForSelector('#result-banner #gcal');
     expect(await v.getAttribute('#gcal', 'href')).toContain(`dates=${Y}1104%2F${Y}1105`);
     expect(await v.textContent('#result-banner')).toContain('Den endelige dato er');
-    expect(await v.getAttribute('#ics', 'href')).toBe(`/api/events/${e.id}/ics`);
+    expect(await v.getAttribute('#ics', 'href')).toBe(`/api/events/${e.id}/ics?locale=da`);
     void b0; await v.close(); await p.close();
   }, 30_000);
 

@@ -90,12 +90,12 @@ export function sameVote(a: { nameKey: string; votes: Map<number, VoteValue> }, 
 }
 
 /** Create participant + votes atomically. Closed check inside the transaction (row lock on the event). */
-export async function createParticipant(eventId: number, v: CleanVote, idemKey?: string) {
+export async function createParticipant(eventId: number, v: CleanVote, idemKey?: string, locale = 'en') {
   const editToken = newToken();
   try {
     const p = await prisma.$transaction(async (tx) => {
       await lockOpenEvent(tx, eventId);
-      const p = await tx.participant.create({ data: { eventId, name: v.name, nameKey: v.nameKey, editTokenHash: sha256Hex(editToken) } });
+      const p = await tx.participant.create({ data: { eventId, locale, name: v.name, nameKey: v.nameKey, editTokenHash: sha256Hex(editToken) } });
       await tx.vote.createMany({ data: [...v.votes].map(([timeOptionId, value]) => ({ participantId: p.id, timeOptionId, value })) });
       if (idemKey) await tx.voteIdempotencyKey.create({ data: { keyHash: sha256Hex(idemKey), participantId: p.id, editTokenEnc: sealForKey(idemKey, editToken) } });
       return p;

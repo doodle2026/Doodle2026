@@ -5,7 +5,13 @@
  */
 import Mustache from 'mustache';
 import { TEMPLATES } from './templates';
-import { formatDateShort } from '../dates';
+import { formatDateShort, type DateLocale } from '../dates';
+
+export type MailLocale = DateLocale;
+export const MAIL_LOCALES: MailLocale[] = ['en', 'da', 'fr', 'de'];
+/** Recipient locale → poll locale → en. */
+export const mailLocale = (...c: (string | null | undefined)[]): MailLocale => (c.find((x) => MAIL_LOCALES.includes(x as MailLocale)) as MailLocale) ?? 'en';
+const TAG: Record<MailLocale, string> = { en: 'en-GB', da: 'da-DK', fr: 'fr-FR', de: 'de-DE' };
 
 export interface PollEmailData {
   assetBaseUrl: string; appUrl: string; eventTitle: string; organizerName: string; recipientName?: string;
@@ -18,6 +24,8 @@ export interface PollEmailData {
   /** Organizer's optional message: plain text, ≤ 1000 graphemes, escaped by the template (pre-line). */
   personalMessage?: string;
   unsubscribePollUrl: string; unsubscribeAllUrl: string; reportAbuseUrl: string;
+  /** Mail language (templates, subject, date labels). Default en. */
+  locale?: MailLocale;
 }
 export interface Rendered { subject: string; html: string; text: string }
 
@@ -27,6 +35,11 @@ const seg = new Intl.Segmenter('da', { granularity: 'grapheme' });
 export const clip = (s: string, n = 60) => { const g = [...seg.segment(s)].map((x) => x.segment); return g.length > n ? g.slice(0, n - 1).join('') + '…' : s; };
 /** Subject is plain text: single line, no control chars. */
 const oneLine = (s: string) => s.replace(/[\u0000-\u001F\u007F\u2028\u2029]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** Deadline is an instant → shown in Europe/Copenhagen, in the mail's language. */
+export function deadlineLabel(d: Date, locale: MailLocale = 'en', tz = DEFAULT_TZ) {
+  return new Intl.DateTimeFormat(TAG[locale], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: tz }).format(d);
+}
 
 export function formatters(tz = DEFAULT_TZ) {
   const day = new Intl.DateTimeFormat('da-DK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: tz });
@@ -43,12 +56,12 @@ export function formatters(tz = DEFAULT_TZ) {
 }
 
 /** Options → chronological labels "fre. 16. okt. 2026" (time-zone free). */
-export function dateLabels(options: { date: string }[]): PollEmailData['dates'] {
-  return [...options].sort((a, b) => a.date.localeCompare(b.date)).map((o) => ({ dateLabel: formatDateShort(o.date) }));
+export function dateLabels(options: { date: string }[], locale: MailLocale = 'en'): PollEmailData['dates'] {
+  return [...options].sort((a, b) => a.date.localeCompare(b.date)).map((o) => ({ dateLabel: formatDateShort(o.date, locale) }));
 }
 
 /** Public poll link, optionally with a personal invite fragment (#inv=<43-char token>, step 5) – never admin/edit. */
-const POLL_URL_RE = /^https?:\/\/[^/\s?#]+\/p\/[A-Za-z0-9_-]{1,64}(?:#inv=[A-Za-z0-9_-]{43})?$/;
+const POLL_URL_RE = /^https?:\/\/[^/\s?#]+\/(?:(?:en|da|fr|de)\/)?p\/[A-Za-z0-9_-]{1,64}(?:#inv=[A-Za-z0-9_-]{43})?$/;
 const SECRET_LINK_RE = /\/p\/[A-Za-z0-9_-]+\/admin|[#?&]edit=|\/admin#/i;
 /** Hard rule: mails carry only the public /p/<id> link – never admin or edit tokens. Throws otherwise. */
 export function assertPublicOnly(d: PollEmailData, r?: Rendered) {
@@ -63,13 +76,23 @@ const escape = (v: unknown) => String(v).replace(/[&<>"']/g, (c) => ESC[c]);
 const decode = (s: string) => s.replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d)).replace(/&amp;/g, '&');
 
 function render(kind: 'invitation' | 'reminder', d: PollEmailData, subject: string): Rendered {
-  const T = TEMPLATES;
+  const T = TEMPLATES[mailLocale(d.locale)];
   assertPublicOnly(d);
   const data = { ...d, description: d.description?.trim() || undefined, personalMessage: d.personalMessage?.trim() || undefined, respondedCount: d.respondedCount || undefined };
   const r = { subject: oneLine(subject), html: Mustache.render(T[kind].html, data, undefined, { escape }), text: Mustache.render(T[kind].text, data, undefined, { escape: String }) }; // plain text: no HTML escaping
   assertPublicOnly(d, r);
   return r;
 }
-export const renderInvitation = (d: PollEmailData) => render('invitation', d, `${d.organizerName} inviterer dig: ${clip(d.eventTitle)}`);
+const plain = (tpl: string, d: PollEmailData) => Mustache.render(tpl, { ...d, eventTitle: clip(d.eventTitle) }, undefined, { escape: String });
+const S = (d: PollEmailData) => TEMPLATES[mailLocale(d.locale)].strings;
+export const renderInvitation = (d: PollEmailData) => render('invitation', d, plain(S(d).invitation.subject, d));
 export const renderReminder = (d: PollEmailData) =>
-  render('reminder', d, `Påmindelse: ${clip(d.eventTitle)}${d.deadline ? ` – lukker ${d.deadline}` : ''}`);
+  render('reminder', d, plain(d.deadline ? S(d).reminder.subjectWithDeadline : S(d).reminder.subject, d));
+/** "<name> via GrabAday" in the mail language (name already sanitized). */
+export const fromNameFor = (organizerName: string, locale?: string) => plain(TEMPLATES[mailLocale(locale)].strings.fromName, { organizerName } as PollEmailData);
+/** .ics SUMMARY/DESCRIPTION in the given language. */
+export function icsTexts(eventTitle: string, pollUrl: string, locale?: string) {
+  const s = TEMPLATES[mailLocale(locale)].strings.ics;
+  const r = (t: string) => Mustache.render(t, { eventTitle, pollUrl }, undefined, { escape: String });
+  return { summary: r(s.summary), description: r(s.description) };
+}

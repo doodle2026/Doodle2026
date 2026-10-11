@@ -1,3 +1,4 @@
+import { isLocale } from '@/i18n/config';
 import { maskEmail } from './email/send';
 /**
  * Step 4 – invitation mails (server). Rules (docs/EMAIL.md):
@@ -84,7 +85,7 @@ async function pollForEmail(eventId: number) {
   if (!ev) throw new ApiError(404, ['Afstemningen findes ikke.']);
   const p: PollForEmail = {
     slug: ev.slug, title: ev.title, description: ev.description, isClosed: ev.closedAt !== null,
-    organizerName: ev.organizerName || 'Arrangøren', organizerFromName: ev.organizerName ?? undefined,
+    organizerName: ev.organizerName || '', locale: ev.locale, organizerFromName: ev.organizerName ?? undefined,
     options: ev.timeOptions.map((o) => ({ date: fromUtcDate(o.date) })),
     remindersSent: ev.remindersSent, lastReminderAt: ev.lastReminderAt, trackingEnabled: ev.inviteTracking,
   };
@@ -110,7 +111,7 @@ async function deliver(eventId: number, msgs: Planned[], byEmail: Map<string, nu
   return { sent: results.length - failed, failed };
 }
 
-export interface InviteInput { recipients: unknown; message?: unknown; organizer_name?: unknown; track?: unknown }
+export interface InviteInput { locale?: unknown; recipients: unknown; message?: unknown; organizer_name?: unknown; track?: unknown }
 
 export async function sendInvitations(eventId: number, body: InviteInput) {
   const { ev, p } = await pollForEmail(eventId);
@@ -141,6 +142,7 @@ export async function sendInvitations(eventId: number, body: InviteInput) {
   // Persist first (status "queued"), with a fresh footer token per recipient; suppressed ones are stored as "unsub".
   const tokens = new Map<string, string>(), invTokens = new Map<string, string>();
   const track = body.track === true;
+  const invLocale = isLocale(body.locale) ? body.locale : ev.locale; // organizer may pick; default = poll language
   linkSecret(); // fail early (503) when send mode lacks EMAIL_LINK_SECRET
   try {
     await prisma.$transaction(async (tx) => {
@@ -148,7 +150,7 @@ export async function sendInvitations(eventId: number, body: InviteInput) {
         await tx.event.update({ where: { id: eventId }, data: { organizerName: organizerName || null, ...(track ? { inviteTracking: true } : {}) } });
       }
       for (const r of parsed.valid) {
-        const row = await tx.invitation.create({ data: { eventId, email: r.email, name: r.name ?? null, linkTokenHash: sha256Hex(`pending:${eventId}:${r.email}:${Math.random()}`), delivery: suppressed.has(r.email) ? 'unsub' : 'queued' } });
+        const row = await tx.invitation.create({ data: { eventId, locale: invLocale, email: r.email, name: r.name ?? null, linkTokenHash: sha256Hex(`pending:${eventId}:${r.email}:${Math.random()}`), delivery: suppressed.has(r.email) ? 'unsub' : 'queued' } });
         const t = linkTokenFor(row.id); tokens.set(r.email, t);
         const it = track ? inviteTokenFor(row.id, 1) : null;
         if (it) invTokens.set(r.email, it);
@@ -158,8 +160,8 @@ export async function sendInvitations(eventId: number, body: InviteInput) {
   } catch (e) { await releaseQuota(toSend.length); if ((e as { code?: string }).code === 'P2002') throw new ApiError(409, ['Nogle modtagere er allerede inviteret.'], { code: 'already_invited' }); throw e; }
 
   p.organizerFromName = organizerName || undefined;
-  p.organizerName = organizerName || 'Arrangøren';
-  const plan = planInvitations(p, toSend.map((r) => ({ email: r.email, name: r.name, linkToken: tokens.get(r.email)!, inviteToken: invTokens.get(r.email) })), { appUrl: appUrl(), personalMessage: message || undefined });
+  p.organizerName = organizerName || '';
+  const plan = planInvitations(p, toSend.map((r) => ({ email: r.email, name: r.name, locale: invLocale, linkToken: tokens.get(r.email)!, inviteToken: invTokens.get(r.email) })), { appUrl: appUrl(), personalMessage: message || undefined });
   const ids = new Map((await prisma.invitation.findMany({ where: { eventId, email: { in: toSend.map((r) => r.email) } }, select: { id: true, email: true } })).map((r) => [r.email, r.id]));
   const res = await deliver(eventId, plan.messages, ids);
   return { ...res, suppressed: suppressed.size, duplicates: parsed.duplicates, already_invited: parsed.alreadyInvited };
@@ -180,7 +182,7 @@ export async function sendReminder(eventId: number) {
       .filter((i) => i.inviteGen === null || (i.participantId === null && i.revokedAt === null));
     const suppressed = await suppressedSet(eventId, inv.map((i) => i.email));
     const tokens = new Map(inv.map((i) => [i.email, linkTokenFor(i.id)]));
-    const plan = planReminders(p, inv.map((i) => ({ email: i.email, name: i.name ?? undefined, linkToken: tokens.get(i.email)!, inviteToken: i.inviteGen ? inviteTokenFor(i.id, i.inviteGen) : undefined, unsubscribedAt: suppressed.has(i.email) ? new Date() : null })), { appUrl: appUrl() });
+    const plan = planReminders(p, inv.map((i) => ({ email: i.email, name: i.name ?? undefined, locale: i.locale, linkToken: tokens.get(i.email)!, inviteToken: i.inviteGen ? inviteTokenFor(i.id, i.inviteGen) : undefined, unsubscribedAt: suppressed.has(i.email) ? new Date() : null })), { appUrl: appUrl() });
     if (!plan.messages.length) throw new ApiError(400, ['Der er ingen modtagere til en påmindelse.'], { code: 'no_recipients' });
     if (!(await reserveQuota(plan.messages.length))) throw new ApiError(429, ['Dagens mailkvote er brugt op. Prøv igen i morgen.'], { code: 'quota' });
     await tx.event.update({ where: { id: eventId }, data: { remindersSent: { increment: 1 }, lastReminderAt: new Date() } });
@@ -342,7 +344,7 @@ export async function resendInvite(eventId: number, email: unknown) {
   const it = inviteTokenFor(i.id, gen);
   await prisma.invitation.update({ where: { id: i.id }, data: { inviteGen: gen, inviteTokenHash: sha256Hex(it), revokedAt: null, delivery: 'queued' } });
   if (!ev.inviteTracking) await prisma.event.update({ where: { id: eventId }, data: { inviteTracking: true } });
-  const plan = planInvitations(p, [{ email: i.email, name: i.name ?? undefined, linkToken: linkTokenFor(i.id), inviteToken: it }], { appUrl: appUrl() });
+  const plan = planInvitations(p, [{ email: i.email, name: i.name ?? undefined, locale: i.locale, linkToken: linkTokenFor(i.id), inviteToken: it }], { appUrl: appUrl() });
   const m = plan.messages.map((x) => ({ ...x, idempotencyKey: `${x.idempotencyKey}:g${gen}` }));
   return deliver(eventId, m, new Map([[i.email, i.id]]));
 }

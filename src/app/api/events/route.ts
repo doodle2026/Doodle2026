@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { IDEMPOTENCY_RE, LIMITS, validateEvent } from '@/lib/validate';
+import { requestLocale } from '@/i18n/req-locale';
 import { adminPath, createEvent, findByIdempotencyKey, loadEvent, withDesignShape } from '@/lib/events';
 import { jsonError, logError, readJson } from '@/lib/http';
 import { rateLimit } from '@/lib/ratelimit';
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
 
     const { errors, value } = validateEvent(parsed, new Date());
     if (errors.length || !value) return jsonError(400, errors);
-    const { slug, adminToken, replayed } = await createEvent(value, idemKey);
+    const { slug, adminToken, replayed } = await createEvent(value, idemKey, requestLocale(req, parsed));
     return respond(slug, adminToken, replayed ? 200 : 201);
   } catch (e) {
     logError('POST /api/events', e); // class/code only — never request data, keys or tokens

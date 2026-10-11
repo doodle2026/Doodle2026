@@ -12,6 +12,8 @@ datasource db {
 
 model Event {
   id              Int              @id @default(autoincrement())
+  /// UI/mail language (en, da, fr, de).
+  locale          String               @db.VarChar(5)
   slug            String           @unique @db.VarChar(22)
   title           String
   description     String           @default("")
@@ -89,6 +91,8 @@ model DeletedParticipant {
 
 model Participant {
   id              Int                  @id @default(autoincrement())
+  /// UI/mail language (en, da, fr, de).
+  locale          String               @db.VarChar(5)
   eventId         Int                  @map("event_id")
   name            String
   /// Case-insensitive uniqueness key: NFKC + trim + lower-case (see participantNameKey()).
@@ -142,6 +146,8 @@ model Vote {
 /// Invitation mail recipient (step 4). Addresses are deleted with the poll (cascade) or 90 days after close (cron).
 model Invitation {
   id              Int          @id @default(autoincrement())
+  /// UI/mail language (en, da, fr, de).
+  locale          String               @db.VarChar(5)
   eventId         Int          @map("event_id")
   /// Normalized (trimmed, lower-case) address.
   email           String       @db.VarChar(320)

@@ -85,7 +85,7 @@ export async function findByIdempotencyKey(idemKey: string): Promise<{ slug: str
  * Create the event (and idempotency record) atomically. If another request with the same key commits
  * first, the unique violation rolls this one back and we return the winner's poll and token.
  */
-export async function createEvent(v: CleanEvent, idemKey?: string):
+export async function createEvent(v: CleanEvent, idemKey?: string, locale = 'en'):
   Promise<{ slug: string; adminToken: string | null; replayed: boolean }> {
   const slug = newSlug();
   const adminToken = newToken();
@@ -93,7 +93,7 @@ export async function createEvent(v: CleanEvent, idemKey?: string):
     await prisma.$transaction(async (tx) => {
       const ev = await tx.event.create({
         data: {
-          slug, title: v.title, description: v.description, adminTokenHash: sha256Hex(adminToken),
+          slug, locale, title: v.title, description: v.description, adminTokenHash: sha256Hex(adminToken),
           timeOptions: { create: v.timeOptions.map((o, i) => ({ ...optData(o), position: i })) },
         },
         select: { id: true },
