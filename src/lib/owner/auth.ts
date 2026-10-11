@@ -21,8 +21,24 @@ export const ARGON2_OPTS = { algorithm: 2 /* Argon2id */, memoryCost: 19456, tim
 export const MIN_PASSWORD = 12;
 export const SESSION_ABS_MS = 12 * 3600_000;
 export const SESSION_IDLE_MS = 2 * 3600_000;
-export const LOCK_WINDOW_MS = 15 * 60_000;
-export const LOCK_MAX_FAILS = 5;
+/**
+ * Login throttling (M3, Jan 11 Oct) – derived from owner_login_log, so it works on serverless:
+ *  - per username + (truncated) IP: PAIR_FREE failures are free, then exponential backoff
+ *    PAIR_BASE_S × 2^(n − PAIR_FREE) seconds after the last failure, capped at PAIR_MAX_S. Counted over 24 h since the
+ *    pair's last successful login or the username's last unlock. Someone else's IP can't lock the owner out.
+ *  - per IP (any usernames, password spraying): IP_MAX failures in IP_WINDOW → wait until the window frees.
+ *  - per username from ALL IPs (distributed attack ceiling): USER_MAX failures in USER_WINDOW → wait until it frees.
+ *  `npm run owner:unlock -- <username>` writes an 'unlock' audit row; failures before it no longer count for that username.
+ */
+export const PAIR_FREE = 5;
+export const PAIR_BASE_S = 60;
+export const PAIR_MAX_S = 3600;
+export const PAIR_LOOKBACK_MS = 24 * 3600_000;
+export const IP_MAX = 20;
+export const IP_WINDOW_MS = 15 * 60_000;
+export const USER_MAX = 100;
+export const USER_WINDOW_MS = 60 * 60_000;
+
 export const GENERIC_LOGIN_ERROR = 'Forkert brugernavn eller password';
 
 export const hashPassword = (pw: string) => argonHash(pw, ARGON2_OPTS);
@@ -90,6 +106,21 @@ function parseCookie(secret: string, raw: string | null | undefined): string | n
 }
 
 /** Resolve the session from a raw cookie value (pages pass cookies().get(), routes pass the request). */
+export type SessionEnd = 'absolute' | 'idle' | 'ended' | null;
+/** Session + why it is gone: 'absolute' (12 h), 'idle' (2 h), 'ended' (logged out / replaced / unknown). The reason is exact on the
+ *  first request after expiry (the row is deleted then); later requests with the same cookie report 'ended'. */
+export async function sessionCheck(raw: string | null | undefined): Promise<{ s: OwnerSessionInfo | null; end: SessionEnd }> {
+  const secret = ownerSecret(); if (!secret) return { s: null, end: null };
+  const id = parseCookie(secret, raw); if (!id) return { s: null, end: raw ? 'ended' : null };
+  const idHash = sha256(id);
+  const s = await prisma.ownerSession.findUnique({ where: { idHash }, include: { user: { select: { username: true } } } });
+  const now = Date.now();
+  if (!s) return { s: null, end: 'ended' };
+  const end: SessionEnd = s.expiresAt.getTime() <= now ? 'absolute' : s.lastSeenAt.getTime() + SESSION_IDLE_MS <= now ? 'idle' : null;
+  if (end) { await prisma.ownerSession.delete({ where: { idHash } }).catch(() => undefined); return { s: null, end }; }
+  if (now - s.lastSeenAt.getTime() > 60_000) await prisma.ownerSession.update({ where: { idHash }, data: { lastSeenAt: new Date(now) } }).catch(() => undefined);
+  return { s: { userId: s.userId, username: s.user.username, idHash, csrf: hmac(secret, `csrf:${id}`) }, end: null };
+}
 export async function sessionFromCookie(raw: string | null | undefined): Promise<OwnerSessionInfo | null> {
   const secret = ownerSecret(); if (!secret) return null;
   const id = parseCookie(secret, raw); if (!id) return null;
@@ -140,16 +171,25 @@ export async function audit(req: Request, username: string, userId: number | nul
 
 /** Seconds until the caller may try again, or 0 when not locked. */
 export async function lockedFor(ip: string, username: string, now = Date.now()): Promise<number> {
-  const since = new Date(now - LOCK_WINDOW_MS);
-  const fails = await prisma.ownerLoginLog.findMany({
-    where: { success: false, outcome: 'bad_credentials', at: { gt: since }, OR: [{ ip }, ...(username ? [{ username }] : [])] },
-    select: { at: true, ip: true, username: true }, orderBy: { at: 'asc' },
-  });
   let wait = 0;
-  for (const group of [fails.filter((f) => f.ip === ip), username ? fails.filter((f) => f.username === username) : []]) {
-    if (group.length >= LOCK_MAX_FAILS) {
-      const oldest = group[group.length - LOCK_MAX_FAILS].at.getTime(); // window frees when this one ages out
-      wait = Math.max(wait, Math.ceil((oldest + LOCK_WINDOW_MS - now) / 1000));
+  const untilFree = (ats: Date[], max: number, windowMs: number) => // ats ascending
+    ats.length >= max ? Math.ceil((ats[ats.length - max].getTime() + windowMs - now) / 1000) : 0;
+  // per IP (spraying)
+  const ipFails = await prisma.ownerLoginLog.findMany({ where: { ip, success: false, outcome: 'bad_credentials', at: { gt: new Date(now - IP_WINDOW_MS) } }, select: { at: true }, orderBy: { at: 'asc' } });
+  wait = Math.max(wait, untilFree(ipFails.map((f) => f.at), IP_MAX, IP_WINDOW_MS));
+  if (username) {
+    const unlock = await prisma.ownerLoginLog.findFirst({ where: { username, outcome: 'unlock' }, orderBy: { at: 'desc' }, select: { at: true } });
+    const floor = unlock?.at.getTime() ?? 0;
+    // per username, all IPs (distributed ceiling)
+    const userFails = await prisma.ownerLoginLog.findMany({ where: { username, success: false, outcome: 'bad_credentials', at: { gt: new Date(Math.max(floor, now - USER_WINDOW_MS)) } }, select: { at: true }, orderBy: { at: 'asc' } });
+    wait = Math.max(wait, untilFree(userFails.map((f) => f.at), USER_MAX, USER_WINDOW_MS));
+    // per username + IP with exponential backoff
+    const lastOk = await prisma.ownerLoginLog.findFirst({ where: { username, ip, outcome: 'ok' }, orderBy: { at: 'desc' }, select: { at: true } });
+    const since = Math.max(floor, lastOk?.at.getTime() ?? 0, now - PAIR_LOOKBACK_MS);
+    const pair = await prisma.ownerLoginLog.findMany({ where: { username, ip, success: false, outcome: 'bad_credentials', at: { gt: new Date(since) } }, select: { at: true }, orderBy: { at: 'asc' } });
+    if (pair.length >= PAIR_FREE) {
+      const backoff = Math.min(PAIR_MAX_S, PAIR_BASE_S * 2 ** (pair.length - PAIR_FREE));
+      wait = Math.max(wait, Math.ceil((pair[pair.length - 1].at.getTime() + backoff * 1000 - now) / 1000));
     }
   }
   return Math.max(0, wait);

@@ -26,7 +26,7 @@ export default async function OwnerLogin({ params, searchParams }: Props) {
         <section className="card" aria-labelledby="ol-h">
           <h1 id="ol-h">{t('owner.loginTitle')}</h1>
           <p className="lead">{t('owner.loginLead')}</p>
-          <LoginForm next={next} notice={sp.out ? 'out' : sp.expired ? 'expired' : null} />
+          <LoginForm next={next} notice={sp.out ? 'out' : sp.expired === 'idle' ? 'idle' : sp.expired === 'ended' ? 'ended' : sp.expired ? 'expired' : null} />
           <p className="privacy">{`🔒 ${t('owner.loginNote')}`}</p>
         </section>
       </main>

@@ -6,7 +6,10 @@ import { listEvents, SORTS } from '@/lib/owner/stats';
 import { ownerFmt } from '@/lib/owner/fmt';
 import { DAY_TZ } from '@/lib/owner/counters';
 import { logError } from '@/lib/http';
+import LocalTime, { TzNote } from '../LocalTime';
+import { split } from '../split';
 import OwnerChrome from '../OwnerChrome';
+import ScrollTable from '../ScrollTable';
 import { ErrorBox, Pager, StatusBadge, type T } from '../parts';
 import Filters from './Filters';
 import { qs, type F } from './qs';
@@ -38,6 +41,7 @@ export default async function OwnerEvents({ params, searchParams }: Props) {
   const fm = ownerFmt(locale);
   let r: Awaited<ReturnType<typeof listEvents>> | null = null;
   try { r = await listEvents({ ...f, page }); } catch (e) { logError('owner list', e); }
+  if (r && r.page !== page) { const { redirect } = await import('next/navigation'); redirect(base + qs({ ...f, page: r.page })); } // L4
   const now = new Date().toISOString();
   const nfx = (v: number) => (v ? fm.n(v) : <span className="meta">{'0'}</span>);
   let body: React.ReactNode;
@@ -62,12 +66,12 @@ export default async function OwnerEvents({ params, searchParams }: Props) {
       const [mPre, mPost] = t('owner.emailMatch', { email: '\u0001' }).split('\u0001');
       body = (
         <>
-          <div className="card ocard-table"><table className="otable otable--cards otable--events" id="o-events"><caption className="sr-only">{t('owner.evTitle')}</caption>
+          <ScrollTable><table className="otable otable--cards otable--events" id="o-events"><caption className="sr-only">{t('owner.evTitle')}</caption>
             <thead><tr>{COLS.map(th)}</tr></thead>
             <tbody>{r.rows.map((e) => (
               <tr key={e.id}>
                 <th scope="row" data-label={t('owner.cTitle')}><a href={`${base}/${e.id}`}>{e.title}</a>{e.matchedEmail && <div className="meta">{mPre}<mark>{e.matchedEmail}</mark>{mPost}</div>}</th>
-                <td data-label={t('owner.cCreated')}>{fm.dt(e.createdAt)}</td>
+                <td data-label={t('owner.cCreated')}>{<LocalTime iso={e.createdAt} />}</td>
                 <td data-label={t('owner.cLang')}><abbr title={LOCALE_NAMES[e.locale as Locale]} lang={e.locale}>{e.locale.toUpperCase()}</abbr></td>
                 <td data-label={t('owner.cStatus')}><StatusBadge t={tt} s={e.status} /></td>
                 <td className="num" data-label={t('owner.cDates')}>{nfx(e.dateCount)}</td>
@@ -76,7 +80,7 @@ export default async function OwnerEvents({ params, searchParams }: Props) {
                 <td className="num" data-label={t('owner.cRejected')}>{nfx(e.invitesRejected)}</td>
                 <td data-label={t('owner.cFinal')}>{e.finalDate ? fm.date(e.finalDate) : <span className="meta">{'–'}</span>}</td>
               </tr>
-            ))}</tbody></table></div>
+            ))}</tbody></table></ScrollTable>
           <Pager t={tt} page={r.page} pages={pages} href={(p) => base + qs({ ...f, page: p })} />
         </>
       );
@@ -85,7 +89,8 @@ export default async function OwnerEvents({ params, searchParams }: Props) {
   return (
     <OwnerChrome locale={locale} active="events" user={s.username}>
       <main className="owner-container" id="main">
-        <div className="owner-title"><div><h1>{t('owner.evTitle')}</h1></div><p className="meta">{t('owner.updated', { time: fm.time(now) })}</p></div>
+        <div className="owner-title"><div><h1>{t('owner.evTitle')}</h1></div><p className="meta">{split(t('owner.updated', { time: '\u0001' }), <LocalTime iso={now} kind="time" />)}</p></div>
+        <TzNote />
         <Filters base={base} f={f} dayTz={DAY_TZ} />
         <p className="ores meta" id="res" role="status" aria-live="polite">{res}</p>
         <div id="list">{body}</div>

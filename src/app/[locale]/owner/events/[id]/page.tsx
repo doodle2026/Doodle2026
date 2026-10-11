@@ -5,6 +5,8 @@ import { requireOwner } from '@/lib/owner/page';
 import { eventDetail, logView } from '@/lib/owner/stats';
 import { ownerFmt } from '@/lib/owner/fmt';
 import { logError } from '@/lib/http';
+import LocalTime, { TzNote } from '../../LocalTime';
+import { split } from '../../split';
 import OwnerChrome from '../../OwnerChrome';
 import { ErrorBox, StatusBadge } from '../../parts';
 
@@ -43,15 +45,16 @@ export default async function OwnerEvent({ params }: Props) {
         <div><h1>{e.title} <StatusBadge t={t as never} s={e.status as 'open'} /></h1><p className="meta">{`ID ${e.id}`}</p></div>
         <a className="btn btn--secondary btn--sm" id="o-public" href={e.publicUrl} target="_blank" rel="noopener noreferrer">{`↗ ${t('owner.publicLink')}`}</a>
       </div>
-      <div className="owner-notes">
+      <TzNote />
+        <div className="owner-notes">
         <p className="onote">{`🔒 ${t('owner.noTokens')}`}</p>
-        <p className="onote" id="o-viewlogged">{`👁 ${t('owner.viewLogged', { user: s.username, time: f.time(now) })}`}</p>
+        <p className="onote" id="o-viewlogged">{split(`👁 ${t('owner.viewLogged', { user: s.username, time: '\u0001' })}`, <LocalTime iso={now} kind="time" />)}</p>
       </div>
       <div className="odetail">
         <section className="card">
           <dl className="ometa">
-            {dl('owner.createdAt', f.dt(e.createdAt))}
-            {e.closedAt && dl('owner.closedAt', f.dt(e.closedAt))}
+            {dl('owner.createdAt', <LocalTime iso={e.createdAt} />)}
+            {e.closedAt && dl('owner.closedAt', <LocalTime iso={e.closedAt} />)}
             {dl('owner.language', LOCALE_NAMES[e.locale as Locale] ?? e.locale)}
             {dl('owner.tracking', t(e.tracking ? 'owner.on' : 'owner.off'))}
             {e.finalDate && dl('owner.cFinal', <strong>{f.date(e.finalDate)}</strong>)}
@@ -60,7 +63,7 @@ export default async function OwnerEvent({ params }: Props) {
           <p className="odesc">{e.description || <span className="meta">{t('owner.noDesc')}</span>}</p>
         </section>
         <section className="card"><h2>{t('owner.timelineH')}</h2>
-          <ol className="otl">{tl.map(([at, label], i) => <li key={i}><time dateTime={at}>{f.dt(at)}</time><span>{label}</span></li>)}</ol>
+          <ol className="otl">{tl.map(([at, label], i) => <li key={i}><LocalTime iso={at} /><span>{label}</span></li>)}</ol>
           {e.purgeAt && <p className="privacy">{t('owner.purgeNote', { date: f.date(e.purgeAt) })}</p>}
         </section>
       </div>
@@ -74,7 +77,7 @@ export default async function OwnerEvent({ params }: Props) {
         {e.participants.length ? (
           <table className="otable otable--cards" id="o-parts"><thead><tr><th scope="col">{t('owner.cName')}</th><th scope="col">{t('owner.cAnswered')}</th><th scope="col">{t('owner.cAnswers')}</th></tr></thead>
             <tbody>{e.participants.map((p, i) => (
-              <tr key={i}><th scope="row" data-label={t('owner.cName')}>{p.name}</th><td data-label={t('owner.cAnswered')}>{f.dt(p.answeredAt)}</td>
+              <tr key={i}><th scope="row" data-label={t('owner.cName')}>{p.name}</th><td data-label={t('owner.cAnswered')}>{<LocalTime iso={p.answeredAt} />}</td>
                 <td data-label={t('owner.cAnswers')}><span className="vote vote--yes">{`✓ ${p.yes}`}</span>{' '}<span className="vote vote--maybe">{`( ) ${p.maybe}`}</span>{' '}<span className="vote vote--no">{`✕ ${p.no}`}</span></td></tr>
             ))}</tbody></table>
         ) : <p className="meta">{t('owner.noParts')}</p>}
@@ -86,7 +89,7 @@ export default async function OwnerEvent({ params }: Props) {
               <tr key={i.email}><th scope="row" data-label={t('owner.cEmail')} className="addr">{i.email}</th>
                 <td data-label={t('owner.cDelivery')}><span className={`ost ost--d-${i.status}`}>{`${DS[i.status as keyof typeof DS]} ${t(`owner.d.${i.status}` as 'owner.d.sent')}`}</span>
                   {i.unsubscribed && <>{' '}<span className="ost ost--unsub" title={t('owner.unsubMarkHint')}>{`– ${t('owner.unsubMark')}`}</span><div className="meta">{t('owner.unsubMarkHint')}</div></>}</td>
-                <td data-label={t('owner.cWhen')}>{f.dt(i.updatedAt)}</td></tr>
+                <td data-label={t('owner.cWhen')}>{<LocalTime iso={i.updatedAt} />}</td></tr>
             ))}</tbody></table>
         ) : <p className="meta">{t('owner.noInv')}</p>}
       </section>

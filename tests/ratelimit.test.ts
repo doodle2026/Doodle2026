@@ -12,9 +12,11 @@ describe('token bucket', () => {
     expect(take('k1', lim, t0 + 2000).ok).toBe(false);
     expect(take('other', lim, t0).ok).toBe(true); // buckets are per key
   });
-  test('client IP: never the (spoofable) leftmost x-forwarded-for entry', () => {
-    expect(clientIp(new Request('http://x', { headers: { 'x-forwarded-for': '1.2.3.4, 10.0.0.1' } }))).toBe('10.0.0.1');
-    expect(clientIp(new Request('http://x', { headers: { 'x-real-ip': '5.6.7.8' } }))).toBe('5.6.7.8');
-    expect(clientIp(new Request('http://x'))).toBe('unknown');
+  test('client IP: never the (spoofable) leftmost x-forwarded-for entry (details: client-ip.test.ts)', () => {
+    const old = process.env.TRUSTED_PROXY_HOPS; process.env.TRUSTED_PROXY_HOPS = '1';
+    try {
+      expect(clientIp(new Request('http://x', { headers: { 'x-forwarded-for': '1.2.3.4, 10.0.0.1' } }))).toBe('10.0.0.1');
+      expect(clientIp(new Request('http://x'))).toBe('unknown');
+    } finally { if (old === undefined) delete process.env.TRUSTED_PROXY_HOPS; else process.env.TRUSTED_PROXY_HOPS = old; }
   });
 });

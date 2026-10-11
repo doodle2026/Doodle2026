@@ -103,7 +103,7 @@ const likeEscape = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 export async function listEvents(qIn: ListQuery) {
   const pageSize = qIn.pageSize ?? 50;
-  const page = Math.max(1, Math.min(10_000, Math.floor(Number(qIn.page) || 1)));
+  let page = Math.max(1, Math.min(10_000, Math.floor(Number(qIn.page) || 1)));
   const q = (qIn.q ?? '').trim().slice(0, 200);
   const emailSearch = q.includes('@');
   const like = `%${likeEscape(q.toLowerCase())}%`;
@@ -119,6 +119,7 @@ export async function listEvents(qIn: ListQuery) {
   const sortKey = (qIn.sort && qIn.sort in SORTS ? qIn.sort : 'createdAt') as keyof typeof SORTS;
   const dir = qIn.dir === 'asc' ? Prisma.sql`ASC` : qIn.dir === 'desc' ? Prisma.sql`DESC` : ['title', 'locale'].includes(sortKey) ? Prisma.sql`ASC` : Prisma.sql`DESC`;
   const [{ c: total }] = await prisma.$queryRaw<{ c: bigint }[]>`SELECT count(*) AS c FROM events e ${W}`;
+  page = Math.min(page, Math.max(1, Math.ceil(n(total) / pageSize))); // L4: clamp out-of-range ?page to the last page
   const rows = await prisma.$queryRaw<{ slug: string; title: string; created_at: Date; locale: string; closed: boolean; date_count: bigint; participants: bigint;
     invites_sent: bigint; invites_rejected: bigint; final_date: Date | null; matched: string | null }[]>`
     SELECT e.slug, e.title, e.created_at, e.locale, (e.closed_at IS NOT NULL) AS closed,
@@ -182,14 +183,13 @@ export async function eventDetail(slug: string) {
 }
 
 // ---------------- activity log ----------------
-export const LOG_TYPES: Record<string, string[]> = { login_ok: ['ok'], login_failed: ['bad_credentials', 'bad_csrf'], locked: ['locked'], logout: ['logout'], view: ['view'] };
+export const LOG_TYPES: Record<string, string[]> = { login_ok: ['ok'], login_failed: ['bad_credentials', 'bad_csrf'], locked: ['locked'], logout: ['logout'], view: ['view'], unlock: ['unlock'] };
 export async function activityLog(type: string | undefined, pageIn: unknown) {
-  const pageSize = 50, page = Math.max(1, Math.floor(Number(pageIn) || 1));
+  const pageSize = 50;
   const where = type && LOG_TYPES[type] ? { outcome: { in: LOG_TYPES[type] } } : {};
-  const [total, rows] = await Promise.all([
-    prisma.ownerLoginLog.count({ where }),
-    prisma.ownerLoginLog.findMany({ where, orderBy: { id: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }),
-  ]);
+  const total = await prisma.ownerLoginLog.count({ where });
+  const page = Math.min(Math.max(1, Math.floor(Number(pageIn) || 1)), Math.max(1, Math.ceil(total / pageSize))); // L4: clamp
+  const rows = await prisma.ownerLoginLog.findMany({ where, orderBy: { id: 'desc' }, skip: (page - 1) * pageSize, take: pageSize });
   const typeOf = (o: string) => Object.entries(LOG_TYPES).find(([, v]) => v.includes(o))?.[0] ?? o;
   const userIds = [...new Set(rows.map((r) => r.userId).filter((x): x is number => x !== null))];
   const users = new Map((await prisma.ownerUser.findMany({ where: { id: { in: userIds } }, select: { id: true, username: true } })).map((u) => [u.id, u.username]));

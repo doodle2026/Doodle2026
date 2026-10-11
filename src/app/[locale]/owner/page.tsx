@@ -5,6 +5,8 @@ import { requireOwner } from '@/lib/owner/page';
 import { ownerStats } from '@/lib/owner/stats';
 import { ownerFmt } from '@/lib/owner/fmt';
 import { logError } from '@/lib/http';
+import LocalTime, { ResetAt, TzNote } from './LocalTime';
+import { split } from './split';
 import OwnerChrome from './OwnerChrome';
 import { ErrorBox, StatusBadge } from './parts';
 
@@ -53,7 +55,7 @@ export default async function OwnerDashboard({ params }: Props) {
   const ev = (q: string) => `/${locale}/owner/events${q}`;
   const title = <h1>{t('owner.dashTitle')}</h1>;
   if (!st) return <OwnerChrome locale={locale} active="dash" user={s.username}><main className="owner-container" id="main">{title}<ErrorBox locale={locale} href={`/${locale}/owner`} /></main></OwnerChrome>;
-  const tz = st.dayTz, rs = f.resetLocal();
+  const tz = st.dayTz;
   const { polls: P, participation: Pa, dates: D, languages: Lg, email: E, limits: Li } = st;
   const pct = E.sentToday / E.dailyLimit, lvl = pct >= 1 ? 'full' : pct >= 0.95 ? 'crit' : pct >= 0.8 ? 'warn' : 'ok';
   const buckets = [D.timeToClose.lt1, D.timeToClose.d1_3, D.timeToClose.d4_7, D.timeToClose.d8_14, D.timeToClose.gt14], bmax = Math.max(1, ...buckets);
@@ -68,8 +70,9 @@ export default async function OwnerDashboard({ params }: Props) {
         <div className="owner-title">
           <div>{title}<p className="lead">{t('owner.dashLead')}</p></div>
           <div className="owner-title__meta">
-            <p className="meta" id="o-updated">{t('owner.updated', { time: f.time(st.generatedAt) })}</p>
-            <p className="meta" id="o-dayrule">{`🕛 ${t('owner.dayRule', { tz, time: rs.time, local: `(${rs.name}, ${t('owner.localTime')})` })}`}</p>
+            <p className="meta" id="o-updated">{split(t('owner.updated', { time: '\u0001' }), <LocalTime iso={st.generatedAt} kind="time" />)}</p>
+            <p className="meta" id="o-dayrule">{'🕛 '}<ResetAt tz={tz} /></p>
+            <TzNote />
           </div>
         </div>
         {lvl !== 'ok' && (
@@ -139,7 +142,7 @@ export default async function OwnerDashboard({ params }: Props) {
             <table className="otable otable--cards" id="o-newest"><thead><tr><th scope="col">{t('owner.cTitle')}</th><th scope="col">{t('owner.cCreated')}</th><th scope="col">{t('owner.cLang')}</th><th scope="col">{t('owner.cStatus')}</th><th scope="col" className="num">{t('owner.cParts')}</th></tr></thead>
               <tbody>{st.newest.map((e) => (
                 <tr key={e.id}><th scope="row" data-label={t('owner.cTitle')}><a href={`/${locale}/owner/events/${e.id}`}>{e.title}</a></th>
-                  <td data-label={t('owner.cCreated')}>{f.dt(e.createdAt)}</td><td data-label={t('owner.cLang')}>{e.locale.toUpperCase()}</td>
+                  <td data-label={t('owner.cCreated')}>{<LocalTime iso={e.createdAt} />}</td><td data-label={t('owner.cLang')}>{e.locale.toUpperCase()}</td>
                   <td data-label={t('owner.cStatus')}><StatusBadge t={t} s={e.status} /></td><td className="num" data-label={t('owner.cParts')}>{f.n(e.participants)}</td></tr>
               ))}</tbody></table>
           ) : <p className="meta">{t('owner.emptyEvents')}</p>}

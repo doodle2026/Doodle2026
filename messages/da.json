@@ -845,6 +845,12 @@
     "seQuotaHour": "Kun {n} invitationer tilbage i denne time – fjern {m}.",
     "ownerNotConfigured": "Ejer-login er ikke sat op på serveren.",
     "ownerRetry": "Noget gik galt. Genindlæs siden, og prøv igen.",
-    "ownerSkip": "Spring til indhold"
+    "ownerSkip": "Spring til indhold",
+    "ownerExpiredIdle": "Du blev logget ud efter 2 timer uden aktivitet. Log ind igen.",
+    "ownerSessionEnded": "Din session er afsluttet (du blev logget ud). Log ind igen.",
+    "ownerScrollHint": "Rul til siden for at se alle kolonner →",
+    "ownerTableAria": "Tabel – rul til siden for flere kolonner",
+    "ownerTzNote": "Tidspunkter vises i din lokale tid ({zone}). “I dag”, tal pr. dag og mailkvoten bruger UTC-døgnet.",
+    "ownerLtUnlock": "Låst op (CLI)"
   }
 }

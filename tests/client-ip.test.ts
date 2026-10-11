@@ -8,24 +8,26 @@ const rnd = () => `${(Math.random() * 200 + 20) | 0}.${(Math.random() * 255) | 0
 const Y = new Date().getUTCFullYear() + 1;
 
 describe('clientIp (unit)', () => {
-  afterEach(() => { delete process.env.TRUSTED_PROXY_HOPS; });
-  test('precedence: x-vercel-forwarded-for > x-real-ip > rightmost XFF', () => {
+  const env = { VERCEL: process.env.VERCEL, HOPS: process.env.TRUSTED_PROXY_HOPS };
+  afterEach(() => { if (env.VERCEL === undefined) delete process.env.VERCEL; else process.env.VERCEL = env.VERCEL; if (env.HOPS === undefined) delete process.env.TRUSTED_PROXY_HOPS; else process.env.TRUSTED_PROXY_HOPS = env.HOPS; });
+  test('on Vercel: x-vercel-forwarded-for > x-real-ip > rightmost XFF', () => {
+    process.env.VERCEL = '1';
     expect(clientIp(R({ 'x-vercel-forwarded-for': '9.9.9.9', 'x-real-ip': '8.8.8.8', 'x-forwarded-for': '1.1.1.1, 7.7.7.7' }))).toBe('9.9.9.9');
     expect(clientIp(R({ 'x-real-ip': '8.8.8.8', 'x-forwarded-for': '1.1.1.1, 7.7.7.7' }))).toBe('8.8.8.8');
     expect(clientIp(R({ 'x-forwarded-for': '1.1.1.1, 2.2.2.2, 7.7.7.7' }))).toBe('7.7.7.7');
-    expect(clientIp(R({ 'x-forwarded-for': '2001:db8::1' }))).toBe('2001:db8::1');
+    expect(new Set([0, 1, 2, 3].map(() => clientIp(R({ 'x-forwarded-for': `${rnd()}, 7.7.7.7` }))))).toEqual(new Set(['7.7.7.7']));
   });
-  test('forged leftmost entries never change the result', () => {
-    const ips = new Set([0, 1, 2, 3, 4].map(() => clientIp(R({ 'x-forwarded-for': `${rnd()}, ${rnd()}, 7.7.7.7` }))));
-    expect([...ips]).toEqual(['7.7.7.7']);
-    expect(clientIp(R({ 'x-vercel-forwarded-for': '9.9.9.9', 'x-forwarded-for': `${rnd()}` }))).toBe('9.9.9.9');
-  });
-  test('TRUSTED_PROXY_HOPS skips our own proxies from the right; garbage values are ignored', () => {
+  test('off Vercel: Vercel/x-real-ip headers are ignored (forgeable); XFF only via TRUSTED_PROXY_HOPS', () => {
+    delete process.env.VERCEL; delete process.env.TRUSTED_PROXY_HOPS;
+    expect(clientIp(R({ 'x-vercel-forwarded-for': '9.9.9.9', 'x-real-ip': '8.8.8.8', 'x-forwarded-for': '7.7.7.7' }))).toBe('unknown');
+    expect(clientIp(Object.assign(R({ 'x-forwarded-for': '7.7.7.7' }), { socket: { remoteAddress: '::ffff:10.1.2.3' } }))).toBe('::ffff:10.1.2.3');
     process.env.TRUSTED_PROXY_HOPS = '1';
-    expect(clientIp(R({ 'x-forwarded-for': '6.6.6.6, 7.7.7.7, 10.0.0.1' }))).toBe('7.7.7.7');
-    expect(clientIp(R({ 'x-forwarded-for': '10.0.0.1' }))).toBe('unknown');
-    delete process.env.TRUSTED_PROXY_HOPS;
-    expect(clientIp(R({ 'x-real-ip': '<script>' , 'x-forwarded-for': 'evil, 7.7.7.7' }))).toBe('7.7.7.7');
+    expect(clientIp(R({ 'x-vercel-forwarded-for': '9.9.9.9', 'x-forwarded-for': `${rnd()}, 7.7.7.7` }))).toBe('7.7.7.7');
+    process.env.TRUSTED_PROXY_HOPS = '2';
+    expect(clientIp(R({ 'x-forwarded-for': `${rnd()}, 7.7.7.7, 10.0.0.1` }))).toBe('7.7.7.7');
+    expect(clientIp(R({ 'x-forwarded-for': '10.0.0.1' }))).toBe('unknown'); // fewer entries than hops → no trusted value
+    process.env.TRUSTED_PROXY_HOPS = '1';
+    expect(clientIp(R({ 'x-forwarded-for': '7.7.7.7, evil' }))).toBe('unknown');
   });
 });
 
@@ -40,19 +42,19 @@ describe('limits hold against a forged leftmost XFF (integration)', () => {
     expect(last).toBe(429);
   });
 
-  test('x-vercel-forwarded-for wins: forged XFF can neither split nor reset the bucket', async () => {
+  test('server is not on Vercel: a forged x-vercel-forwarded-for cannot split the bucket', async () => {
     const v = rnd(); let last = 0;
     for (let i = 0; i < 24; i++) {
-      const r = await fetch(`${BASE}/api/events`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-vercel-forwarded-for': v, 'X-Forwarded-For': rnd() },
+      const r = await fetch(`${BASE}/api/events`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-vercel-forwarded-for': rnd(), 'x-real-ip': rnd(), 'X-Forwarded-For': v },
         body: JSON.stringify({ locale: 'da', title: `v ${i}`, options: [{ date: `${Y}-11-03` }] }) });
       last = r.status; if (r.status === 429) break;
     }
     expect(last).toBe(429);
   });
 
-  test('owner login lock per IP: different usernames + forged leftmost XFF still lock after 5', async () => {
+  test('owner login lock per IP (20): different usernames + forged leftmost XFF still lock', async () => {
     const real = rnd(); let last = 0;
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 21; i++) {
       const xff = `${rnd()}, ${real}`;
       const c = await fetch(`${BASE}/api/owner/csrf`, { headers: { 'X-Forwarded-For': xff } });
       const { csrf } = await c.json(); const cookie = (c.headers.get('set-cookie') ?? '').split(';')[0];

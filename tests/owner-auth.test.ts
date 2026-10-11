@@ -116,20 +116,34 @@ describe('owner auth API', () => {
     expect((await req(j, '/api/owner/me')).status).toBe(401);
   });
 
-  test('lockout: 5 failures per username (any IP) or per IP within 15 min → 429 + Retry-After, even with the right password', async () => {
-    const u = await mkUser();
-    for (let i = 0; i < 5; i++) expect((await login(jar(), u, `wrong-${i}-password`)).status).toBe(401);
-    const r = await login(jar(), u);
-    expect(r.status).toBe(429); expect(Number(r.res.headers.get('retry-after'))).toBeGreaterThan(800);
-    expect(r.body.code).toBe('locked');
-    // per IP, spread over different usernames
-    const ip = ipGen(); const v = await mkUser();
-    for (let i = 0; i < 5; i++) await login(jar(ip), `x-${uniq()}`, 'wrong password!!');
-    expect((await login(jar(ip), v)).status).toBe(429);
-    expect((await login(jar(), v)).status).toBe(200); // other IP, untouched user
-    // window frees after 15 min
-    await prisma.ownerLoginLog.updateMany({ where: { username: u }, data: { at: new Date(Date.now() - 16 * 60_000) } });
-    expect((await login(jar(), u)).status).toBe(200);
+  test('M3 lockout: per username+IP backoff (others cannot lock the owner out), per-IP spraying limit, per-username ceiling', async () => {
+    const u = await mkUser(); const ip = ipGen();
+    for (let i = 0; i < 5; i++) expect((await login(jar(ip), u, `wrong-${i}-password`)).status).toBe(401);
+    const r = await login(jar(ip), u);
+    expect(r.status).toBe(429); expect(r.body.code).toBe('locked');
+    const ra = Number(r.res.headers.get('retry-after')); expect(ra).toBeGreaterThan(50); expect(ra).toBeLessThanOrEqual(60); // 1st step: 60 s
+    expect((await login(jar(), u)).status).toBe(200); // the owner from another IP is NOT locked out
+    // backoff doubles: let the 60 s pass, fail once more → 120 s
+    const v = await mkUser(); const ip2 = ipGen();
+    for (let i = 0; i < 5; i++) await login(jar(ip2), v, `wrong-${i}-password`);
+    await prisma.ownerLoginLog.updateMany({ where: { username: v }, data: { at: new Date(Date.now() - 61_000) } });
+    expect((await login(jar(ip2), v, 'still wrong!!!')).status).toBe(401);
+    const r2 = await login(jar(ip2), v); expect(r2.status).toBe(429);
+    expect(Number(r2.res.headers.get('retry-after'))).toBeGreaterThan(110);
+    // a success from that pair resets its counter
+    await prisma.ownerLoginLog.updateMany({ where: { username: v }, data: { at: new Date(Date.now() - 3 * 3600_000) } });
+    expect((await login(jar(ip2), v)).status).toBe(200);
+    expect((await login(jar(ip2), v, 'wrong again!!!')).status).toBe(401);
+    expect((await login(jar(ip2), v)).status).toBe(200);
+    // per IP spraying: 20 failures over different usernames lock that IP only
+    const sp = ipGen(); const w = await mkUser();
+    for (let i = 0; i < 20; i++) await login(jar(sp), `x-${uniq()}`, 'wrong password!!');
+    expect((await login(jar(sp), w)).status).toBe(429);
+    expect((await login(jar(), w)).status).toBe(200);
+    // distributed ceiling: 100 failures for one username from many IPs within 1 h lock the username everywhere
+    const z = await mkUser();
+    await prisma.ownerLoginLog.createMany({ data: Array.from({ length: 100 }, (_, i) => ({ username: z, success: false, outcome: 'bad_credentials', ip: `10.${i}.0.xxx`, userAgent: 't', at: new Date(Date.now() - 1000 * i) })) });
+    const r3 = await login(jar(), z); expect(r3.status).toBe(429); expect(Number(r3.res.headers.get('retry-after'))).toBeGreaterThan(3000);
   });
 
   test('audit log: success and failure with IP, UA, time – never the password', async () => {
