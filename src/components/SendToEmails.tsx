@@ -42,8 +42,17 @@ const newRow = (value = '', status: St = 'idle', earlier = false): Row => ({ id:
 /** trim, drop mailto:, lower-case the domain (§46.3). */
 export const normSe = (v: string) => { v = v.trim().replace(/^mailto:/i, ''); const i = v.lastIndexOf('@'); return i < 0 ? v : v.slice(0, i) + '@' + v.slice(i + 1).toLowerCase(); };
 const key = (v: string) => normSe(v).toLowerCase();
-const fromDelivery = (d: string): St => (d === 'bounced' ? 'bounced' : d === 'failed' ? 'failed' : 'sent');
-const FINAL = new Set(['bounced', 'failed']);
+const fromDelivery = (d: string): St => (d === 'bounced' ? 'bounced' : d === 'failed' ? 'failed' : 'sent'); // 'delivered' shows as Sendt ✓
+const FINAL = new Set(['delivered', 'bounced', 'failed', 'blocked']);
+/** §46.9: Retry-After as delta-seconds or HTTP date → seconds; null when missing/unparseable. */
+export function parseRetryAfter(h: string | null, now = Date.now()): number | null {
+  if (!h) return null; const v = h.trim();
+  if (/^\d+$/.test(v)) return Number(v);
+  const t = Date.parse(v); return Number.isNaN(t) ? null : Math.max(0, Math.round((t - now) / 1000));
+}
+/** §46.9: minutes shown = ceil(sec/60); under 60 s → 0 ("under 1 min"). */
+export const waitMinutes = (sec: number) => (sec < 60 ? 0 : Math.ceil(sec / 60));
+const isIpLimit = (status: number | undefined, d: Record<string, unknown>) => status === 429 && (d.error === 'rate_ip' || d.code === 'ip_limit');
 
 export default function SendToEmails({ slug, token }: { slug: string; token: string }) {
   const { t, tr, locale } = useI18n();
@@ -70,9 +79,13 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
   const sentHere = useRef(0);
 
   const ipTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-  const startIpWait = (sec: number) => {
+  const [ipNoHeader, setIpNoHeader] = useState(false);
+  /** Local countdown, no auto-resend. `sec === null` (no Retry-After) → se.limitHour for an hour. */
+  const startIpWait = (secIn: number | null) => {
+    setIpNoHeader(secIn === null);
+    const sec = secIn ?? 3600;
     const until = Date.now() + sec * 1000; clearInterval(ipTimer.current);
-    const tick = () => { const left = until - Date.now(); if (left <= 0) { clearInterval(ipTimer.current); setIpWait(null); } else setIpWait(Math.floor(left / 60_000)); };
+    const tick = () => { const left = until - Date.now(); if (left <= 0) { clearInterval(ipTimer.current); setIpWait(null); } else setIpWait(waitMinutes(left / 1000)); };
     tick(); ipTimer.current = setInterval(tick, 15_000);
   };
   useEffect(() => () => clearInterval(ipTimer.current), []);
@@ -130,7 +143,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
   }, [refresh]);
 
   const left = quota ? Math.min(quota.poll, quota.day, quota.hour) : Infinity;
-  const limitMsg = !quota && ipWait === null ? '' : ipWait !== null ? t('se.limitIp', { min: ipWait }) : !quota ? '' : quota.day <= 0 ? t('se.limitDay') : quota.hour <= 0 ? t('se.limitHour') : quota.poll <= 0 ? t('se.limitPoll') : '';
+  const limitMsg = !quota && ipWait === null ? '' : ipWait !== null ? (ipNoHeader ? t('se.limitHour') : t('se.limitIp', { min: ipWait })) : !quota ? '' : quota.day <= 0 ? t('se.limitDay') : quota.hour <= 0 ? t('se.limitHour') : quota.poll <= 0 ? t('se.limitPoll') : '';
   const invited = new Set(invitees.map((i) => i.email));
 
   function check(r: Row, i: number, all: Row[]): { kind: 'invalid' | 'already' | 'pending'; msg?: string } | null {
@@ -154,7 +167,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
         const { res, data } = await api('/retry', { method: 'POST', body: JSON.stringify({ emails: [value] }) });
         if (data.remaining) setQuota(data.remaining); if (res.ok) apply(data);
         const st = (data.results as { status: string }[] | undefined)?.[0]?.status;
-        if (res.status === 429 && data.code === 'ip_limit') startIpWait(Number(res.headers.get('Retry-After') || 3600));
+        if (isIpLimit(res.status, data)) startIpWait(parseRetryAfter(res.headers.get('Retry-After')));
         upd(r.id, { status: st === 'sent' ? 'sent' : st === 'blocked' ? 'rejected' : 'failed' });
         say(st === 'sent' ? t('se.liveSent', { email: value }) : st === 'blocked' ? `${t('se.blocked')}: ${value}` : t('se.liveFailed', { email: value }));
       } catch { upd(r.id, { status: 'failed' }); say(t('se.liveFailed', { email: value })); }
@@ -180,7 +193,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
         say(t('se.liveSent', { email: value }));
       } else {
         if (data.remaining) setQuota(data.remaining); else void refresh();
-        if (res.status === 429 && data.code === 'ip_limit') startIpWait(Number(res.headers.get('Retry-After') || data.retry_after || 3600)); // §46.9: local countdown, no auto-resend
+        if (isIpLimit(res.status, data)) startIpWait(parseRetryAfter(res.headers.get('Retry-After'))); // §46.9: local countdown, no auto-resend
         upd(r.id, { status: data.code === 'already_invited' || data.code === 'no_new_recipients' ? 'idle' : 'failed' });
         if (data.code === 'no_new_recipients') void refresh();
         say(t('se.liveFailed', { email: value }));
@@ -197,12 +210,16 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
   }
 
   // ===== Phase 2: "Indsæt mange" =====
-  const kinds = new Map<number, Kind>();
-  { const seen = new Set(B.filter((x) => x.status).map((x) => key(x.email)));
-    for (const x of B) if (!x.status) {
+  const classify = (list: BItem[]) => {
+    // sent chips (also shown in this view) count as "already invited", not as duplicates
+    const m = new Map<number, Kind>(); const sentK = new Set(list.filter((x) => x.status).map((x) => key(x.email))); const seen = new Set<string>();
+    for (const x of list) if (!x.status) {
       const k = key(x.email);
-      kinds.set(x.id, !validEmail(x.email) ? 'invalid' : seen.has(k) ? 'dup' : (seen.add(k), invited.has(k)) ? 'already' : 'valid');
-    } }
+      m.set(x.id, !validEmail(x.email) ? 'invalid' : seen.has(k) ? 'dup' : (seen.add(k), invited.has(k) || sentK.has(k)) ? 'already' : 'valid');
+    }
+    return m;
+  };
+  const kinds = classify(B);
   const kindOf = (x: BItem) => x.status || kinds.get(x.id)!;
   const c = { valid: 0, invalid: 0, dup: 0, already: 0, sent: 0, failed: 0, blocked: 0 };
   for (const x of B) { if (x.status === 'sent' || x.status === 'bounced') c.sent++; else if (x.status === 'failed') c.failed++; else if (x.status === 'blocked') c.blocked++; else if (!x.status) c[kinds.get(x.id)!]++; }
@@ -243,7 +260,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
     const results = (data.results as { email: string; status: string }[] | undefined) ?? [];
     const by = new Map(results.map((r) => [r.email, r.status]));
     if (data.remaining) setQuota(data.remaining as Quota);
-    if (res?.status === 429 && data.code === 'ip_limit') startIpWait(Number(res.headers.get('Retry-After') || data.retry_after || 3600));
+    if (isIpLimit(res?.status, data)) startIpWait(parseRetryAfter(res!.headers.get('Retry-After')));
     const final = list.map((x) => { const s = res?.ok ? by.get(key(x.email)) : undefined; return { id: x.id, status: (s === 'sent' ? 'sent' : s === 'blocked' ? 'blocked' : 'failed') as BSt }; });
     const fm = new Map(final.map((f) => [f.id, f.status]));
     setB((bs) => bs.map((x) => (fm.has(x.id) ? { ...x, status: fm.get(x.id)! } : x)));
@@ -257,19 +274,29 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
     try { localStorage.setItem(MODE_KEY, m); } catch { /* ignore */ }
     setNotice('');
     if (m === 'bulk') {
-      const carry = rows.filter((r) => !r.earlier && normSe(r.value));
-      setB((bs) => [...bs, ...carry.map((r) => ({ id: ++uid, raw: r.value, email: normSe(r.value), status: (r.status === 'rejected' ? 'blocked' : r.status === 'idle' ? '' : r.status) as BSt }))]);
-      setRows((rs) => { const e = rs.filter((r) => r.earlier); return [...e, ...Array.from({ length: 5 }, () => newRow())]; });
+      // unsent rows move to chips; sent rows (incl. earlier) stay as rows AND appear as green chips (§46.7 "sendte vises i begge")
+      const isSentRow = (r: Row) => r.earlier || r.status === 'sent' || r.status === 'bounced';
+      const carry = rows.filter((r) => !isSentRow(r) && normSe(r.value));
+      const sentRows = rows.filter((r) => isSentRow(r) && normSe(r.value));
+      setB((bs) => {
+        const have = new Set(bs.filter((x) => x.status).map((x) => key(x.email)));
+        const copies = sentRows.filter((r) => !have.has(key(r.value))).map((r) => ({ id: ++uid, raw: r.value, email: normSe(r.value), status: (r.status === 'bounced' ? 'bounced' : r.status === 'failed' ? 'failed' : 'sent') as BSt }));
+        return [...copies, ...bs, ...carry.map((r) => ({ id: ++uid, raw: r.value, email: normSe(r.value), status: (r.status === 'rejected' ? 'blocked' : r.status === 'idle' ? '' : r.status) as BSt }))];
+      });
+      setRows((rs) => { const e = rs.filter(isSentRow); return [...e, ...Array.from({ length: 5 }, () => newRow())]; });
       if (bulkText.trim()) flushBulk();
       focus('#se-bulk');
     } else {
       const all = bulkText.trim() ? [...B, ...toItems(bulkText)] : B;
       const seen = new Set<string>(); let nd = 0; const keep: BItem[] = [];
       for (const x of all) { const k = key(x.email); if (!x.status && seen.has(k)) { nd++; continue; } seen.add(k); keep.push(x); }
-      setBulkText(''); setB([]);
+      setBulkText('');
+      // sent/bounced chips stay in the bulk view as well (shown in both); only unsent chips move to rows
+      setB(keep.filter((x) => x.status === 'sent' || x.status === 'bounced'));
       setRows((rs) => {
         const e = rs.filter((r) => r.earlier || normSe(r.value));
-        const moved = keep.map((x) => { const r = newRow(x.email || x.raw, (x.status === 'blocked' ? 'rejected' : x.status === '' || x.status === 'sending' ? 'idle' : x.status) as St); return r; });
+        const rowKeys = new Set(e.map((r) => key(r.value)));
+        const moved = keep.filter((x) => !((x.status === 'sent' || x.status === 'bounced') && rowKeys.has(key(x.email)))).map((x) => { const r = newRow(x.email || x.raw, (x.status === 'blocked' ? 'rejected' : x.status === '' || x.status === 'sending' ? 'idle' : x.status) as St); return r; });
         const n = [...e, ...moved];
         const idle = n.filter((r) => !r.earlier && r.status === 'idle').length;
         return [...n, ...Array.from({ length: Math.max(1, 5 - idle) }, () => newRow())];
@@ -362,7 +389,13 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
               onChange={(e) => { const v = e.target.value; if (/[;,\n]\s*$/.test(v)) { addBulk(v); setBulkText(''); } else setBulkText(v); }}
               onBlur={flushBulk}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); flushBulk(); }
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { // §46.7: parse + send
+                  e.preventDefault();
+                  const all = bulkText.trim() ? [...B, ...toItems(bulkText)] : B;
+                  if (all !== B) { setB(all); setBulkText(''); }
+                  const k = classify(all); const v = all.filter((x) => !x.status && k.get(x.id) === 'valid');
+                  if (v.length && !busy && !bulkLimit(v.length)) void bulkCall(v, false);
+                }
                 else if (e.key === 'Backspace' && !bulkText) { const last = [...B].reverse().find(removable); if (last) { e.preventDefault(); setB((bs) => bs.filter((y) => y.id !== last.id)); say(t('se.remove', { email: last.email })); } } // L5
               }} />
             <p className="field__hint" id="se-bulk-hint">{t('se.bulkHint').replace(/&lt;/g, '<').replace(/&gt;/g, '>')}</p>

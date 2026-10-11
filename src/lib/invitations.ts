@@ -70,6 +70,11 @@ export async function reserveQuota(n: number, now = new Date(), limits = { day: 
   });
 }
 const secsToUtcMidnight = () => { const n = new Date(); return Math.max(60, Math.ceil((Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1) - n.getTime()) / 1000)); };
+/** §46.9: add `remaining` to a per-IP 429 from rateLimit() (status, headers incl. Retry-After kept). */
+export async function withRemaining(res: Response, eventId: number): Promise<Response> {
+  const body = await res.json().catch(() => ({}));
+  return Response.json({ ...body, remaining: await remainingNow(eventId) }, { status: res.status, headers: res.headers });
+}
 /** §46.8 QuotaRemaining for 429 responses. */
 async function remainingNow(eventId: number) {
   const rows = await prisma.invitation.findMany({ where: { eventId }, select: { createdAt: true } });
@@ -246,7 +251,9 @@ export async function listInvitations(eventId: number) {
   return {
     invitees: rows.map((r) => ({
       // PM §46.8: opt-outs are never revealed – shown as the neutral 'blocked' (same as other undeliverable addresses).
-      email: r.email, name: r.name, delivery: r.delivery === 'unsub' || r.delivery === 'bounced' ? 'blocked' : r.delivery, reason: null, updated_at: r.lastEventAt.toISOString(),
+      email: r.email, name: r.name, delivery: r.delivery === 'unsub' || r.delivery === 'bounced' ? 'blocked' : r.delivery,
+      // audit #2: explanations for non-sensitive states (e.g. temporary failure) are shown; never for blocked (bounced/unsub).
+      reason: r.delivery === 'unsub' || r.delivery === 'bounced' ? null : r.reason, updated_at: r.lastEventAt.toISOString(),
       // Step 5 "Svar" axis (only for personal links): invited | answered | revoked.
       response: r.inviteGen === null ? null : r.participantId !== null ? 'answered' : r.revokedAt ? 'revoked' : 'invited',
       linked_from: r.linkedManually && r.participant ? r.participant.name : null,
@@ -259,7 +266,8 @@ export async function listInvitations(eventId: number) {
     quota,
     /** §46.8 data shape: QuotaRemaining + SendToEmailsInitial.invitations. */
     remaining: { poll: quota.poll_remaining, hour: quota.hour_remaining, day: quota.day_remaining },
-    invitations: rows.map((r) => ({ email: r.email, status: r.delivery === 'bounced' ? 'bounced' : r.delivery === 'unsub' ? 'blocked' : r.delivery === 'failed' ? 'failed' : 'sent' })),
+    // §46.8 + audit #3: 'delivered' is final, so the box can stop polling (admin still maps bounced/unsub → neutral 'blocked').
+    invitations: rows.map((r) => ({ email: r.email, status: r.delivery === 'bounced' ? 'bounced' : r.delivery === 'unsub' ? 'blocked' : r.delivery === 'failed' ? 'failed' : r.delivery === 'delivered' ? 'delivered' : 'sent' })),
     reminder: { used: ev.remindersSent, max: REMINDER_MAX, next_allowed_at: next && next > new Date() ? next.toISOString() : null, recipient_count: recipients, answered_count: rows.filter((r) => r.participantId !== null).length, closed: ev.closedAt !== null },
     mail_blocked: ev.mailBlockedAt !== null,
   };

@@ -52,7 +52,7 @@ export function rateLimit(req: Request, name: keyof typeof LIMITS = 'write'): Re
   const r = take(`${name}:${clientIp(req)}`, LIMITS[name]);
   if (r.ok) return null;
   return Response.json(
-    { errors: ['For mange forespørgsler. Vent lidt, og prøv igen.'], code: 'ip_limit', retry_after: r.retryAfterSec },
+    { errors: ['For mange forespørgsler. Vent lidt, og prøv igen.'], error: 'rate_ip', code: 'ip_limit' /* legacy name, kept for compat */, retry_after: r.retryAfterSec },
     { status: 429, headers: { 'Retry-After': String(r.retryAfterSec), 'Cache-Control': 'no-store' } },
   );
 }
