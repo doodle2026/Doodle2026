@@ -90,6 +90,21 @@ function parseCookie(secret: string, raw: string | null | undefined): string | n
 }
 
 /** Resolve the session from a raw cookie value (pages pass cookies().get(), routes pass the request). */
+export type SessionEnd = 'absolute' | 'idle' | 'ended' | null;
+/** Session + why it is gone: 'absolute' (12 h), 'idle' (2 h), 'ended' (logged out / replaced / unknown). The reason is exact on the
+ *  first request after expiry (the row is deleted then); later requests with the same cookie report 'ended'. */
+export async function sessionCheck(raw: string | null | undefined): Promise<{ s: OwnerSessionInfo | null; end: SessionEnd }> {
+  const secret = ownerSecret(); if (!secret) return { s: null, end: null };
+  const id = parseCookie(secret, raw); if (!id) return { s: null, end: raw ? 'ended' : null };
+  const idHash = sha256(id);
+  const s = await prisma.ownerSession.findUnique({ where: { idHash }, include: { user: { select: { username: true } } } });
+  const now = Date.now();
+  if (!s) return { s: null, end: 'ended' };
+  const end: SessionEnd = s.expiresAt.getTime() <= now ? 'absolute' : s.lastSeenAt.getTime() + SESSION_IDLE_MS <= now ? 'idle' : null;
+  if (end) { await prisma.ownerSession.delete({ where: { idHash } }).catch(() => undefined); return { s: null, end }; }
+  if (now - s.lastSeenAt.getTime() > 60_000) await prisma.ownerSession.update({ where: { idHash }, data: { lastSeenAt: new Date(now) } }).catch(() => undefined);
+  return { s: { userId: s.userId, username: s.user.username, idHash, csrf: hmac(secret, `csrf:${id}`) }, end: null };
+}
 export async function sessionFromCookie(raw: string | null | undefined): Promise<OwnerSessionInfo | null> {
   const secret = ownerSecret(); if (!secret) return null;
   const id = parseCookie(secret, raw); if (!id) return null;

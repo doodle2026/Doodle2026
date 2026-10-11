@@ -6,6 +6,7 @@ import { activityLog, LOG_TYPES } from '@/lib/owner/stats';
 import { ownerFmt } from '@/lib/owner/fmt';
 import { logError } from '@/lib/http';
 import OwnerChrome from '../OwnerChrome';
+import ScrollTable from '../ScrollTable';
 import { ErrorBox, Pager, type T } from '../parts';
 import TypeSelect from './TypeSelect';
 
@@ -32,6 +33,7 @@ export default async function OwnerLog({ params, searchParams }: Props) {
   const f = ownerFmt(locale);
   let r: Awaited<ReturnType<typeof activityLog>> | null = null;
   try { r = await activityLog(type || undefined, page); } catch (e) { logError('owner log', e); }
+  if (r && r.page !== page) { const { redirect } = await import('next/navigation'); redirect(href(r.page)); } // L4
   let body: React.ReactNode, res = '';
   if (!r) body = <ErrorBox locale={locale} href={base} />;
   else if (!r.total) body = <div className="card owner-empty"><p>{type ? `🔍 ${t('owner.logNoResults')}` : `🗒 ${t('owner.logEmpty')}`}</p></div>;
@@ -40,7 +42,7 @@ export default async function OwnerLog({ params, searchParams }: Props) {
     res = `${t('owner.logEntries', { n: r.total })} · ${t('owner.showing', { from: f.n(from + 1), to: f.n(from + r.rows.length), total: f.n(r.total) })}`;
     body = (
       <>
-        <div className="card ocard-table"><table className="otable otable--cards" id="o-log"><caption className="sr-only">{t('owner.logTitle')}</caption>
+        <ScrollTable><table className="otable otable--cards" id="o-log"><caption className="sr-only">{t('owner.logTitle')}</caption>
           <thead><tr><th scope="col">{t('owner.cTime')}</th><th scope="col">{t('owner.cEvent')}</th><th scope="col">{t('owner.cUser')}</th><th scope="col">{t('owner.cDetails')}</th></tr></thead>
           <tbody>{r.rows.map((e, i) => (
             <tr key={i} data-type={e.type}>
@@ -51,7 +53,7 @@ export default async function OwnerLog({ params, searchParams }: Props) {
                 ? (e.event.title !== null ? <a href={`/${locale}/owner/events/${e.event.id}`}>{e.event.title}</a> : <span className="meta">{t('owner.deletedTitle')}</span>)
                 : e.ip ? <span className="olog-ip">{t('owner.ipLabel', { ip: e.ip })}</span> : <span className="meta">{'–'}</span>}</td>
             </tr>
-          ))}</tbody></table></div>
+          ))}</tbody></table></ScrollTable>
         <Pager t={t as unknown as T} page={r.page} pages={Math.max(1, Math.ceil(r.total / r.pageSize))} href={href} />
       </>
     );

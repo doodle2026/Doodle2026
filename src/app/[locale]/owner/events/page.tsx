@@ -7,6 +7,7 @@ import { ownerFmt } from '@/lib/owner/fmt';
 import { DAY_TZ } from '@/lib/owner/counters';
 import { logError } from '@/lib/http';
 import OwnerChrome from '../OwnerChrome';
+import ScrollTable from '../ScrollTable';
 import { ErrorBox, Pager, StatusBadge, type T } from '../parts';
 import Filters from './Filters';
 import { qs, type F } from './qs';
@@ -38,6 +39,7 @@ export default async function OwnerEvents({ params, searchParams }: Props) {
   const fm = ownerFmt(locale);
   let r: Awaited<ReturnType<typeof listEvents>> | null = null;
   try { r = await listEvents({ ...f, page }); } catch (e) { logError('owner list', e); }
+  if (r && r.page !== page) { const { redirect } = await import('next/navigation'); redirect(base + qs({ ...f, page: r.page })); } // L4
   const now = new Date().toISOString();
   const nfx = (v: number) => (v ? fm.n(v) : <span className="meta">{'0'}</span>);
   let body: React.ReactNode;
@@ -62,7 +64,7 @@ export default async function OwnerEvents({ params, searchParams }: Props) {
       const [mPre, mPost] = t('owner.emailMatch', { email: '\u0001' }).split('\u0001');
       body = (
         <>
-          <div className="card ocard-table"><table className="otable otable--cards otable--events" id="o-events"><caption className="sr-only">{t('owner.evTitle')}</caption>
+          <ScrollTable><table className="otable otable--cards otable--events" id="o-events"><caption className="sr-only">{t('owner.evTitle')}</caption>
             <thead><tr>{COLS.map(th)}</tr></thead>
             <tbody>{r.rows.map((e) => (
               <tr key={e.id}>
@@ -76,7 +78,7 @@ export default async function OwnerEvents({ params, searchParams }: Props) {
                 <td className="num" data-label={t('owner.cRejected')}>{nfx(e.invitesRejected)}</td>
                 <td data-label={t('owner.cFinal')}>{e.finalDate ? fm.date(e.finalDate) : <span className="meta">{'–'}</span>}</td>
               </tr>
-            ))}</tbody></table></div>
+            ))}</tbody></table></ScrollTable>
           <Pager t={tt} page={r.page} pages={pages} href={(p) => base + qs({ ...f, page: p })} />
         </>
       );

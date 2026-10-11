@@ -40,22 +40,11 @@ DATABASE_URL='<prod connection string>' npm run owner:create -- --username jan
 - **Later (spec, phase 2):** TOTP 2FA.
 
 ## Client IP (all rate limits, login lock, audit log)
-`src/lib/client-ip.ts` is the only place the IP is read: `x-vercel-forwarded-for` → `x-real-ip` → the **rightmost** `x-forwarded-for` entry (after skipping `TRUSTED_PROXY_HOPS` own proxies, default 0). The leftmost XFF entry is client-controlled and is never used.
-# Statistics API (PR B)
+`src/lib/client-ip.ts` is the only place the IP is read.
 
-All endpoints are `GET` only, need an owner session, and send no-store/noindex. There are no export endpoints and nothing returns tokens, token hashes or admin/edit/invite links.
-
-| Endpoint | |
-|---|---|
-| `/api/owner/stats` | Aggregates per §47.7 (+ `limits`, `dayTz`). Cached 60 s per server instance. |
-| `/api/owner/events?q=&status=open\|closed&pl=en\|da\|fr\|de&period=today\|7\|30\|90&sort=&dir=&page=` | 50 per page. Server-side filtering and sorting. `q` containing `@` = partial, case-insensitive email search (`ILIKE '%q%'`, wildcards escaped) with `matchedEmail`; otherwise title search. `deletedNotShown` = deleted counter. |
-| `/api/owner/events/<id>` | Detail: title, description, dates with yes/maybe/no, participants (name, answered, counts), invitations (full email, raw status sent/failed/rejected/answered, `unsubscribed` mark), timeline, `purgeAt`, the public link only. **Every call is logged** (`owner_login_log`, outcome `view`, user + poll + time, no IP). |
-| `/api/owner/log?type=login_ok\|login_failed\|locked\|logout\|view&page=` | Read-only activity log, 50 per page, IPs already truncated. Retention 12 months (daily cron cleanup). |
-
-**Definitions and decisions**
-- **Day = UTC** (`DAY_TZ`), the same as the mail quota (`EmailQuota.day`, Resend resets at 00:00 UTC). Used for "i dag", 7/30-day windows, the 30-day charts, the "I dag" filter and the quota bar.
-- **Deletion is a hard delete** (cascade). Deleted polls survive only as the aggregate counter `daily_stats(day, 'polls_deleted')`. "Afstemninger i alt" = existing + deleted.
-- **Limit hits** are aggregate counters per type per UTC day in `daily_stats`: `limit_poll` (200 per poll), `limit_hour` (organizer hourly), `limit_ip` (per-IP mail limit) and `limit_day` (daily quota). No IP or email is stored.
-- **Votes per day** = responses (participants created that day). **Participation** "ud over arrangøren" = a participant whose name ≠ the poll's organizer name (case-insensitive).
-- **Email search** works on `invitations.email`, which is stored normalized (lowercase) in plain text. The migration adds a `pg_trgm` GIN index when the extension is available (Supabase); otherwise it uses a sequential scan, which is fine at this size. Addresses disappear with the 90-day invitation cleanup and with poll deletion.
-- **Unsubscribes** = rows in the suppression list (hashed; all scopes).
+- **On Vercel** (`VERCEL` is set by the platform): `x-vercel-forwarded-for` → `x-real-ip` → rightmost `x-forwarded-for`. Vercel's edge overwrites these, so clients cannot forge them.
+- **Anywhere else** those headers are client-controlled and are **ignored**:
+  - `TRUSTED_PROXY_HOPS=N` is the number of reverse proxies *you* run in front of the app, each appending to `X-Forwarded-For`. The client IP is the N-th entry from the right, i.e. the one your outermost proxy appended. Example: nginx → app is `1`; Cloudflare → nginx → app is `2`.
+  - With `TRUSTED_PROXY_HOPS` unset or `0`, no header is trusted: the socket address is used if the runtime exposes it, else `unknown`. That means one shared bucket, which fails closed.
+  - Tests and `.env.test` use `1` (the test client plays the proxy).
+- The leftmost `X-Forwarded-For` entry is never used.
