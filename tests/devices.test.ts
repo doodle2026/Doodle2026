@@ -104,7 +104,11 @@ describe.skipIf(!existsSync(CHROME))('device matrix (§0.1)', () => {
           if (fw < 96) issues.push(`${lang} se field ${Math.round(fw)}px < 96`);
           // P2: mode switch on one line
           const tops = await pg.locator('.se-mode button').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)));
-          if (new Set(tops).size > 1 && (d.viewport?.width ?? 999) >= 375) issues.push(`${lang} mode switch wraps`);
+          if (new Set(tops).size > 1) issues.push(`${lang} mode switch wraps`); // F2: one line at every width incl. 320 px
+          // F3: "Sendt ✓" (earlier row) is exactly as wide as "Send" at every width
+          const wDone = await pg.locator('#se-rows li[data-status="earlier"] .se-btn--done').first().evaluate((e) => e.getBoundingClientRect().width);
+          const wSend = await pg.locator('#se-rows li[data-status="idle"] .se-btn').nth(1).evaluate((e) => e.getBoundingClientRect().width);
+          if (Math.abs(wDone - wSend) > 1) issues.push(`${lang} Sendt ✓ ${Math.round(wDone)} ≠ Send ${Math.round(wSend)}`);
           // P4: Send button keeps its width while "Sender…"
           const idle = pg.locator('#se-rows li[data-status="idle"]').nth(1);
           await idle.locator('input').fill(`w-${lang}-${Date.now()}@example.com`);

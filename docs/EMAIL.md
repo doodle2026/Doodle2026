@@ -133,7 +133,7 @@ Shows the FULL rendered mails (incl. personal invite tokens and unsubscribe link
 
 ### Tester hooks (capture mode only – 404/inert otherwise)
 - `EMAIL_CAPTURE_FAIL=<regex>`: sends to matching recipients fail like a provider error (→ "Ikke sendt", retry possible). `EMAIL_CAPTURE_FAIL_ONCE=1`: each matching address fails only once (retry then succeeds).
-- `POST /api/test/delivery {email, event: 'bounced'|'failed', poll?}` sets the delivery status like a Resend webhook would.
+- `POST /api/test/delivery {email, event: 'delivered'|'bounced'|'failed'|'unsubscribed', poll?}` sets the delivery status like a Resend webhook would ('unsubscribed' only marks the invitation; it does not add the address to the suppression list).
 
 ### Spec audit follow-ups (§38/§44.8/§46.2/§46.7/§46.9)
 - **Send nyt link (§44.8)** always asks for confirmation (`resend.*` texts) because the old link stops working; the toast says so.

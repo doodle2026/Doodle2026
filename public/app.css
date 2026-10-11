@@ -23,3 +23,8 @@
   .se-row__line{gap:var(--s-1)}
   .se-input[readonly]{min-width:4rem} /* read-only (already sent) rows may shrink; editable fields keep 6rem */
 }
+/* F2: below 360 px the switch fills the row with two equal halves (no wrap in any locale at 320 px). */
+@media (max-width:359px){
+  .se-mode{display:flex;width:100%;max-width:100%;flex-wrap:nowrap}
+  .se-mode button{flex:1 1 0;min-width:0;padding:0 4px;font-size:.78rem;letter-spacing:-.01em}
+}
