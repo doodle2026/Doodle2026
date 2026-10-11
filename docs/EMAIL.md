@@ -112,7 +112,7 @@ Shows the FULL rendered mails (incl. personal invite tokens and unsubscribe link
 - Opted-out addresses are never revealed: per-address result `blocked` (UI: `se.blocked` "Kan ikke sendes til denne adresse"), same HTTP 201 and response shape as a normal send, minimum response time 400 ms + jitter, and the address is **not stored** (so the admin list can't reveal it either). No pre-check endpoint reports opt-outs. Retry of a now-suppressed address answers 409 `blocked`.
 - Duplicates in the form are marked with their line number; quota (poll/hour/day) is returned by GET and every POST; one combined response per call.
 - Tracking: the box doesn't send `track`; the server uses the poll's `inviteTracking` (changed only in admin).
-- Data shape per design §46.8: GET and every POST return `remaining: {poll, hour, day}` and `invitations: [{email, status: sent|failed|bounced}]`; POST adds `results: [{email, status: sent|failed|blocked}]`; 429s carry `remaining` too. (Legacy `quota.*_remaining` kept for the admin view.)
+- Data shape per design §46.8: GET and every POST return `remaining: {poll, hour, day}` and `invitations: [{email, status: sent|delivered|failed|blocked}]` (PM decision 11 Oct: bounced and unsubscribed are both the neutral `blocked` here too, so the box never says 'Afvist'); POST adds `results: [{email, status: sent|failed|blocked}]`; 429s carry `remaining` too. (Legacy `quota.*_remaining` kept for the admin view.)
 - Admin never shows 'Afmeldt': the admin API maps unsub and bounced to the neutral `blocked` ('⊘ Kan ikke sendes til denne adresse', filter 'Kan ikke sendes'); the DB keeps the distinction.
 - Per-IP mail limit: `RATE_LIMIT_MAIL_PER_HOUR` default **150 calls/hour/IP** (was 10; one call per address in the box). Every 429 carries `Retry-After` (+ `retry_after`, `code`: ip_limit | poll_hourly_limit | quota). UI shows `se.limitIp` with a local minute countdown, no auto-resend (§46.9).
 
@@ -138,6 +138,6 @@ Shows the FULL rendered mails (incl. personal invite tokens and unsubscribe link
 ### Spec audit follow-ups (§38/§44.8/§46.2/§46.7/§46.9)
 - **Send nyt link (§44.8)** always asks for confirmation (`resend.*` texts) because the old link stops working; the toast says so.
 - **Status explanations (§38)**: non-sensitive states (e.g. temporary failure) keep their reason in the admin list; bounced and unsubscribed are both shown only as neutral “Kan ikke sendes” with **no** reason.
-- **Box statuses (§46.8)**: `invitations[]` now includes `delivered`; the box polls until every invitation is `delivered`/`bounced`/`failed`/`blocked`.
+- **Box statuses (§46.8)**: `invitations[]` now includes `delivered`; the box polls until every invitation is `delivered`/`failed`/`blocked`. Bounced is reported as `blocked` and shown as neutral '⊘ Kan ikke sendes til denne adresse' (PM: neutral everywhere).
 - **Per-IP 429 (§46.9)**: body `{ error: 'rate_ip', code: 'ip_limit' (legacy), retry_after, remaining }` + `Retry-After` header. The UI accepts seconds or an HTTP date, rounds minutes up, and shows the hour message (`se.limitHour`) when the header is missing. No auto-resend.
 - **Bulk (§46.7)**: Ctrl/⌘+Enter parses and sends; sent addresses are shown in both views. Drag-and-drop (§44.5) is dropped by PM decision.

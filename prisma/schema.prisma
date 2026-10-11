@@ -206,3 +206,49 @@ model AbuseReport {
   @@index([eventId])
   @@map("abuse_reports")
 }
+
+/// Owner dashboard accounts (owner/ops only – poll users have no accounts). Created via `npm run owner:create`.
+model OwnerUser {
+  id           Int            @id @default(autoincrement())
+  username     String         @unique @db.VarChar(64)
+  /// argon2id PHC string (m=19456 KiB, t=2, p=1 – OWASP minimum)
+  passwordHash String         @map("password_hash") @db.VarChar(255)
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastLoginAt  DateTime?      @map("last_login_at") @db.Timestamptz(3)
+  sessions     OwnerSession[]
+
+  @@map("owner_users")
+}
+
+/// DB-backed owner sessions. Only SHA-256 of the session id is stored; the cookie carries the id + HMAC signature.
+model OwnerSession {
+  idHash     String    @id @map("id_hash") @db.Char(64)
+  userId     Int       @map("user_id")
+  user       OwnerUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  /// absolute expiry (createdAt + 12 h)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("owner_sessions")
+}
+
+/// Audit log of owner logins (success and failure). Also the source for login throttling/lockout.
+model OwnerLoginLog {
+  id        Int      @id @default(autoincrement())
+  at        DateTime @default(now()) @db.Timestamptz(3)
+  /// attempted username (normalized, max 64) – also logged for unknown names
+  username  String   @db.VarChar(64)
+  userId    Int?     @map("user_id")
+  success   Boolean
+  /// ok | bad_credentials | locked | bad_csrf | logout
+  outcome   String   @db.VarChar(24)
+  ip        String   @db.VarChar(64)
+  userAgent String   @map("user_agent") @db.VarChar(255)
+
+  @@index([ip, at])
+  @@index([username, at])
+  @@map("owner_login_log")
+}

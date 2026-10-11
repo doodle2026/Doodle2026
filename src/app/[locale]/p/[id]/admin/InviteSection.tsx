@@ -5,7 +5,7 @@ import { useI18n } from '@/i18n/use';
 import { BCP } from '@/lib/dates';
 
 type Api = (path: string, init?: RequestInit) => Promise<{ res: Response; data: any }>; // eslint-disable-line @typescript-eslint/no-explicit-any
-type Delivery = 'queued' | 'sent' | 'delivered' | 'failed' | 'bounced' | 'blocked';
+type Delivery = 'queued' | 'sent' | 'delivered' | 'failed' | 'blocked'; // API never sends 'bounced' (neutral blocked)
 interface Row { email: string; name: string | null; delivery: Delivery; reason: string | null; updated_at: string; response: 'invited' | 'answered' | 'revoked' | null; linked_from: string | null }
 interface State {
   invitees: Row[]; organizer_name: string; mail_blocked: boolean; tracking: boolean; public_answers: { id: number; name: string }[];
@@ -15,10 +15,10 @@ interface State {
 /** Delivery badges (design §30.3 "Levering"; §38 colours). sent and delivered both read "Leveret"/"Sendt". */
 const DLV: Record<Delivery, [string, string, string]> = {
   queued: ['st.queued', '…', 'queued'], sent: ['app.dlvSent', '✉', 'sent'], delivered: ['st.fSent', '✉', 'sent'],
-  failed: ['st.fFailed', '!', 'failed'], bounced: ['st.fBounced', '⊘', 'bounced'], blocked: ['st.blocked', '⊘', 'blocked'],
+  failed: ['st.fFailed', '!', 'failed'], blocked: ['st.blocked', '⊘', 'blocked'],
 };
-type Filter = 'all' | 'queued' | 'sent' | 'failed' | 'bounced' | 'blocked' | 'answered' | 'waiting' | 'public';
-const mailable = (r: Row) => r.delivery !== 'bounced' && r.delivery !== 'blocked';
+type Filter = 'all' | 'queued' | 'sent' | 'failed' | 'blocked' | 'answered' | 'waiting' | 'public';
+const mailable = (r: Row) => r.delivery !== 'blocked';
 const inFilter = (r: Row, f: Filter) => f === 'all' || (f === 'sent' ? r.delivery === 'sent' || r.delivery === 'delivered'
   : f === 'answered' ? r.response === 'answered' : f === 'waiting' ? r.response === 'invited' && mailable(r) : f === 'public' ? false : r.delivery === f);
 const ANS = { invited: ['st.invited', '○', 'st st--invited'], answered: ['st.fAnswered', '✓', 'st st--answered'], revoked: ['st.revoked', '⊗', 'st st--unsub'] } as const;
@@ -48,9 +48,6 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
   const cdlg = useRef<HTMLDialogElement>(null);
   const returnFocus = useRef<string | null>(null);
-  // Render only one layout (table ≥640 px, list below) so each row has exactly one "Send nyt link" in the DOM/a11y tree.
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => { const m = matchMedia('(max-width:639px)'); const f = () => setNarrow(m.matches); f(); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
   const dlg = useRef<HTMLDialogElement>(null);
   const remBtn = useRef<HTMLButtonElement>(null);
 
@@ -139,8 +136,8 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
   if (!st) return null;
   const R = st.invitees;
   const T = st.tracking;
-  const counts: Record<Filter, number> = { all: R.length, queued: 0, sent: 0, failed: 0, bounced: 0, blocked: 0, answered: 0, waiting: 0, public: st.public_answers.length };
-  for (const r of R) for (const f of ['queued', 'sent', 'failed', 'bounced', 'blocked', 'answered', 'waiting'] as const) if (inFilter(r, f)) counts[f]++;
+  const counts: Record<Filter, number> = { all: R.length, queued: 0, sent: 0, failed: 0, blocked: 0, answered: 0, waiting: 0, public: st.public_answers.length };
+  for (const r of R) for (const f of ['queued', 'sent', 'failed', 'blocked', 'answered', 'waiting'] as const) if (inFilter(r, f)) counts[f]++;
   const F: [Filter, string][] = T
     ? [['all', t('st.fAll')], ['answered', t('st.fAnswered')], ['waiting', t('st.fWaiting')], ['failed', t('st.fFailed')], ['blocked', t('st.fBlocked')], ['public', t('st.fPublic')]]
     : [['all', t('st.fAll')], ['sent', t('st.fSent')], ['failed', t('st.fFailed')], ['blocked', t('st.fBlocked')]];
@@ -251,7 +248,8 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
           <div className="filters" role="group" aria-label={t('st.filterAria')} id="filters">
             {F.map(([k, l]) => <button key={k} type="button" data-f={k} aria-pressed={filter === k} onClick={() => { setFilter(k); setShowAll(false); }}>{l}<span className="n">{counts[k]}</span></button>)}
           </div>
-          {!narrow && <table className="rtable" id="rtable"><caption className="sr-only">{t('st.caption')}</caption>
+          {/* One markup for all widths: the table is restyled as cards below 640 px (CSS only) → no flash, one button per row. */}
+          <table className="rtable rtable--resp" id="rtable"><caption className="sr-only">{t('st.caption')}</caption>
             <thead>{T ? <tr><th scope="col">{t('st.colRecipient')}</th><th scope="col">{t('st.colDelivery')}</th><th scope="col">{t('st.colResponse')}</th><th scope="col"><span className="sr-only">{t('st.colActions')}</span></th></tr>
               : <tr><th scope="col">{t('st.colRecipient')}</th><th scope="col">{t('st.colDelivery')}</th><th scope="col">{t('st.colLatest')}</th></tr>}</thead>
             <tbody>{filter === 'public' ? null : show.length ? show.map((r) => T ? (
@@ -259,11 +257,8 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
             ) : (
               <tr key={r.email}><td className="addr">{r.email}</td><td>{badge(r)}{r.reason && r.delivery !== 'blocked' && <div className="meta">{r.reason}</div>}</td><td className="meta">{when(r.updated_at, locale)}</td></tr>
             )) : <tr><td colSpan={T ? 4 : 3} className="meta">{t('st.none')}</td></tr>}</tbody>
-          </table>}
-          {narrow && <ul className="rlist" id="rlist">{filter === 'public' ? null : show.length ? show.map((r) => (
-            <li key={r.email}><span className="addr">{r.email}</span><span className="badges">{badge(r)}{T && ans(r)}</span><span className="meta">{when(r.updated_at, locale)}{r.reason && r.delivery !== 'blocked' ? ` · ${r.reason}` : ''}</span>
-              {T && <span style={{ gridColumn: '1/-1' }}>{act(r)}</span>}</li>
-          )) : <li className="meta">{t('st.none')}</li>}</ul>}
+          </table>
+          
           {T && (filter === 'all' || filter === 'public') && st.public_answers.length > 0 && (
             <div className="pub" aria-labelledby="pub-h" id="public-answers"><h4 id="pub-h">{t('pub.h')} <span className="meta">{t('pub.notInvitedParen')}</span></h4>
               <p className="field__hint">{t('pub.hint')}</p>

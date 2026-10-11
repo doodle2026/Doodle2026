@@ -123,7 +123,7 @@ describe.skipIf(!existsSync(CHROME))('UI (headless)', () => {
     expect(await pg.inputValue('#se-pmsg')).toBe('Hej');
     const before = await pg.locator('#se-rows li').count(); await pg.click('#se-more'); expect(await pg.locator('#se-rows li').count()).toBe(before + 5);
     await prisma.invitation.updateMany({ where: { event: { slug: p.id } }, data: { delivery: 'bounced' } });
-    await pg.reload(); await pg.waitForSelector('#se-rows >> text=Afvist – tjek adressen');
+    await pg.reload(); await pg.waitForSelector('#se-rows >> text=Kan ikke sendes til denne adresse'); expect(await pg.textContent('#se')).not.toMatch(/afvist/i); // PM: bounced is neutral in the box too
     await prisma.invitation.updateMany({ where: { event: { slug: p.id } }, data: { delivery: 'sent' } });
     await pg.reload(); await pg.waitForSelector('#se-rows li[data-status="earlier"]');
     expect(await pg.textContent('#se-rows')).toContain('Sendt tidligere');

@@ -44,6 +44,11 @@ test('/api/test/delivery (capture only): delivered and unsubscribed', async () =
   // the box: delivered is final; unsubscribed is neutral blocked
   const g = await call(`/api/events/${p.id}/invitations`, { token: p.token });
   expect(g.body.invitations).toEqual(expect.arrayContaining([{ email: a, status: 'delivered' }, { email: u, status: 'blocked' }]));
+  // PM: bounced is neutral in the box as well – never 'bounced'
+  await post({ email: a, event: 'bounced', poll: p.id });
+  const g2 = await call(`/api/events/${p.id}/invitations`, { token: p.token });
+  expect(g2.body.invitations).toEqual(expect.arrayContaining([{ email: a, status: 'blocked' }]));
+  expect(JSON.stringify(g2.body.invitations)).not.toContain('bounced');
 });
 
 describe.skipIf(!existsSync(CHROME))('admin list', () => {
@@ -59,8 +64,8 @@ describe.skipIf(!existsSync(CHROME))('admin list', () => {
       await pg.locator(`[data-resend="${a}"]`).first().waitFor();
       expect(await pg.locator(`[data-resend="${a}"]`).count()).toBe(1);
       expect(await pg.locator(`[data-resend="${a}"]`).isVisible()).toBe(true);
-      expect(await pg.locator(width < 640 ? '#rlist' : '#rtable').count()).toBe(1);
-      expect(await pg.locator(width < 640 ? '#rtable' : '#rlist').count()).toBe(0);
+      expect(await pg.locator('#rtable').count()).toBe(1); // one markup at all widths (CSS restyles it) → no flash
+      expect(await pg.locator('#rlist').count()).toBe(0);
       await pg.close();
     }
     await b.close();
