@@ -6,7 +6,8 @@ export default function Html({ lang, nonce, children }: { lang: string; nonce?: 
     <html lang={lang} suppressHydrationWarning>
       <head>
         {/* Sets data-theme before first paint; allowed by the per-request CSP nonce. */}
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* browsers blank the nonce attribute after parsing → dev-only hydration warning; content is identical */}
+        <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         {/* eslint-disable-next-line @next/next/no-css-tags -- design's plain global CSS file, kept restylable as-is */}
         <link rel="stylesheet" href="/styles.css" />
         {/* eslint-disable-next-line @next/next/no-css-tags -- small app-only additions (see file header) */}

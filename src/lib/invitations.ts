@@ -159,32 +159,38 @@ export async function sendInvitations(eventId: number, body: InviteInput) {
   const track = body.track === true || ev.inviteTracking; // follows the poll's tracking setting (changed only in admin)
   const invLocale = isLocale(body.locale) ? body.locale : ev.locale; // organizer may pick; default = poll language
   linkSecret(); // fail early (503) when send mode lacks EMAIL_LINK_SECRET
-  try {
-    await prisma.$transaction(async (tx) => {
-      if (organizerName !== (ev.organizerName ?? '') || (track && !ev.inviteTracking)) {
-        await tx.event.update({ where: { id: eventId }, data: { organizerName: organizerName || null, ...(track ? { inviteTracking: true } : {}) } });
-      }
-      for (const r of toSend) {
+  if (organizerName !== (ev.organizerName ?? '') || (track && !ev.inviteTracking)) {
+    await prisma.event.update({ where: { id: eventId }, data: { organizerName: organizerName || null, ...(track ? { inviteTracking: true } : {}) } });
+  }
+  // L2: one small transaction per address – a concurrent send that already stored an address (unique eventId+email)
+  // only affects that address (per-address "already_invited"); the others are still sent.
+  const lost = new Set<string>();
+  for (const r of [...toSend]) {
+    try {
+      await prisma.$transaction(async (tx) => {
         const row = await tx.invitation.create({ data: { eventId, locale: invLocale, email: r.email, name: r.name ?? null, linkTokenHash: sha256Hex(`pending:${eventId}:${r.email}:${Math.random()}`), delivery: 'queued' } });
         const t = linkTokenFor(row.id); tokens.set(r.email, t);
         const it = track ? inviteTokenFor(row.id, 1) : null;
         if (it) invTokens.set(r.email, it);
         await tx.invitation.update({ where: { id: row.id }, data: { linkTokenHash: sha256Hex(t), ...(it ? { inviteGen: 1, inviteTokenHash: sha256Hex(it) } : {}) } });
-      }
-    });
-  } catch (e) { await releaseQuota(toSend.length); if ((e as { code?: string }).code === 'P2002') throw new ApiError(409, ['Nogle modtagere er allerede inviteret.'], { code: 'already_invited' }); throw e; }
+      });
+    } catch (e) {
+      if ((e as { code?: string }).code !== 'P2002') { await releaseQuota(toSend.length - lost.size - tokens.size); throw e; }
+      lost.add(r.email); tokens.delete(r.email); invTokens.delete(r.email);
+    }
+  }
+  if (lost.size) { await releaseQuota(lost.size); for (let i = toSend.length - 1; i >= 0; i--) if (lost.has(toSend[i].email)) toSend.splice(i, 1); }
 
   p.organizerFromName = organizerName || undefined;
   p.organizerName = organizerName || '';
   const plan = planInvitations(p, toSend.map((r) => ({ email: r.email, name: r.name, locale: invLocale, linkToken: tokens.get(r.email)!, inviteToken: invTokens.get(r.email) })), { appUrl: appUrl(), personalMessage: message || undefined });
   const ids = new Map((await prisma.invitation.findMany({ where: { eventId, email: { in: toSend.map((r) => r.email) } }, select: { id: true, email: true } })).map((r) => [r.email, r.id]));
   const res = await deliver(eventId, plan.messages, ids);
-  // Per-recipient outcome (Send til e-mails: one row per address). Suppressed → "unsub" (Modtageren har frabedt sig mails).
   // PM: opted-out addresses are never revealed – they get the same neutral "rejected" as any address we can't send to,
   // and are not stored (so the admin list can't reveal them either).
   const after = new Map((await prisma.invitation.findMany({ where: { eventId, email: { in: toSend.map((r) => r.email) } }, select: { email: true, delivery: true } })).map((r) => [r.email, r.delivery]));
   const results = [
-    ...parsed.valid.map((r) => ({ email: r.email, status: suppressed.has(r.email) ? 'blocked' : after.get(r.email) === 'failed' ? 'failed' : 'sent' })),
+    ...parsed.valid.map((r) => ({ email: r.email, status: lost.has(r.email) ? 'already_invited' : suppressed.has(r.email) ? 'blocked' : after.get(r.email) === 'failed' ? 'failed' : 'sent' })),
     ...parsed.alreadyInvited.map((e) => ({ email: e, status: 'already_invited' })),
     ...parsed.duplicates.map((e) => ({ email: e, status: 'duplicate' })),
   ];

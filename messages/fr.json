@@ -635,6 +635,7 @@
     "wrongH": "Une erreur s’est produite",
     "wrongP": "Veuillez réessayer dans un instant.",
     "abusePrivacy": "Le signalement est anonyme pour l’organisateur. Nous ne conservons que le sondage et votre évaluation.",
-    "answerDeleted": "Votre réponse a été supprimée par l’organisateur. Vous pouvez répondre à nouveau comme nouveau participant."
+    "answerDeleted": "Votre réponse a été supprimée par l’organisateur. Vous pouvez répondre à nouveau comme nouveau participant.",
+    "seQuotaHour": "Plus que {n} invitations cette heure-ci – retirez-en {m}."
   }
 }

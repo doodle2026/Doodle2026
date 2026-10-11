@@ -635,6 +635,7 @@
     "wrongH": "Etwas ist schiefgelaufen",
     "wrongP": "Bitte versuche es gleich noch einmal.",
     "abusePrivacy": "Die Meldung ist für die Organisatorin bzw. den Organisator anonym. Wir speichern nur die Umfrage und deine Einschätzung.",
-    "answerDeleted": "Deine Antwort wurde vom Organisator gelöscht. Du kannst als neue Person erneut antworten."
+    "answerDeleted": "Deine Antwort wurde vom Organisator gelöscht. Du kannst als neue Person erneut antworten.",
+    "seQuotaHour": "In dieser Stunde nur noch {n} Einladungen – entfernen Sie {m}."
   }
 }

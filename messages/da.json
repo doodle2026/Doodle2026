@@ -635,6 +635,7 @@
     "wrongH": "Noget gik galt",
     "wrongP": "Prøv igen om lidt.",
     "abusePrivacy": "Rapporten er anonym over for arrangøren. Vi gemmer kun afstemningen og din vurdering.",
-    "answerDeleted": "Dit svar er slettet af arrangøren. Du kan svare igen som ny deltager."
+    "answerDeleted": "Dit svar er slettet af arrangøren. Du kan svare igen som ny deltager.",
+    "seQuotaHour": "Kun {n} invitationer tilbage i denne time – fjern {m}."
   }
 }

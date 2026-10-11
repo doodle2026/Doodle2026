@@ -9,7 +9,7 @@
  * Uses the Resend REST API via fetch (no SDK dependency); 10 s timeout.
  */
 export type EmailMode = 'log' | 'send' | 'capture';
-import { captureRefusal, recordMail } from './capture';
+import { captureRefusal, captureShouldFail, recordMail } from './capture';
 export interface EmailMessage {
   to: string | string[]; subject: string; text: string; html?: string; idempotencyKey?: string;
   /** Overrides EMAIL_REPLY_TO (e.g. the organizer). Dropped if not a valid address. */
@@ -156,7 +156,7 @@ export function createMailer(opts: { env?: Env; fetch?: typeof fetch; log?: Log;
     }
     const summary = summarize(m);
     if (mode === 'log') { log('info', `[email:log] ${summary}`); return { ok: true, mode, id: logId() }; }
-    if (mode === 'capture') return { ok: true, mode, id: capture(m) };
+    if (mode === 'capture') return captureShouldFail(recipients(m), opts.env ?? process.env) ? { ok: false, mode, error: 'provider' } : { ok: true, mode, id: capture(m) };
     if (!cfg.apiKey || !cfg.from) { warnConfig(); log('error', `[email] not sent (config error): ${summary}`); return { ok: false, mode, error: 'config' }; }
 
     const r = await post(RESEND_URL, payload(m), m.idempotencyKey, summary);
@@ -179,7 +179,7 @@ export function createMailer(opts: { env?: Env; fetch?: typeof fetch; log?: Log;
       const chunk = good.slice(c, c + BATCH_MAX);
       const summary = `batch ${chunk.length} msg(s), first ${summarize(chunk[0][0])}`;
       if (mode === 'log') { log('info', `[email:log] ${summary}`); chunk.forEach(([, i]) => { out[i] = { ok: true, mode, id: logId() }; }); continue; }
-      if (mode === 'capture') { chunk.forEach(([m, i]) => { out[i] = { ok: true, mode, id: capture(m, idempotencyKey) }; }); continue; }
+      if (mode === 'capture') { chunk.forEach(([m, i]) => { out[i] = captureShouldFail(recipients(m), opts.env ?? process.env) ? { ok: false, mode, error: 'provider' } : { ok: true, mode, id: capture(m, idempotencyKey) }; }); continue; }
       if (!cfg.apiKey || !cfg.from) { warnConfig(); log('error', `[email] not sent (config error): ${summary}`); chunk.forEach(([, i]) => { out[i] = { ok: false, mode, error: 'config' }; }); continue; }
       const r = await post(RESEND_BATCH_URL, chunk.map(([m]) => payload(m)), idempotencyKey ? `${idempotencyKey}:${c / BATCH_MAX}` : undefined, summary);
       if (!r.ok) { chunk.forEach(([, i]) => { out[i] = { ok: false, mode, error: r.error }; }); continue; }

@@ -635,6 +635,7 @@
     "wrongH": "Something went wrong",
     "wrongP": "Please try again in a moment.",
     "abusePrivacy": "The report is anonymous to the organizer. We only store the poll and your assessment.",
-    "answerDeleted": "Your answer was deleted by the organizer. You can answer again as a new participant."
+    "answerDeleted": "Your answer was deleted by the organizer. You can answer again as a new participant.",
+    "seQuotaHour": "Only {n} invitations left this hour – remove {m}."
   }
 }

@@ -6,7 +6,12 @@ export const NAME_MAX = 100;
 
 const EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 export const normEmail = (e: string) => e.trim().toLowerCase();
-export const validEmail = (e: string) => e.length <= 254 && EMAIL_RE.test(e) && !e.includes('..') && /\.[A-Za-z]{2,}$/.test(e);
+/** L1: also local part ≤ 64, no leading/trailing dot in the local part, no consecutive dots anywhere. */
+export const validEmail = (e: string) => {
+  if (e.length > 254 || !EMAIL_RE.test(e) || e.includes('..') || !/\.[A-Za-z]{2,}$/.test(e)) return false;
+  const local = e.slice(0, e.lastIndexOf('@'));
+  return local.length >= 1 && local.length <= 64 && !local.startsWith('.') && !local.endsWith('.');
+};
 
 export interface Recipient { email: string; name?: string }
 export interface ParsedRecipients { valid: Recipient[]; invalid: string[]; duplicates: string[]; alreadyInvited: string[] }
