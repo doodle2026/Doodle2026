@@ -10,7 +10,7 @@ import { useI18n } from '@/i18n/use';
 import { useLp } from '@/i18n/link';
 import { graphemes, MESSAGE_MAX, validEmail } from '@/lib/recipients';
 
-type Invitee = { email: string; delivery: string };
+type Invitee = { email: string; status: string }; // §46.8 invitations[] (sent|failed|bounced; opt-outs never shown as such)
 type Quota = { poll: number; hour: number; day: number }; // §46.8 QuotaRemaining
 type St = 'idle' | 'sending' | 'sent' | 'failed' | 'bounced' | 'rejected';
 type Row = { id: number; value: string; status: St; touched: boolean; earlier?: boolean };
@@ -23,7 +23,7 @@ const newRow = (value = '', status: St = 'idle', earlier = false): Row => ({ id:
 export const normSe = (v: string) => { v = v.trim().replace(/^mailto:/i, ''); const i = v.lastIndexOf('@'); return i < 0 ? v : v.slice(0, i) + '@' + v.slice(i + 1).toLowerCase(); };
 const key = (v: string) => normSe(v).toLowerCase();
 const fromDelivery = (d: string): St => (d === 'bounced' ? 'bounced' : d === 'failed' ? 'failed' : 'sent');
-const FINAL = new Set(['delivered', 'bounced', 'failed', 'unsub']);
+const FINAL = new Set(['bounced', 'failed']);
 
 export default function SendToEmails({ slug, token }: { slug: string; token: string }) {
   const { t, tr, locale } = useI18n();
@@ -60,12 +60,12 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
     return { res, data: await res.json().catch(() => ({})) };
   }, [slug, token]);
 
-  const apply = useCallback((d: { invitees?: Invitee[]; remaining?: Quota }) => {
+  const apply = useCallback((d: { invitations?: Invitee[]; remaining?: Quota }) => {
     if (d.remaining) setQuota(d.remaining);
-    if (!d.invitees) return;
-    const inv = d.invitees;
+    if (!d.invitations) return;
+    const inv = d.invitations;
     setInvitees(inv);
-    const by = new Map(inv.map((i) => [i.email, i.delivery]));
+    const by = new Map(inv.map((i) => [i.email, i.status]));
     setRows((rs) => {
       let next = rs.map((r) => {
         const d2 = by.get(key(r.value));
@@ -76,7 +76,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
       });
       if (!loaded.current) { // reload: earlier invitations on top, read-only
         loaded.current = true;
-        next = [...inv.map((i) => newRow(i.email, fromDelivery(i.delivery), true)), ...next];
+        next = [...inv.map((i) => newRow(i.email, fromDelivery(i.status), true)), ...next];
       }
       return next;
     });
@@ -88,7 +88,7 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
     const id = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
       // stop polling once every sent invitation has a final status
-      if (loaded.current && invitees.length && invitees.every((i) => FINAL.has(i.delivery))) return;
+      if (loaded.current && invitees.length && invitees.every((i) => FINAL.has(i.status))) return;
       void refresh();
     }, POLL_MS);
     return () => clearInterval(id);
