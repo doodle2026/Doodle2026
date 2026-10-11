@@ -850,6 +850,7 @@
     "ownerScrollHint": "Faites défiler horizontalement pour voir toutes les colonnes →",
     "ownerTableAria": "Tableau – faites défiler horizontalement pour plus de colonnes",
     "ownerTzNote": "Les heures sont affichées dans votre heure locale ({zone}). « Aujourd’hui », les chiffres par jour et le quota d’e-mails utilisent le jour UTC.",
-    "ownerLtUnlock": "Déverrouillé (CLI)"
+    "ownerLtUnlock": "Déverrouillé (CLI)",
+    "homeDesc": "Trouvez une date qui convient à tous. Créez un sondage, partagez le lien – sans inscription."
   }
 }

@@ -4,7 +4,7 @@ import { jsonError } from '@/lib/http';
 import { buildIcs, icsDisposition } from '@/lib/ics';
 import { stripInvisible } from '@/lib/validate';
 import { icsTexts, mailLocale } from '@/lib/email/render';
-import { requestLocale } from '@/i18n/req-locale';
+import { explicitRequestLocale } from '@/i18n/req-locale';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -26,7 +26,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const app = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
   // Language: ?locale= (our pages pass the active one) → cookie/Accept-Language → poll language.
   const q = new URL(req.url).searchParams.get('locale');
-  const L = mailLocale(q, q ? null : requestLocale(req), meta?.locale);
+  const L = mailLocale(q, q ? null : explicitRequestLocale(req), meta?.locale);
   const url = `${app}/${L}/p/${ev.slug}`;
   const tx = icsTexts(stripInvisible(ev.title), url, L);
   const desc = [stripInvisible(ev.description), tx.description].filter(Boolean).join('\n\n');

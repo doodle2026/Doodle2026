@@ -48,3 +48,7 @@
 /* L3: horizontal-scroll hint for owner tables (iPad) */
 .oscroll-hint{margin:0 0 calc(-1 * var(--s-2));text-align:right;font-size:var(--fs-xs)}
 .ocard-table:focus-visible{outline:2px solid var(--c-primary);outline-offset:2px}
+
+/* Header: keep 📅 + wordmark on one line on narrow phones (de at 320/375) */
+.app-header__logo{white-space:nowrap;flex-shrink:0}
+.app-header__actions{min-width:0}
