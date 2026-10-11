@@ -134,3 +134,10 @@ Shows the FULL rendered mails (incl. personal invite tokens and unsubscribe link
 ### Tester hooks (capture mode only – 404/inert otherwise)
 - `EMAIL_CAPTURE_FAIL=<regex>`: sends to matching recipients fail like a provider error (→ "Ikke sendt", retry possible). `EMAIL_CAPTURE_FAIL_ONCE=1`: each matching address fails only once (retry then succeeds).
 - `POST /api/test/delivery {email, event: 'bounced'|'failed', poll?}` sets the delivery status like a Resend webhook would.
+
+### Spec audit follow-ups (§38/§44.8/§46.2/§46.7/§46.9)
+- **Send nyt link (§44.8)** always asks for confirmation (`resend.*` texts) because the old link stops working; the toast says so.
+- **Status explanations (§38)**: non-sensitive states (e.g. temporary failure) keep their reason in the admin list; bounced and unsubscribed are both shown only as neutral “Kan ikke sendes” with **no** reason.
+- **Box statuses (§46.8)**: `invitations[]` now includes `delivered`; the box polls until every invitation is `delivered`/`bounced`/`failed`/`blocked`.
+- **Per-IP 429 (§46.9)**: body `{ error: 'rate_ip', code: 'ip_limit' (legacy), retry_after, remaining }` + `Retry-After` header. The UI accepts seconds or an HTTP date, rounds minutes up, and shows the hour message (`se.limitHour`) when the header is missing. No auto-resend.
+- **Bulk (§46.7)**: Ctrl/⌘+Enter parses and sends; sent addresses are shown in both views. Drag-and-drop (§44.5) is dropped by PM decision.

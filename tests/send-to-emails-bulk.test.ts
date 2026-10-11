@@ -68,12 +68,12 @@ describe.skipIf(!HAS)('UI (headless)', () => {
     expect(sum).toContain('3 gyldige'); expect(sum).toContain('1 ugyldig'); expect(sum).toContain('1 dublet'); expect(sum).toContain('1 allerede inviteret');
     expect(await pg.textContent('#se-bsend')).toBe('Send til 3');
     await pg.click('#se-bclean');
-    await pg.waitForFunction(() => document.querySelectorAll('#se-blist li').length === 3);
+    await pg.waitForFunction(() => document.querySelectorAll('#se-blist li:not([data-kind="sent"])').length === 3); // + the earlier sent address as a green chip (§46.7)
     let posts = 0; pg.on('request', (r) => { if (r.method() === 'POST' && /\/invitations$/.test(r.url())) posts++; });
     await pg.click('#se-bsend');
     await pg.waitForSelector('#se-blist li[data-kind="blocked"]');
     expect(posts).toBe(1);
-    expect(await pg.locator('#se-blist li[data-kind="sent"]').count()).toBe(2);
+    expect(await pg.locator('#se-blist li[data-kind="sent"]').count()).toBe(3); // earlier + 2 new
     const txt = (await pg.textContent('#se-blist'))! + (await pg.textContent('#se-bulk-sum'));
     expect(txt).toContain('kan ikke sendes'); expect(txt).not.toMatch(/afmeld|frabedt/i);
     // back to lines: duplicates removed with a message

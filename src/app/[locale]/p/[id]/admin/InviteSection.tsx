@@ -42,7 +42,7 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
   const [preview, setPreview] = useState<{ subject: string; html: string } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [track, setTrack] = useState(false);
-  const [confirm, setConfirm] = useState<{ kind: 'revoke'; email: string } | { kind: 'link'; pid: number; name: string } | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: 'revoke'; email: string } | { kind: 'resend'; email: string; answered: boolean } | { kind: 'link'; pid: number; name: string } | null>(null);
   const [linkSel, setLinkSel] = useState('');
   const [linkErr, setLinkErr] = useState(false);
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
@@ -113,12 +113,15 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
     setErr([]); setSt(data); return data;
   }
   const esc = (e: string) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(e) : e);
-  async function resend(email: string) {
-    if (await action('resend', { email })) { setToast({ text: t('app.resentToast', { email }) }); returnFocus.current = `[data-resend="${esc(email)}"]`; }
-  }
+  /** §44.8: "Send nyt link" – always confirmed, because the old link stops working. */
+  const resend = (r: Row) => { setConfirm({ kind: 'resend', email: r.email, answered: r.response === 'answered' }); };
   async function confirmOk() {
     if (!confirm) return;
-    if (confirm.kind === 'revoke') {
+    if (confirm.kind === 'resend') {
+      const email = confirm.email; cdlg.current?.close(); setConfirm(null);
+      if (await action('resend', { email })) setToast({ text: t('resend.toast', { email }) });
+      returnFocus.current = `[data-resend="${esc(email)}"]`;
+    } else if (confirm.kind === 'revoke') {
       const email = confirm.email; cdlg.current?.close(); setConfirm(null);
       if (await action('revoke', { email })) { setToast({ text: t('app.revokedToast', { email }) }); returnFocus.current = `[data-resend="${esc(email)}"]`; }
     } else {
@@ -145,8 +148,8 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
     {r.linked_from && <div className="meta">{t('st.linkedFrom', { name: r.linked_from })} · <button type="button" className="link-btn" onClick={() => action('unlink', { email: r.email })}>{t('common.undo')}</button></div>}
   </>);
   const act = (r: Row) => !r.response || !mailable(r) ? <span className="meta">–</span>
-    : r.response === 'revoked' ? <button type="button" className="btn btn--ghost btn--sm" data-resend={r.email} onClick={() => resend(r.email)}>{t('st.newLink')}</button>
-    : <div className="row-actions"><button type="button" className="btn btn--ghost btn--sm" data-resend={r.email} onClick={() => resend(r.email)}>{t('app.resendLink')}</button>
+    : r.response === 'revoked' ? <button type="button" className="btn btn--ghost btn--sm" data-resend={r.email} onClick={() => resend(r)}>{t('st.newLink')}</button>
+    : <div className="row-actions"><button type="button" className="btn btn--ghost btn--sm" data-resend={r.email} onClick={() => resend(r)}>{t('st.newLink')}</button>
         <button type="button" className="btn btn--danger-ghost btn--sm" data-revoke={r.email} onClick={() => setConfirm({ kind: 'revoke', email: r.email })}>{t('st.revoke')}</button></div>;
   const list = R.filter((r) => inFilter(r, filter));
   const show = showAll ? list : list.slice(0, 8);
@@ -285,6 +288,11 @@ export default function InviteSection({ api, slug, closed, onDenied, onStatus }:
           <p>{rich('app.revokeP')}</p>
           <div className="modal__actions"><button type="button" className="btn btn--ghost" id="c-cancel" onClick={() => cdlg.current?.close()}>{t('common.cancel')}</button>
             <button type="button" className="btn btn--danger" id="c-ok" onClick={confirmOk}>{t('revoke.ok')}</button></div></>)}
+        {confirm?.kind === 'resend' && (<>
+          <h2 id="c-h">{t('resend.h', { email: confirm.email })}</h2>
+          <p>{rich('resend.p', { answered: confirm.answered ? 'yes' : 'no' })}</p>
+          <div className="modal__actions"><button type="button" className="btn btn--ghost" id="c-cancel" onClick={() => cdlg.current?.close()}>{t('common.cancel')}</button>
+            <button type="button" className="btn btn--primary" id="c-ok" onClick={confirmOk}>{t('st.newLink')}</button></div></>)}
         {confirm?.kind === 'link' && (<>
           <h2 id="c-h">{t('link.h', { name: confirm.name })}</h2>
           <p>{t('link.p')}</p>
