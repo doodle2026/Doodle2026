@@ -146,9 +146,9 @@ export async function sendInvitations(eventId: number, body: InviteInput) {
   const toSend = parsed.valid.filter((r) => !suppressed.has(r.email));
   if (!(await reserveQuota(toSend.length))) throw new ApiError(429, ['Dagens mailkvote er brugt op. Prøv igen i morgen.'], { code: 'quota' });
 
-  // Persist first (status "queued"), with a fresh footer token per recipient; suppressed ones are stored as "unsub".
+  // Persist first (status "queued"), with a fresh footer token per recipient; suppressed ones are not stored at all.
   const tokens = new Map<string, string>(), invTokens = new Map<string, string>();
-  const track = body.track === true;
+  const track = body.track === true || ev.inviteTracking; // follows the poll's tracking setting (changed only in admin)
   const invLocale = isLocale(body.locale) ? body.locale : ev.locale; // organizer may pick; default = poll language
   linkSecret(); // fail early (503) when send mode lacks EMAIL_LINK_SECRET
   try {
@@ -156,8 +156,8 @@ export async function sendInvitations(eventId: number, body: InviteInput) {
       if (organizerName !== (ev.organizerName ?? '') || (track && !ev.inviteTracking)) {
         await tx.event.update({ where: { id: eventId }, data: { organizerName: organizerName || null, ...(track ? { inviteTracking: true } : {}) } });
       }
-      for (const r of parsed.valid) {
-        const row = await tx.invitation.create({ data: { eventId, locale: invLocale, email: r.email, name: r.name ?? null, linkTokenHash: sha256Hex(`pending:${eventId}:${r.email}:${Math.random()}`), delivery: suppressed.has(r.email) ? 'unsub' : 'queued' } });
+      for (const r of toSend) {
+        const row = await tx.invitation.create({ data: { eventId, locale: invLocale, email: r.email, name: r.name ?? null, linkTokenHash: sha256Hex(`pending:${eventId}:${r.email}:${Math.random()}`), delivery: 'queued' } });
         const t = linkTokenFor(row.id); tokens.set(r.email, t);
         const it = track ? inviteTokenFor(row.id, 1) : null;
         if (it) invTokens.set(r.email, it);
@@ -172,13 +172,15 @@ export async function sendInvitations(eventId: number, body: InviteInput) {
   const ids = new Map((await prisma.invitation.findMany({ where: { eventId, email: { in: toSend.map((r) => r.email) } }, select: { id: true, email: true } })).map((r) => [r.email, r.id]));
   const res = await deliver(eventId, plan.messages, ids);
   // Per-recipient outcome (Send til e-mails: one row per address). Suppressed → "unsub" (Modtageren har frabedt sig mails).
-  const after = new Map((await prisma.invitation.findMany({ where: { eventId, email: { in: parsed.valid.map((r) => r.email) } }, select: { email: true, delivery: true } })).map((r) => [r.email, r.delivery]));
+  // PM: opted-out addresses are never revealed – they get the same neutral "rejected" as any address we can't send to,
+  // and are not stored (so the admin list can't reveal them either).
+  const after = new Map((await prisma.invitation.findMany({ where: { eventId, email: { in: toSend.map((r) => r.email) } }, select: { email: true, delivery: true } })).map((r) => [r.email, r.delivery]));
   const results = [
-    ...parsed.valid.map((r) => ({ email: r.email, status: after.get(r.email) ?? 'failed' })),
+    ...parsed.valid.map((r) => ({ email: r.email, status: suppressed.has(r.email) ? 'rejected' : after.get(r.email) === 'failed' ? 'failed' : 'sent' })),
     ...parsed.alreadyInvited.map((e) => ({ email: e, status: 'already_invited' })),
     ...parsed.duplicates.map((e) => ({ email: e, status: 'duplicate' })),
   ];
-  return { ...res, results, suppressed: suppressed.size, duplicates: parsed.duplicates, already_invited: parsed.alreadyInvited };
+  return { ...res, results, rejected: suppressed.size, duplicates: parsed.duplicates, already_invited: parsed.alreadyInvited };
 }
 
 export async function sendReminder(eventId: number) {
@@ -358,7 +360,7 @@ export async function retryInvite(eventId: number, email: unknown) {
   if (p.isClosed) throw new ApiError(409, ['Afstemningen er lukket.'], { code: 'closed' });
   if (ev.mailBlockedAt) throw new ApiError(403, ['Mails er stoppet for denne afstemning efter rapporter om misbrug.'], { code: 'mail_blocked' });
   if (i.delivery !== 'failed') throw new ApiError(409, ['Kun fejlede invitationer kan sendes igen herfra.'], { code: 'not_failed' });
-  if ((await suppressedSet(eventId, [i.email])).size) throw new ApiError(409, ['Modtageren har frabedt sig mails.'], { code: 'not_mailable' });
+  if ((await suppressedSet(eventId, [i.email])).size) throw new ApiError(409, ['Kan ikke sendes til denne adresse.'], { code: 'rejected' });
   if (!(await reserveQuota(1))) throw new ApiError(429, ['Dagens mailkvote er brugt op. Prøv igen i morgen.'], { code: 'quota' });
   await prisma.invitation.update({ where: { id: i.id }, data: { delivery: 'queued' } });
   const it = i.inviteGen && !i.revokedAt ? inviteTokenFor(i.id, i.inviteGen) : undefined;

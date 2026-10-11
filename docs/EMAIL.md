@@ -107,3 +107,8 @@ Shows the FULL rendered mails (incl. personal invite tokens and unsubscribe link
 - Response adds `results: [{ email, status }]` (`sent` | `failed` | `unsub` | `already_invited` | `duplicate`); `GET` adds `quota: { poll_remaining, hour_remaining, day_remaining }`.
 - `POST /api/events/:id/invitations/retry { email }`: re-send a **failed** invitation unchanged (same link, tracking unchanged).
 - The box shows only in the organizer's tab: the admin token from the creation hand-over is kept in the tab's sessionStorage (same key the admin page uses). Status re-polls every 20 s while visible. UI is a placeholder until Doodle UI's design.
+
+### PM decisions (Send til e-mails)
+- Opted-out addresses are never revealed: per-address result `rejected` (UI: "Kan ikke sendes til denne adresse"), same HTTP 201 and response shape as a normal send, minimum response time 400 ms + jitter, and the address is **not stored** (so the admin list can't reveal it either). No pre-check endpoint reports opt-outs. Retry of a now-suppressed address answers 409 `rejected`.
+- Duplicates in the form are marked with their line number; quota (poll/hour/day) is returned by GET and every POST; one combined response per call.
+- Tracking: the box doesn't send `track`; the server uses the poll's `inviteTracking` (changed only in admin).

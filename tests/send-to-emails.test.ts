@@ -43,19 +43,28 @@ describe('API', () => {
     expect(again.status).toBe(400); expect(again.body.code).toBe('no_new_recipients');
   });
 
-  test('suppressed address → status unsub (never mailed); retry only for failed', async () => {
+  test('opted-out address → neutral "rejected", not stored, same status code + shape as a normal send; retry only for failed', async () => {
     const p = await poll(); const s = `s-${uniq()}@example.com`, f = `f-${uniq()}@example.com`;
     await prisma.emailSuppression.create({ data: { emailHash: emailHash(s), scope: 'all' } });
-    const r = await send(p, { recipients: [s] });
-    expect(r.status).toBe(201); expect(r.body.results).toEqual([{ email: s, status: 'unsub' }]); expect(r.body.sent).toBe(0);
-    await send(p, { recipients: [f] });
+    const t0 = Date.now(); const r = await send(p, { recipients: [s] }); const dt = Date.now() - t0;
+    expect(r.status).toBe(201); expect(r.body.results).toEqual([{ email: s, status: 'rejected' }]);
+    expect(dt).toBeGreaterThanOrEqual(390); // minimum response time – rejected isn't faster than a send
+    expect(r.text).not.toMatch(/unsub|suppress|afmeld|frabedt/i);
+    expect(await prisma.invitation.count({ where: { email: s, event: { slug: p.id } } })).toBe(0);
+    const ok = await send(p, { recipients: [f] });
+    expect(Object.keys(ok.body).sort()).toEqual(Object.keys(r.body).sort());
     expect((await call(`/api/events/${p.id}/invitations/retry`, { method: 'POST', token: p.token, json: { email: f } })).body.code).toBe('not_failed');
     await prisma.invitation.updateMany({ where: { email: f, event: { slug: p.id } }, data: { delivery: 'failed' } });
     const rt = await call(`/api/events/${p.id}/invitations/retry`, { method: 'POST', token: p.token, json: { email: f } });
-    expect(rt.status).toBe(200); expect(rt.body.sent).toBe(1);
+    expect(rt.status).toBe(200); expect(rt.body.sent).toBe(1); expect(rt.body.quota).toBeTruthy();
     expect((await prisma.invitation.findFirstOrThrow({ where: { email: f, event: { slug: p.id } } })).delivery).toBe('sent');
-    expect((await prisma.event.findUniqueOrThrow({ where: { slug: p.id } })).inviteTracking).toBe(false); // retry doesn't switch tracking on
-    expect((await call(`/api/events/${p.id}/invitations/retry`, { method: 'POST', token: p.token, json: { email: s } })).status).toBe(409);
+  });
+
+  test('box follows the poll tracking setting (personal link when tracking is on)', async () => {
+    const p = await poll(); const a = `t-${uniq()}@example.com`;
+    await prisma.event.update({ where: { slug: p.id }, data: { inviteTracking: true } });
+    await send(p, { recipients: [a] });
+    expect((await prisma.invitation.findFirstOrThrow({ where: { email: a, event: { slug: p.id } } })).inviteGen).toBe(1);
   });
 });
 
@@ -64,30 +73,32 @@ describe.skipIf(!existsSync(CHROME))('UI (headless)', () => {
   beforeAll(async () => { const { chromium } = await import('playwright-core'); browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] }); });
   afterAll(async () => { await browser?.close(); });
 
-  test('confirmation page: box under the admin link; Enter sends one line → Sendt ✓; invalid / duplicate blocked; survives reload in the tab; not for visitors', async () => {
+  test('confirmation page (§46): box inside the share panel under the admin link; Enter sends → Sendt ✓; invalid after blur; duplicate with line number; reload shows "Sendt tidligere"; not for visitors', async () => {
     const p = await poll();
     const pg = await browser.newPage();
     await pg.goto(`${BASE}/da`);
     await pg.evaluate(([id, tok]) => sessionStorage.setItem(`mt-admin-${id}`, `/p/${id}/admin#${tok}`), [p.id, p.token]);
     await pg.goto(`${BASE}/da/p/${p.id}?created=1`);
-    await pg.waitForSelector('#send-mails #sm-rows input');
-    expect(await pg.locator('#sm-rows li').count()).toBe(5);
-    // order: admin link box comes first
-    expect(await pg.evaluate(() => !!(document.querySelector('#adminurl')!.compareDocumentPosition(document.querySelector('#send-mails')!) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
-    const inputs = pg.locator('#sm-rows input');
-    await inputs.nth(0).fill('ikke-en-mail'); await inputs.nth(0).blur();
-    await pg.waitForSelector('text=Ugyldig e-mailadresse');
-    expect(await pg.locator('#sm-rows button').first().isDisabled()).toBe(true);
-    const a = `ui-${uniq()}@example.com`;
-    await inputs.nth(0).fill(a); await inputs.nth(0).press('Enter');
-    await pg.waitForSelector(`#sm-sent li:has(input[value="${a}"])`);
-    expect(await pg.textContent('#sm-sent')).toContain('Sendt ✓');
-    await pg.locator('#sm-rows input').nth(0).fill(a.toUpperCase()); await pg.locator('#sm-rows input').nth(0).blur();
-    await pg.waitForSelector('#sm-rows >> text=Allerede inviteret');
-    await pg.click('#sm-more'); expect(await pg.locator('#sm-rows li').count()).toBe(9);
-    await pg.reload(); await pg.waitForSelector(`#sm-sent li:has(input[value="${a}"])`);
+    await pg.waitForSelector('#se #se-rows input');
+    expect(await pg.locator('#se-rows li').count()).toBe(5);
+    expect(await pg.evaluate(() => !!(document.querySelector('#adminurl')!.compareDocumentPosition(document.querySelector('#se')!) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+    expect(await pg.textContent('#se')).toContain('Vi sender aldrig dit admin-link.');
+    const inp = (i: number) => pg.locator('#se-rows input').nth(i);
+    await inp(0).fill('ikke-en-mail'); await inp(1).focus();
+    await pg.waitForSelector('#se-rows >> text=Ugyldig e-mailadresse');
+    const a = `ui-${uniq()}@Example.COM`;
+    await inp(0).fill(a); await inp(1).fill(a.toLowerCase());
+    await pg.waitForSelector('#se-rows >> text=Står allerede i linje 1.');
+    await inp(0).press('Enter');
+    await pg.waitForSelector('#se-rows li[data-status="sent"]');
+    expect(await inp(0).inputValue()).toBe(a.replace('@Example.COM', '@example.com'));
+    expect(await pg.evaluate(() => document.activeElement?.id)).toMatch(/^se-i/);
+    await pg.waitForSelector('#se-rows >> text=Gensend fra admin.');
+    await pg.click('#se-more'); expect(await pg.locator('#se-rows li').count()).toBe(10);
+    await pg.reload(); await pg.waitForSelector('#se-rows li[data-status="earlier"]');
+    expect(await pg.textContent('#se-rows')).toContain('Sendt tidligere');
     const v = await browser.newPage(); await v.goto(`${BASE}/da/p/${p.id}`); await v.waitForLoadState('networkidle');
-    expect(await v.locator('#send-mails').count()).toBe(0);
+    expect(await v.locator('#se').count()).toBe(0);
     await v.close(); await pg.close();
   });
 });

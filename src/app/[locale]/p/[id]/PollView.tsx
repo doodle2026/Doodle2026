@@ -160,9 +160,10 @@ export default function PollView({ event, shareUrl, justCreated }:
                   onClick={() => { setAcked(false); setTimeout(() => adminRef.current?.focus(), 0); }}>{t('share.showAdmin')}</button>
               </div>
             )}
+            {adminTok && open && <SendToEmails slug={event.slug} token={adminTok} />}
             <span className="sr-only" role="status" aria-live="polite">{status}</span>
           </section>
-          {adminTok && <SendToEmails slug={event.slug} token={adminTok} />}
+          {adminTok && !open && <SendToEmails slug={event.slug} token={adminTok} />}
           <ResultBanner event={event} appUrl={shareUrl.replace(/\/[a-z]{2}\/p\/[^/]+$/, '')} />
           <h1>{event.title}</h1>
           {event.description && <p className="lead">{event.description}</p>}
