@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '@/i18n/use';
 import { useLp } from '@/i18n/link';
-import { graphemes, MESSAGE_MAX, validEmail } from '@/lib/recipients';
+import { graphemes, MESSAGE_MAX, NAME_ADDR_RE, validEmail } from '@/lib/recipients';
 
 type Invitee = { email: string; status: string }; // §46.8 invitations[] (sent|failed|bounced; opt-outs never shown as such)
 type Quota = { poll: number; hour: number; day: number }; // §46.8 QuotaRemaining
@@ -27,7 +27,7 @@ const drafts = new Map<string, { rows: Row[]; message: string; bulk?: BItem[] }>
 const MODE_KEY = 'ga-se-mode';
 /** Split pasted text: ; , newline/whitespace, and Outlook "Name <x@y>" (keeps only the address). */
 export function splitBulk(text: string): string[] {
-  return text.replace(/[^,;\n<>]*<([^>]+)>/g, ' $1 ').split(/[\s,;]+/).map((x) => x.trim().replace(/^<|>$/g, '')).filter(Boolean);
+  return text.replace(NAME_ADDR_RE, (_m: string, _n: string, e: string) => ` ${e} `).split(/[\s,;]+/).map((x) => x.trim().replace(/^<|>$/g, '')).filter(Boolean);
 }
 const newRow = (value = '', status: St = 'idle', earlier = false): Row => ({ id: ++uid, value, status, touched: !!value, earlier });
 /** trim, drop mailto:, lower-case the domain (§46.3). */
@@ -77,40 +77,48 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
     return { res, data: await res.json().catch(() => ({})) };
   }, [slug, token]);
 
+  // H1: stable callbacks (no t/invitees deps) → exactly one interval; no side effects inside state updaters.
+  const tRef = useRef(t); tRef.current = t;
+  const invRef = useRef<Invitee[]>([]);
   const apply = useCallback((d: { invitations?: Invitee[]; remaining?: Quota }) => {
     if (d.remaining) setQuota(d.remaining);
     if (!d.invitations) return;
     const inv = d.invitations;
+    const prev = new Map(invRef.current.map((i) => [i.email, i.status]));
+    invRef.current = inv;
     setInvitees(inv);
     const by = new Map(inv.map((i) => [i.email, i.status]));
+    for (const i of inv) if (i.status === 'bounced' && prev.has(i.email) && prev.get(i.email) !== 'bounced') say(tRef.current('se.liveBounced', { email: i.email }));
+    const first = !loaded.current;
+    loaded.current = true;
+    const earlier = first ? inv.map((i) => newRow(i.email, fromDelivery(i.status), true)) : [];
     setRows((rs) => {
-      let next = rs.map((r) => {
+      const next = rs.map((r) => {
         const d2 = by.get(key(r.value));
         if (!d2 || !(r.status === 'sent' || r.status === 'bounced' || r.status === 'failed')) return r;
-        const s = fromDelivery(d2);
-        if (s === 'bounced' && r.status !== 'bounced') say(t('se.liveBounced', { email: r.value }));
-        return s === r.status ? r : { ...r, status: s };
+        const st = fromDelivery(d2);
+        return st === r.status ? r : { ...r, status: st };
       });
-      setB((bs) => bs.map((x) => (x.status === 'sent' && by.get(key(x.email)) === 'bounced' ? { ...x, status: 'bounced' as BSt } : x)));
-      if (!loaded.current) { // reload: earlier invitations on top, read-only
-        loaded.current = true;
-        next = [...inv.map((i) => newRow(i.email, fromDelivery(i.status), true)), ...next];
-      }
-      return next;
+      // reload: earlier invitations on top, read-only (idempotent – safe if the updater runs twice)
+      if (!first) return next;
+      const have = new Set(next.filter((r) => r.earlier).map((r) => key(r.value)));
+      return [...earlier.filter((r) => !have.has(key(r.value))), ...next];
     });
-  }, [t]);
+    setB((bs) => bs.map((x) => (x.status === 'sent' && by.get(key(x.email)) === 'bounced' ? { ...x, status: 'bounced' as BSt } : x)));
+  }, []);
 
   const refresh = useCallback(async () => { const { res, data } = await api(''); if (res.ok) apply(data); }, [api, apply]);
   useEffect(() => {
-    void refresh();
+    void refresh(); // one initial load
     const id = setInterval(() => {
-      if (document.visibilityState !== 'visible') return;
-      // stop polling once every sent invitation has a final status
-      if (loaded.current && invitees.length && invitees.every((i) => FINAL.has(i.status))) return;
+      if (document.visibilityState !== 'visible') return; // paused while hidden
+      const inv = invRef.current;
+      if (!inv.length) return; // nothing to watch
+      if (inv.every((i) => FINAL.has(i.status))) return; // all final
       void refresh();
     }, POLL_MS);
     return () => clearInterval(id);
-  }, [refresh, invitees]);
+  }, [refresh]);
 
   const left = quota ? Math.min(quota.poll, quota.day, quota.hour) : Infinity;
   const limitMsg = !quota && ipWait === null ? '' : ipWait !== null ? t('se.limitIp', { min: ipWait }) : !quota ? '' : quota.day <= 0 ? t('se.limitDay') : quota.hour <= 0 ? t('se.limitHour') : quota.poll <= 0 ? t('se.limitPoll') : '';
@@ -307,8 +315,8 @@ export default function SendToEmails({ slug, token }: { slug: string; token: str
                     <span className="se-btnwrap">
                       {r.status === 'sending' ? <button type="button" className="btn btn--secondary btn--sm se-btn" disabled aria-busy="true"><span className="spinner" aria-hidden="true" /> {t('se.sending')}</button>
                         : r.status === 'bounced' ? <button type="button" className="btn btn--sm se-btn se-btn--bounced" disabled>{'⊘ '}{t('se.bouncedBtn')}</button>
-                        : r.status === 'sent' || r.earlier ? <button type="button" className="btn btn--sm se-btn se-btn--done" disabled>{t('se.sent')}</button>
                         : r.status === 'failed' ? <button type="button" className="btn btn--secondary btn--sm se-btn" data-send={r.id} disabled={lim} onClick={() => send(r)}>{t('se.retry')}</button>
+                        : r.status === 'sent' || r.earlier ? <button type="button" className="btn btn--sm se-btn se-btn--done" disabled>{t('se.sent')}</button>
                         : <button type="button" className="btn btn--secondary btn--sm se-btn" data-send={r.id} disabled={dis} aria-label={t('se.sendAria', { n })} onClick={() => send(r)}>{t('se.send')}</button>}
                     </span>
                   </div>

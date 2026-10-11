@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { pollExists } from '@/lib/events';
+import { legacyRedirect } from '@/lib/legacy-links';
 import { LOCALE_COOKIE, detectLocale, isLocale, type Locale } from '@/i18n/config';
 
 /** Per-request nonce CSP (Next.js picks the nonce up for its own inline scripts) + security headers. */
@@ -32,7 +33,11 @@ export async function middleware(req: NextRequest) {
   const L = (p: string) => (p === '/' ? `/${locale}` : `/${locale}${p}`);
   requestHeaders.set('x-locale', locale);
   requestHeaders.set('x-path', path); // locale-less path, for hreflang alternates
-  if (path.length > 1 && path.endsWith('/')) {
+  const legacy = legacyRedirect(path, req.nextUrl.searchParams);
+  if (legacy) {
+    // H2: old link formats → token moved into the #fragment (never sent to servers/logs again), before the locale safety net.
+    res = redirect(req, L(legacy), 302);
+  } else if (path.length > 1 && path.endsWith('/')) {
     // We handle trailing-slash redirects ourselves (skipTrailingSlashRedirect) so they get our headers.
     res = redirect(req, L(path.replace(/\/+$/, '')) + req.nextUrl.search, 308);
   } else if (!prefixed) {
@@ -59,7 +64,7 @@ export async function middleware(req: NextRequest) {
 /** Admin pages, ?edit= and mail-token pages (unsubscribe / report abuse / old /e), with or without a locale prefix. */
 const isSecretUrl = (req: NextRequest) => {
   const p = req.nextUrl.pathname.replace(/^\/(en|da|fr|de)(?=\/|$)/, '');
-  return /^\/p\/[^/]+\/admin(\/|$)/.test(p) || req.nextUrl.searchParams.has('edit') || /^\/(u\/(p|all)|abuse)\//.test(p);
+  return /^\/p\/[^/]+\/admin(\/|$)/.test(p) || req.nextUrl.searchParams.has('edit') || /^\/(u\/(p|all)|abuse|e)\//.test(p);
 };
 
 /** Page routes that exist under /<locale>; anything else → 404 page. */
