@@ -56,3 +56,29 @@
 /* Send til mig selv – receipt is exactly two block lines (destination, spam hint) */
 .sts__receipt .sts__line{display:block}
 .sts__receipt .sts__spam{margin:var(--s-1) 0 0;font-weight:600;color:var(--c-text)}
+/* §49 follow-up: at < 400 px the de line "✓ Ihre Umfrage wurde erstellt" (236 px) can't share a row with "Ausblenden ▴"
+   at 320 px, so the confirmation gets the full width and the hide button drops to its own right-aligned row below it. */
+@media (max-width:399px){
+ .share__confirm{padding-right:0}
+ .share__close{position:static;display:flex;margin:var(--s-1) 0 var(--s-2) auto;min-height:44px}
+}
+
+/* §49 follow-up (PR #37 review): the full labels don't fit between 400 and ~440 px (fr up to 430), so the public header
+   stays icon-only up to 479 px. Owner pages keep their own header for now (.owner-header excluded). The header row never
+   wraps: the logo may shrink/ellipsis as a last resort instead of pushing the actions to a 2nd row. */
+@media (min-width:400px) and (max-width:479px){
+ .app-header:not(.owner-header){padding:var(--s-2) var(--s-3);gap:var(--s-1)}
+ .app-header:not(.owner-header) .app-header__actions{flex-wrap:nowrap;gap:2px}
+ .app-header:not(.owner-header) .hdr-lbl,.app-header:not(.owner-header) .langsw__caret{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+ .app-header:not(.owner-header) .icon-btn{padding:0 6px;min-width:44px;gap:3px}
+ .app-header:not(.owner-header) .hdr-ico{font-size:1.15rem;line-height:1}
+ .app-header:not(.owner-header) .langsw__cur{font-size:.75rem}
+}
+/* Confirmation line gets the full width (hide button on its own row) on all phone widths – it wrapped beside "Ausblenden" up to ~480 px. */
+@media (max-width:639px){
+ .share__confirm{padding-right:0}
+ .share__close{position:static;display:flex;margin:var(--s-1) 0 var(--s-2) auto;min-height:44px}
+}
+.app-header:not(.owner-header){flex-wrap:nowrap}
+.app-header:not(.owner-header) .app-header__actions{flex-wrap:nowrap;flex-shrink:0}
+.app-header:not(.owner-header) .app-header__logo{min-width:0;overflow:hidden;text-overflow:ellipsis}

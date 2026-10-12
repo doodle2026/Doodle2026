@@ -907,5 +907,13 @@
     "ownerTzNote": "Tidspunkter vises i din lokale tid ({zone}). “I dag”, tal pr. dag og mailkvoten bruger UTC-døgnet.",
     "ownerLtUnlock": "Låst op (CLI)",
     "homeDesc": "Find en dato, der passer alle. Opret en afstemning, del linket – uden login."
+  },
+  "og": {
+    "count": "{n, plural, one {# datoforslag} other {# datoforslag}}",
+    "cta": "Vælg datoer →",
+    "sampleTitle": "Teammøde om Q4-planlægning",
+    "homeTitle": "Find den dag, der passer alle",
+    "homePill": "Gratis · uden login",
+    "homeAlt": "grabAday – find den dag, der passer alle"
   }
 }

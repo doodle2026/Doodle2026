@@ -907,5 +907,13 @@
     "ownerTzNote": "Times are shown in your local time ({zone}). “Today”, the per-day counts and the email quota use the UTC day.",
     "ownerLtUnlock": "Unlocked (CLI)",
     "homeDesc": "Find a date that works for everyone. Create a poll, share the link – no sign-up."
+  },
+  "og": {
+    "count": "{n, plural, one {# date option} other {# date options}}",
+    "cta": "Pick dates →",
+    "sampleTitle": "Team meeting on Q4 planning",
+    "homeTitle": "Find the day that works for everyone",
+    "homePill": "Free · no login",
+    "homeAlt": "grabAday – find the day that works for everyone"
   }
 }

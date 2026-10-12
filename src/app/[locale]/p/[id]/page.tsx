@@ -2,13 +2,12 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { loadEvent } from '@/lib/events';
 import { pollDescription, truncateGraphemes } from '@/lib/meta';
-import { OG_SIZE, ogImagePath } from '@/lib/og';
+import { OG_SIZE, ogImagePath, OG_LOCALE } from '@/lib/og';
 import PollView from './PollView';
 import { languageAlternates } from '@/i18n/seo';
 import { getTranslations } from 'next-intl/server';
 import { LOCALES, type Locale } from '@/i18n/config';
 
-const OG_LOCALE: Record<Locale, string> = { en: 'en_US', da: 'da_DK', fr: 'fr_FR', de: 'de_DE' };
 
 export const dynamic = 'force-dynamic';
 type Props = { params: Promise<{ id: string; locale: string }>; searchParams: Promise<{ created?: string; edit?: string }> };
